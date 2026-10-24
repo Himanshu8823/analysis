@@ -1,0 +1,235 @@
+/*
+ * Coinbase design tokens wired into Tailwind utilities.
+ * Source of truth: DESIGN.md (installed via `npx getdesign@latest add coinbase`).
+ * NEVER introduce new colors, fonts, or component styles here.
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Coinbase color tokens */
+    --color-primary: #0052ff;
+    --color-primary-active: #003ecc;
+    --color-primary-disabled: #a8b8cc;
+    --color-ink: #0a0b0d;
+    --color-body: #5b616e;
+    --color-body-strong: #0a0b0d;
+    --color-muted: #7c828a;
+    --color-muted-soft: #a8acb3;
+    --color-hairline: #dee1e6;
+    --color-hairline-soft: #eef0f3;
+    --color-canvas: #ffffff;
+    --color-surface-soft: #f7f7f7;
+    --color-surface-card: #ffffff;
+    --color-surface-strong: #eef0f3;
+    --color-surface-dark: #0a0b0d;
+    --color-surface-dark-elevated: #16181c;
+    --color-on-primary: #ffffff;
+    --color-on-dark: #ffffff;
+    --color-on-dark-soft: #a8acb3;
+    --color-semantic-up: #05b169;
+    --color-semantic-down: #cf202f;
+    --color-accent-yellow: #f4b000;
+
+    /* Radius tokens */
+    --radius-none: 0px;
+    --radius-xs: 4px;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+    --radius-pill: 100px;
+    --radius-full: 9999px;
+
+    /* Spacing tokens */
+    --space-xxs: 4px;
+    --space-xs: 8px;
+    --space-sm: 12px;
+    --space-base: 16px;
+    --space-md: 20px;
+    --space-lg: 24px;
+    --space-xl: 32px;
+    --space-xxl: 48px;
+    --space-section: 96px;
+  }
+
+  html,
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+  }
+
+  * {
+    border-color: var(--color-hairline);
+  }
+
+  /* Display font stays at weight 400 — never bold display copy. */
+  .font-display {
+    font-weight: 400;
+    letter-spacing: -0.5px;
+  }
+
+  /* Numerical values use Coinbase Mono substitute via Tailwind's `font-mono`. */
+  .num {
+    font-family: var(--font-mono, 'Coinbase Mono', ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-feature-settings: 'tnum' 1;
+  }
+}
+
+@layer components {
+  /* Primary CTA pill — Coinbase Blue, pill radius, 44px touch target. */
+  .cb-btn-primary {
+    background-color: var(--color-primary);
+    color: var(--color-on-primary);
+    font-family: var(--font-sans, 'Coinbase Sans', sans-serif);
+    font-weight: 600;
+    font-size: 16px;
+    line-height: 1.15;
+    border-radius: var(--radius-pill);
+    padding: 12px 20px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 120ms ease;
+  }
+  .cb-btn-primary:hover {
+    background-color: var(--color-primary-active);
+  }
+  .cb-btn-primary:disabled {
+    background-color: var(--color-primary-disabled);
+    cursor: not-allowed;
+  }
+
+  /* Secondary pill — soft gray surface. */
+  .cb-btn-secondary {
+    background-color: var(--color-surface-strong);
+    color: var(--color-ink);
+    font-family: var(--font-sans, 'Coinbase Sans', sans-serif);
+    font-weight: 600;
+    font-size: 16px;
+    line-height: 1.15;
+    border-radius: var(--radius-pill);
+    padding: 12px 20px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Tertiary text CTA — Coinbase Blue on transparent. */
+  .cb-btn-tertiary {
+    background-color: transparent;
+    color: var(--color-primary);
+    font-family: var(--font-sans, 'Coinbase Sans', sans-serif);
+    font-weight: 600;
+    font-size: 16px;
+    line-height: 1.15;
+    border-radius: var(--radius-pill);
+    padding: 12px 20px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Standard text input. */
+  .cb-input {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    min-height: 48px;
+    width: 100%;
+    font-family: var(--font-sans, 'Coinbase Sans', sans-serif);
+    font-size: 16px;
+    line-height: 1.5;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+  }
+  .cb-input:focus {
+    outline: none;
+    border: 2px solid var(--color-primary);
+    padding: 13px 15px;
+  }
+  .cb-input::placeholder {
+    color: var(--color-muted);
+  }
+  /* Invalid field state — red hairline border. */
+  .cb-input[aria-invalid='true'] {
+    border-color: var(--color-semantic-down);
+  }
+  .cb-input[aria-invalid='true']:focus {
+    border-color: var(--color-semantic-down);
+  }
+
+  /* Feature / product card. */
+  .cb-card {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-xl);
+    padding: 32px;
+  }
+
+  /* Dark hero / band. */
+  .cb-band-dark {
+    background-color: var(--color-surface-dark);
+    color: var(--color-on-dark);
+    padding: var(--space-section) 0;
+  }
+
+  /* Light hero / band. */
+  .cb-band-light {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    padding: var(--space-section) 0;
+  }
+
+  /* Surface card for analytics blocks. */
+  .cb-surface-card {
+    background-color: var(--color-surface-card);
+    color: var(--color-ink);
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+  }
+
+  /* Badge pill. */
+  .cb-badge {
+    display: inline-flex;
+    align-items: center;
+    background-color: var(--color-surface-strong);
+    color: var(--color-ink);
+    font-family: var(--font-sans, 'Coinbase Sans', sans-serif);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.5;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border-radius: var(--radius-pill);
+  }
+
+  /* Auth page heading — Coinbase Blue, display weight 400. */
+  .cb-auth-heading {
+    color: var(--color-primary);
+    font-family: var(--font-display, 'Coinbase Display', sans-serif);
+    font-weight: 400;
+    font-size: 36px;
+    line-height: 1.11;
+    letter-spacing: -0.5px;
+  }
+
+  /* Elevated card — surface card lifted off the canvas. */
+  .cb-card-elevated {
+    background-color: var(--color-surface-card);
+    color: var(--color-ink);
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    box-shadow: 0 6px 24px rgba(10, 11, 13, 0.08), 0 1px 3px rgba(10, 11, 13, 0.05);
+  }
+}

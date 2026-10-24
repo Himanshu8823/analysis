@@ -1,0 +1,27 @@
+{
+  "name": "@result-analysis/workers",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BullMQ worker process for long-running jobs (report generation, OCR)",
+  "scripts": {
+    "dev": "ts-node --transpile-only src/main.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "lint": "eslint \"src/**/*.ts\"",
+    "type-check": "tsc --noEmit",
+    "test": "jest --passWithNoTests",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "bullmq": "^5.7.0",
+    "ioredis": "^5.3.2",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "eslint": "^8.56.0",
+    "rimraf": "^6.0.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}

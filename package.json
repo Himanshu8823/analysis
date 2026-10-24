@@ -1,0 +1,31 @@
+{
+  "name": "result-analysis-system",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Resultiq — monorepo root. See scripts.md for what each script does and when to run it.",
+  "packageManager": "pnpm@9.12.3",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "type-check": "turbo run type-check",
+    "clean": "turbo run clean && rimraf node_modules/.turbo",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "db:generate": "pnpm --filter @result-analysis/backend prisma:generate",
+    "db:migrate": "pnpm --filter @result-analysis/backend prisma:deploy",
+    "db:deploy": "pnpm --filter @result-analysis/backend prisma:deploy",
+    "db:seed": "pnpm --filter @result-analysis/backend prisma:seed",
+    "db:studio": "pnpm --filter @result-analysis/backend prisma:studio"
+  },
+  "devDependencies": {
+    "prettier": "3.2.4",
+    "rimraf": "6.0.1",
+    "turbo": "2.3.3",
+    "typescript": "5.6.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

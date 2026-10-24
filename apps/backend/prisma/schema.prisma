@@ -1,0 +1,415 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USERS & RBAC
+// ============================================================================
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  name         String
+  passwordHash String    @map("password_hash")
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  createdBy    String?   @map("created_by")
+  updatedBy    String?   @map("updated_by")
+
+  // Set when the account was created through an invitation. The invitee's
+  // own password is chosen at accept time, so this is `false` for everyone
+  // who arrives through an invite link — it is reserved for password resets.
+  mustChangePassword Boolean   @default(false) @map("must_change_password")
+  invitedById        String?   @map("invited_by_id")
+  invitedAt          DateTime? @map("invited_at")
+
+  // Relations
+  userRoles        UserRole[]
+  teacherSubjects  TeacherSubject[] @relation("TeacherSubjects")
+  refreshTokens    RefreshToken[]
+  auditLogs        AuditLog[]
+  uploadedJobs     UploadJob[]
+  generatedReports Report[]         @relation("ReportGeneratedBy")
+  notifications    Notification[]
+  sentInvites      Invite[]         @relation("InvitesSent")
+
+  @@index([email])
+  @@index([isActive])
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique // SUPER_ADMIN, ADMIN, HOD, TEACHER, PRINCIPAL, STUDENT
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique // students:read, marks:write, etc.
+  resource    String // students, marks, reports, etc.
+  action      String // read, write, delete, etc.
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  rolePermissions RolePermission[]
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+model UserRole {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  roleId    String   @map("role_id")
+  branchId  String?  @map("branch_id") // Optional branch scope (for HOD/Teacher)
+  grantedBy String?  @map("granted_by")
+  grantedAt DateTime @default(now()) @map("granted_at")
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id])
+
+  @@unique([userId, roleId, branchId])
+  @@index([userId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  id           String   @id @default(uuid())
+  roleId       String   @map("role_id")
+  permissionId String   @map("permission_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  tokenHash  String    @unique @map("token_hash")
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  replacedBy String?   @map("replaced_by")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  userAgent  String?   @map("user_agent")
+  ipAddress  String?   @map("ip_address")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
+}
+
+// ============================================================================
+// ACADEMIC STRUCTURE
+// ============================================================================
+
+model Branch {
+  id        String   @id @default(uuid())
+  code      String   @unique // CS, ME, CE, EE
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  subjects  Subject[]
+  students  Student[]
+  userRoles UserRole[]
+  invites   Invite[]
+
+  @@map("branches")
+}
+
+model Scheme {
+  id            String   @id @default(uuid())
+  name          String   @unique // SCHEME_2019, SCHEME_2022, SCHEME_2024
+  description   String
+  rules         Json // SchemeRules: passingPercentage, graceMarks, components
+  isActive      Boolean  @default(true) @map("is_active")
+  effectiveFrom DateTime @map("effective_from")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  subjects Subject[]
+  students Student[]
+
+  @@map("schemes")
+}
+
+model Subject {
+  id           String   @id @default(uuid())
+  code         String // Subject code like CS301
+  name         String
+  credits      Int
+  branchId     String   @map("branch_id")
+  semester     Int
+  schemeId     String   @map("scheme_id")
+  year         Int // 1, 2, 3, 4
+  maxMarks     Int      @map("max_marks")
+  passingMarks Int      @map("passing_marks")
+  components   Json // [{type: 'CA1', maxMarks: 20}, ...]
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  branch          Branch           @relation(fields: [branchId], references: [id])
+  scheme          Scheme           @relation(fields: [schemeId], references: [id])
+  marks           Mark[]
+  teacherSubjects TeacherSubject[]
+
+  @@unique([code, schemeId, branchId])
+  @@index([branchId, schemeId, semester])
+  @@map("subjects")
+}
+
+model TeacherSubject {
+  id             String @id @default(uuid())
+  teacherId      String @map("teacher_id")
+  subjectId      String @map("subject_id")
+  academicYearId String @map("academic_year_id")
+
+  teacher      User         @relation("TeacherSubjects", fields: [teacherId], references: [id], onDelete: Cascade)
+  subject      Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+
+  @@unique([teacherId, subjectId, academicYearId])
+  @@index([teacherId])
+  @@map("teacher_subjects")
+}
+
+// ============================================================================
+// STUDENTS & MARKS
+// ============================================================================
+
+model AcademicYear {
+  id        String   @id @default(uuid())
+  year      String   @unique // "2024-25"
+  startDate DateTime @map("start_date")
+  endDate   DateTime @map("end_date")
+  isActive  Boolean  @default(true) @map("is_active")
+
+  batches         Batch[]
+  students        Student[]
+  marks           Mark[]
+  teacherSubjects TeacherSubject[]
+
+  @@map("academic_years")
+}
+
+model Batch {
+  id              String  @id @default(uuid())
+  name            String // "2022-26"
+  admissionYearId String  @map("admission_year_id")
+  isActive        Boolean @default(true) @map("is_active")
+
+  admissionYear AcademicYear @relation(fields: [admissionYearId], references: [id])
+  students      Student[]
+
+  @@map("batches")
+}
+
+model Student {
+  id             String   @id @default(uuid())
+  rollNo         String   @map("roll_no")
+  name           String
+  branchId       String   @map("branch_id")
+  currentYear    Int      @map("current_year")
+  semester       Int
+  schemeId       String   @map("scheme_id")
+  batchId        String   @map("batch_id")
+  academicYearId String   @map("academic_year_id")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  createdBy      String?  @map("created_by")
+  updatedBy      String?  @map("updated_by")
+
+  branch       Branch       @relation(fields: [branchId], references: [id])
+  scheme       Scheme       @relation(fields: [schemeId], references: [id])
+  batch        Batch        @relation(fields: [batchId], references: [id])
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+  marks        Mark[]
+
+  @@unique([rollNo, academicYearId])
+  @@index([rollNo])
+  @@index([branchId, currentYear, semester])
+  @@index([schemeId])
+  @@map("students")
+}
+
+model Mark {
+  id             String   @id @default(uuid())
+  studentId      String   @map("student_id")
+  subjectId      String   @map("subject_id")
+  examType       String   @map("exam_type") // CA1, CA2, MID_SEM, WRITTEN, PRACTICAL, ORAL
+  marksObtained  Float    @map("marks_obtained")
+  maxMarks       Float    @map("max_marks")
+  isAbsent       Boolean  @default(false) @map("is_absent")
+  isWithheld     Boolean  @default(false) @map("is_withheld")
+  academicYearId String   @map("academic_year_id")
+  remarks        String?
+  createdBy      String?  @map("created_by")
+  updatedBy      String?  @map("updated_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject      Subject      @relation(fields: [subjectId], references: [id])
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+
+  @@unique([studentId, subjectId, examType, academicYearId])
+  @@index([studentId])
+  @@index([subjectId])
+  @@map("marks")
+}
+
+// ============================================================================
+// FILE PROCESSING & REPORTS
+// ============================================================================
+
+model UploadJob {
+  id            String    @id @default(uuid())
+  uploadedBy    String    @map("uploaded_by")
+  fileName      String    @map("file_name")
+  fileType      String    @map("file_type") // EXCEL, PDF_TEXT, PDF_IMAGE
+  fileUrl       String    @map("file_url") // Storage URL
+  fileSize      Int       @map("file_size")
+  status        String    @default("PENDING") // PENDING, PROCESSING, EXTRACTED, FAILED, COMPLETED
+  progress      Int       @default(0)
+  errorMessage  String?   @map("error_message")
+  extractedData Json?     @map("extracted_data")
+  metadata      Json?
+  startedAt     DateTime? @map("started_at")
+  completedAt   DateTime? @map("completed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  uploadedByUser User @relation(fields: [uploadedBy], references: [id])
+
+  @@index([status, createdAt])
+  @@index([uploadedBy])
+  @@map("upload_jobs")
+}
+
+model Report {
+  id           String    @id @default(uuid())
+  generatedBy  String    @map("generated_by")
+  type         String // STUDENT_WISE, SCHEME_WISE, SUBJECT_ANALYSIS, STUDENT_ANALYSIS, CLASS_TOPPERS, PASS_FAIL, COMPLETE
+  filters      Json
+  fileUrl      String?   @map("file_url")
+  status       String    @default("PENDING")
+  errorMessage String?   @map("error_message")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  completedAt  DateTime? @map("completed_at")
+
+  generatedByUser User @relation("ReportGeneratedBy", fields: [generatedBy], references: [id])
+
+  @@index([generatedBy])
+  @@index([status])
+  @@map("reports")
+}
+
+// ============================================================================
+// AUDIT & NOTIFICATIONS
+// ============================================================================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  action     String // LOGIN, CREATE_USER, UPDATE_MARKS, etc.
+  resource   String // user, marks, scheme
+  resourceId String?  @map("resource_id")
+  details    Json?
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([resource, resourceId])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  type      String // UPLOAD_COMPLETE, REPORT_READY, etc.
+  title     String
+  message   String
+  data      Json?
+  isRead    Boolean   @default(false) @map("is_read")
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+  @@map("notifications")
+}
+
+// ============================================================================
+// INVITES
+// ============================================================================
+
+/// Lifecycle of a member invitation.
+enum InviteStatus {
+  /// Sent, not yet accepted. The only status that can be accepted.
+  PENDING
+  /// The invitee accepted and an account now exists.
+  ACCEPTED
+  /// An administrator cancelled the invitation before it was accepted.
+  REVOKED
+  /// The expiry window elapsed. Flipped lazily when the invite is next read.
+  EXPIRED
+}
+
+/// An invitation to join the system.
+///
+/// The user account does not exist until the invitation is accepted, so an
+/// unaccepted invitation grants no access at all. Only the SHA-256 hash of the
+/// token is stored — a database leak yields no usable invitation links.
+model Invite {
+  id          String       @id @default(uuid())
+  email       String
+  name        String
+  roleName    String       @map("role_name")
+  branchId    String?      @map("branch_id")
+  /// SHA-256 of the raw token. The raw token exists only in the email link.
+  tokenHash   String       @unique @map("token_hash")
+  status      InviteStatus @default(PENDING)
+  expiresAt   DateTime     @map("expires_at")
+  acceptedAt  DateTime?    @map("accepted_at")
+  invitedById String       @map("invited_by_id")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  invitedBy User    @relation("InvitesSent", fields: [invitedById], references: [id], onDelete: Cascade)
+  branch    Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  @@index([email])
+  @@index([status, expiresAt])
+  @@index([invitedById])
+  @@map("invites")
+}
