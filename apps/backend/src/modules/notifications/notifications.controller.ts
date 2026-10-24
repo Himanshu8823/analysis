@@ -5,6 +5,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { CreateNotificationDto } from './dto';
 import { Roles, CurrentUser } from '@/common/decorators';
+import { parseOptionalInt } from '@/common/utils/query-params';
 import type { JwtPayload } from '@/common/types';
 
 @ApiTags('Notifications')
@@ -17,14 +18,14 @@ export class NotificationsController {
   @ApiOperation({ summary: 'List notifications for current user' })
   async findAll(
     @CurrentUser() user: JwtPayload,
-    @Query('page') page?: number,
-    @Query('pageSize') pageSize?: number,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
     @Query('unreadOnly') unreadOnly?: string,
   ) {
     return this.service.findAllForUser({
       userId: user.sub,
-      page,
-      pageSize,
+      page: parseOptionalInt(page),
+      pageSize: parseOptionalInt(pageSize),
       unreadOnly: unreadOnly === 'true',
     });
   }

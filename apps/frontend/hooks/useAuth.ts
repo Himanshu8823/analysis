@@ -11,7 +11,10 @@ export interface SessionUser {
   id: string;
   email: string;
   name: string;
+  /** The primary role — what the sidebar and header badge gate on. */
   role: string;
+  /** Every role the member holds. */
+  roles?: string[];
   branchId?: string | null;
   mustChangePassword: boolean;
 }
@@ -55,7 +58,9 @@ export function useLogin() {
   const qc = useQueryClient();
   const toast = useToast();
   return useMutation({
-    mutationFn: (input: LoginVariables) => authService.login(input),
+    // `redirectTo` is a client-side concern — the API rejects unknown body
+    // properties, so only the credentials are sent over the wire.
+    mutationFn: ({ email, password }: LoginVariables) => authService.login({ email, password }),
     onSuccess: (data, variables) => {
       persistAuthSession(data);
       qc.setQueryData(queryKeys.auth.me(), data.user);
@@ -85,6 +90,20 @@ export function useAcceptInvite() {
       qc.setQueryData(queryKeys.auth.me(), data.user);
       toast.success('Your account is ready');
       router.push('/dashboard');
+    },
+    onError: (error: unknown) => {
+      toast.error(extractErrorMessage(error));
+    },
+  });
+}
+
+export function useResetPassword() {
+  const toast = useToast();
+  return useMutation({
+    mutationFn: (input: { token: string; password: string }) =>
+      authService.resetPassword(input),
+    onSuccess: () => {
+      toast.success('Password reset — sign in with your new password');
     },
     onError: (error: unknown) => {
       toast.error(extractErrorMessage(error));
@@ -161,10 +180,45 @@ export function useCurrentUser() {
 
 export function extractErrorMessage(error: unknown): string {
   if (typeof error === 'object' && error !== null) {
-    const e = error as { response?: { data?: { message?: string } }; message?: string };
+    const e = error as {
+      response?: {
+        status?: number;
+        data?: { message?: string | string[]; error?: { retryAfter?: number } };
+      };
+      message?: string;
+    };
+
     const apiMessage = e.response?.data?.message;
-    if (apiMessage) return apiMessage;
-    if (e.message) return e.message;
+    if (Array.isArray(apiMessage)) {
+      if (apiMessage.length > 0) return apiMessage.join('. ');
+    } else if (apiMessage) {
+      return apiMessage;
+    }
+
+    // Axios' generic messages ("Request failed with status code 401") are not
+    // user-facing — map them to something a person can act on.
+    const status = e.response?.status;
+    if (status === 401) return 'Your email or password is incorrect.';
+    if (status === 403) return "You don't have permission to do that.";
+    if (status === 404) return 'We could not find what you were looking for.';
+    if (status === 409) return 'That already exists.';
+    if (status === 429) {
+      // The backend tells us how long to wait — surface it instead of a vague
+      // "wait a moment".
+      const retryAfter = e.response?.data?.error?.retryAfter;
+      if (typeof retryAfter === 'number' && retryAfter > 0) {
+        const minutes = Math.ceil(retryAfter / 60);
+        return minutes > 1
+          ? `Too many attempts. Please try again in ${minutes} minutes.`
+          : 'Too many attempts. Please try again in a minute.';
+      }
+      return 'Too many attempts. Please wait a moment and try again.';
+    }
+    if (status && status >= 500) return 'Something went wrong on our side. Please try again.';
+
+    if (e.message && !e.message.startsWith('Request failed with status code')) {
+      return e.message;
+    }
   }
   return 'Something went wrong. Please try again.';
 }

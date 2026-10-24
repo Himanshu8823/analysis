@@ -1,7 +1,16 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
-import { getSession, setSessionToken, signOut } from '@/lib/auth/session-client';
+import { getSession, setSessionTokens, signOut } from '@/lib/auth/session-client';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+
+/**
+ * Endpoints that must never trigger the silent token-refresh flow.
+ *
+ * A 401 on these routes means "wrong credentials", not "your access token
+ * expired" — refreshing and redirecting would reload the page and hide the
+ * error the user needs to see.
+ */
+const NO_REFRESH_ENDPOINTS = ['/auth/login', '/auth/refresh', '/auth/accept-invite'];
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -37,12 +46,17 @@ function onTokenRefreshed(token: string) {
   refreshSubscribers = [];
 }
 
+function isRefreshExempt(config: InternalAxiosRequestConfig): boolean {
+  const url = config.url ?? '';
+  return NO_REFRESH_ENDPOINTS.some((endpoint) => url.includes(endpoint));
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry && !isRefreshExempt(originalRequest)) {
       if (isRefreshing) {
         return new Promise((resolve) => {
           subscribeTokenRefresh((token: string) => {
@@ -66,7 +80,9 @@ apiClient.interceptors.response.use(
         });
 
         const newToken = data.data.accessToken;
-        setSessionToken(newToken);
+        // The backend rotates the refresh token, so the rotated one has to be
+        // stored too — otherwise the next refresh is rejected.
+        setSessionTokens(newToken, data.data.refreshToken);
         onTokenRefreshed(newToken);
 
         if (originalRequest.headers) {

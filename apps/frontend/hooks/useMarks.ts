@@ -7,7 +7,7 @@ import { invalidationRules } from '@/lib/query/invalidationRules';
 import { useToast } from '@/lib/utils/notifications';
 
 export function useMarks(filters?: MarkListFilters) {
-  return useQuery<{ data: Mark[] }>({
+  return useQuery<Mark[]>({
     queryKey: queryKeys.marks.list(filters),
     queryFn: () => marksService.list(filters),
     staleTime: 60 * 1000,
@@ -15,7 +15,7 @@ export function useMarks(filters?: MarkListFilters) {
 }
 
 export function useMarksByStudent(studentId: string | null) {
-  return useQuery<{ data: Mark[] }>({
+  return useQuery<Mark[]>({
     queryKey: studentId ? queryKeys.marks.byStudent(studentId) : ['marks', 'student', 'noop'],
     queryFn: () => marksService.list({ studentId: studentId! }),
     enabled: !!studentId,
@@ -55,6 +55,7 @@ export function useUpdateMark() {
 
 export function useCalculateMarks() {
   return useMutation({
-    mutationFn: (payload: { studentId: string; schemeId: string }) => marksService.calculate(payload),
+    mutationFn: (payload: { studentId: string; academicYearId: string }) =>
+      marksService.calculate(payload),
   });
 }

@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { ToppersRepository } from './toppers.repository';
 import { TopperStrategyFactory } from './algorithms';
 import type { RankingRule } from './algorithms';
+import { resolveAcademicYear } from '@/common/utils/academic-year';
 
 export interface SubjectTopper {
   subjectId: string;
@@ -58,23 +59,39 @@ export class ToppersService {
     private readonly prisma: PrismaClient,
   ) {}
 
+  /**
+   * Resolves the academic year to rank against. An explicit `academicYearId`
+   * always wins; otherwise the active year (or the most recent one) is used.
+   */
+  private async resolveYearId(academicYearId?: string): Promise<string | undefined> {
+    if (academicYearId) return academicYearId;
+    const year = await resolveAcademicYear(this.prisma);
+    return year?.id;
+  }
+
   async findSubjectToppers(params: {
     branchId?: string;
     schemeId?: string;
     semester?: number;
-    academicYearId: string;
+    academicYearId?: string;
   }): Promise<SubjectTopper[]> {
-    return this.repository.findSubjectToppers(params);
+    return this.repository.findSubjectToppers({
+      ...params,
+      academicYearId: await this.resolveYearId(params.academicYearId),
+    });
   }
 
   async findClassToppers(params: {
     branchId?: string;
     schemeId?: string;
     semester?: number;
-    academicYearId: string;
+    academicYearId?: string;
     limit?: number;
   }): Promise<ClassTopper> {
-    return this.repository.findClassToppers(params);
+    return this.repository.findClassToppers({
+      ...params,
+      academicYearId: await this.resolveYearId(params.academicYearId),
+    });
   }
 
   /**
@@ -82,17 +99,20 @@ export class ToppersService {
    * using the rules from the subject's scheme.
    */
   async findSubjectWiseToppers(filters: {
-    branchId: string;
-    schemeId: string;
-    semester: number;
-    academicYearId: string;
+    branchId?: string;
+    schemeId?: string;
+    semester?: number;
+    academicYearId?: string;
   }): Promise<SubjectTopperResult[]> {
-    const ctx = await this.repository.loadClassContext(filters);
+    const ctx = await this.repository.loadClassContext({
+      ...filters,
+      academicYearId: await this.resolveYearId(filters.academicYearId),
+    });
     const subjects = ctx.subjects.filter(
       (s) =>
-        s.branchId === filters.branchId &&
-        s.schemeId === filters.schemeId &&
-        s.semester === filters.semester,
+        (filters.branchId === undefined || s.branchId === filters.branchId) &&
+        (filters.schemeId === undefined || s.schemeId === filters.schemeId) &&
+        (filters.semester === undefined || s.semester === filters.semester),
     );
     const summaries = this.repository.buildStudentSummaries(
       ctx.students,
@@ -158,10 +178,10 @@ export class ToppersService {
    */
   async findClassToppersByRule(
     filters: {
-      branchId: string;
-      schemeId: string;
-      semester: number;
-      academicYearId: string;
+      branchId?: string;
+      schemeId?: string;
+      semester?: number;
+      academicYearId?: string;
     },
     rule: RankingRule,
     limit?: number,
@@ -170,7 +190,10 @@ export class ToppersService {
     totalStudents: number;
     ranking: RankedTopper[];
   }> {
-    const ctx = await this.repository.loadClassContext(filters);
+    const ctx = await this.repository.loadClassContext({
+      ...filters,
+      academicYearId: await this.resolveYearId(filters.academicYearId),
+    });
     const summaries = this.repository.buildStudentSummaries(
       ctx.students,
       ctx.marks,

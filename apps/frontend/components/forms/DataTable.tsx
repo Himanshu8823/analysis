@@ -20,8 +20,24 @@ interface DataTableProps<T> {
   cardRender?: (row: T) => ReactNode;
   emptyState?: ReactNode;
   loading?: boolean;
+  /** Rendered under the table body, e.g. a pagination row. */
+  footer?: ReactNode;
 }
 
+/**
+ * DataTable — the table body used by every list page.
+ *
+ * Design rationale:
+ * - The table lives inside a bordered card, matching the toolbar card
+ *   directly above it, so the controls and the results read as one unit.
+ * - The header row uses a tinted surface (`{colors.surface-soft}`) with
+ *   uppercase caption labels — a table header is a column-label strip, not
+ *   a data row, and the tint separates it without adding a heavy rule.
+ * - Rows are separated by hairlines rather than zebra striping; striping
+ *   fights with the hover state and adds visual noise on a white canvas.
+ * - Row height stays generous (16px vertical padding) for comfortable
+ *   scanning and touch targets.
+ */
 export function DataTable<T>({
   columns,
   rows,
@@ -29,25 +45,32 @@ export function DataTable<T>({
   cardRender,
   emptyState,
   loading,
+  footer,
 }: DataTableProps<T>) {
   if (loading) {
     return (
-      <div className="space-y-3">
+      <div className="space-y-3" aria-busy>
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-24 animate-pulse rounded-lg bg-surface-soft" aria-hidden />
+          <div key={i} className="h-24 animate-pulse rounded-xl bg-surface-soft" aria-hidden />
         ))}
       </div>
     );
   }
 
   if (rows.length === 0 && emptyState) {
-    return <>{emptyState}</>;
+    // The empty state keeps the table's frame so the toolbar above still
+    // reads as connected to a results area.
+    return (
+      <div className="overflow-hidden rounded-xl border border-hairline bg-card">
+        {emptyState}
+      </div>
+    );
   }
 
   return (
     <>
       {/* Desktop / Tablet table */}
-      <div className="hidden overflow-hidden rounded-lg border border-hairline md:block">
+      <div className="hidden overflow-hidden rounded-xl border border-hairline bg-card md:block">
         <div className="overflow-x-auto">
           <table className="w-full text-body-sm">
             <thead className="bg-surface-soft">
@@ -56,7 +79,7 @@ export function DataTable<T>({
                   <th
                     key={col.key}
                     scope="col"
-                    className={`px-base py-sm text-left font-semibold text-muted ${col.className ?? ''}`}
+                    className={`px-4 py-3 text-left text-caption-strong uppercase tracking-wide text-muted ${col.className ?? ''}`}
                   >
                     {col.header}
                   </th>
@@ -67,10 +90,13 @@ export function DataTable<T>({
               {rows.map((row) => (
                 <tr
                   key={keyExtractor(row)}
-                  className="border-t border-hairline first:border-t-0 transition-colors hover:bg-surface-soft"
+                  className="border-t border-hairline transition-colors hover:bg-surface-soft"
                 >
                   {columns.map((col) => (
-                    <td key={col.key} className={`px-base py-sm text-ink ${col.className ?? ''}`}>
+                    <td
+                      key={col.key}
+                      className={`px-4 py-4 text-ink ${col.className ?? ''}`}
+                    >
                       {col.render(row)}
                     </td>
                   ))}
@@ -79,6 +105,9 @@ export function DataTable<T>({
             </tbody>
           </table>
         </div>
+        {footer ? (
+          <div className="border-t border-hairline px-4 py-3">{footer}</div>
+        ) : null}
       </div>
 
       {/* Mobile card view */}
@@ -86,18 +115,18 @@ export function DataTable<T>({
         {rows.map((row) => (
           <div
             key={keyExtractor(row)}
-            className="rounded-lg border border-hairline bg-canvas p-base"
+            className="rounded-xl border border-hairline bg-card p-4"
           >
             {cardRender
               ? cardRender(row)
               : columns.slice(0, 3).map((col) => (
-                  <div key={col.key} className="flex items-start justify-between gap-sm py-1">
+                  <div key={col.key} className="flex items-start justify-between gap-3 py-1">
                     <span className="text-caption text-muted">{col.header}</span>
                     <span className="text-body-sm text-ink">{col.render(row)}</span>
                   </div>
                 ))}
             {cardRender ? null : columns.length > 3 ? (
-              <div className="mt-sm flex flex-wrap gap-x-base gap-y-xs border-t border-hairline pt-sm">
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 border-t border-hairline pt-3">
                 {columns.slice(3).map((col) => (
                   <div key={col.key} className="min-w-[120px]">
                     <span className="block text-caption text-muted">{col.header}</span>

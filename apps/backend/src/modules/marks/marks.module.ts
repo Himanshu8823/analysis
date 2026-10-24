@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { MarksController } from './marks.controller';
 import { MarksService } from './marks.service';
 import { MarksRepository } from './marks.repository';
-import { MarksCalculatorService } from './calculator.service';
 import {
   CalculatorFactory,
   Scheme2019Calculator,
@@ -15,12 +14,11 @@ import {
   providers: [
     MarksService,
     MarksRepository,
-    MarksCalculatorService,
     CalculatorFactory,
     Scheme2019Calculator,
     Scheme2022Calculator,
     Scheme2024Calculator,
   ],
-  exports: [MarksService, MarksCalculatorService, CalculatorFactory],
+  exports: [MarksService, CalculatorFactory],
 })
 export class MarksModule {}

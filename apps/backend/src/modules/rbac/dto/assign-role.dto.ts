@@ -1,9 +1,10 @@
-import { IsString, IsNotEmpty, IsUUID, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsEntityId } from '@/common/validators/is-entity-id.validator';
 
 export class AssignRoleDto {
   @ApiProperty()
-  @IsUUID('4')
+  @IsEntityId()
   userId: string;
 
   @ApiProperty({ example: 'TEACHER' })
@@ -13,6 +14,6 @@ export class AssignRoleDto {
 
   @ApiProperty({ required: false, description: 'Optional branch scope (for HOD/Teacher)' })
   @IsOptional()
-  @IsUUID('4')
+  @IsEntityId()
   branchId?: string;
 }

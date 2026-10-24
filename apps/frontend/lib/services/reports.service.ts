@@ -1,24 +1,44 @@
 import { apiClient } from '@/lib/api/client';
 import { ENDPOINTS } from '@/lib/api/endpoints';
+import type { ListResponse } from '@/lib/types/api';
 
-export type ReportStatus = 'PENDING' | 'GENERATING' | 'READY' | 'FAILED';
+/** Matches the backend Report.status values (see prisma/schema.prisma). */
+export type ReportStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+
+export type ReportType =
+  | 'STUDENT_WISE'
+  | 'SCHEME_WISE'
+  | 'SUBJECT_ANALYSIS'
+  | 'STUDENT_ANALYSIS'
+  | 'CLASS_TOPPERS'
+  | 'PASS_FAIL'
+  | 'COMPLETE';
 
 export interface Report {
   id: string;
-  name: string;
+  generatedBy: string;
+  type: ReportType;
+  filters: Record<string, unknown>;
+  fileUrl?: string | null;
   status: ReportStatus;
-  generatedAt?: string;
-  downloadUrl?: string;
-  fileSize?: number;
-  filters?: Record<string, unknown>;
+  errorMessage?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
 }
 
+/**
+ * The backend expects `{ type, filters }` — every scope field belongs inside
+ * `filters`, and the report kind is `type` (not `reportType`).
+ */
 export interface GenerateReportPayload {
-  branchId: string;
-  schemeId: string;
-  semester: number;
-  reportType: 'STUDENT_WISE' | 'SCHEME_WISE' | 'SUBJECT_ANALYSIS' | 'CLASS_TOPPERS' | 'PASS_FAIL';
-  name?: string;
+  type: ReportType;
+  filters: {
+    branchId?: string;
+    schemeId?: string;
+    semester?: number;
+    academicYearId?: string;
+    [key: string]: unknown;
+  };
 }
 
 export const reportsService = {
@@ -26,12 +46,12 @@ export const reportsService = {
     const res = await apiClient.post(ENDPOINTS.REPORTS.GENERATE, payload);
     return res.data.data;
   },
-  list: async (): Promise<{ data: Report[] }> => {
+  list: async (): Promise<ListResponse<Report>> => {
     const res = await apiClient.get(ENDPOINTS.REPORTS.LIST);
     return res.data.data;
   },
   get: async (id: string): Promise<Report> => {
-    const res = await apiClient.get(`/reports/${id}`);
+    const res = await apiClient.get(ENDPOINTS.REPORTS.GET(id));
     return res.data.data;
   },
   download: async (id: string): Promise<Blob> => {

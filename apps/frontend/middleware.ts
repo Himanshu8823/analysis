@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 // Public routes that don't need auth
-const PUBLIC_PATHS = ['/login', '/forgot-password', '/accept-invite'];
+const PUBLIC_PATHS = ['/login', '/forgot-password', '/reset-password', '/accept-invite'];
 const PUBLIC_PREFIXES = ['/_next', '/api/auth', '/favicon', '/public', '/images'];
 
 export function middleware(request: NextRequest) {

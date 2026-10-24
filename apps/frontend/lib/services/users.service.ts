@@ -1,11 +1,7 @@
 import { apiClient } from '@/lib/api/client';
 import { ENDPOINTS } from '@/lib/api/endpoints';
 import type { Member, MemberRole, UserRole } from '@result-analysis/shared-types';
-
-interface ListResponse<T> {
-  items: T[];
-  meta: { total: number; page: number; pageSize: number; totalPages: number };
-}
+import type { ListResponse } from '@/lib/types/api';
 
 export interface MemberListFilters {
   search?: string;
@@ -35,6 +31,11 @@ export const usersService = {
   /** Lists the roles that can be assigned, with member counts. */
   listRoles: async (): Promise<RoleSummary[]> => {
     const res = await apiClient.get(ENDPOINTS.USERS.ROLES);
+    return res.data.data;
+  },
+  /** Fetches a single member, used by the edit page. */
+  getMember: async (id: string): Promise<Member> => {
+    const res = await apiClient.get(ENDPOINTS.USERS.GET(id));
     return res.data.data;
   },
   /** The backend exposes `PUT /users/:id`, not `PATCH`. */

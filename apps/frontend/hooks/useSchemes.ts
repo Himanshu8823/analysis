@@ -1,13 +1,13 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { schemesService, type Scheme } from '@/lib/services/schemes.service';
+import { schemesService, type Scheme, type SchemePayload } from '@/lib/services/schemes.service';
 import { queryKeys } from '@/lib/query/queryKeys';
 import { invalidationRules } from '@/lib/query/invalidationRules';
 import { useToast } from '@/lib/utils/notifications';
 
 export function useSchemes() {
-  return useQuery<{ data: Scheme[] }>({
+  return useQuery<Scheme[]>({
     queryKey: queryKeys.schemes.list(),
     queryFn: () => schemesService.list(),
     staleTime: 30 * 60 * 1000,
@@ -27,8 +27,7 @@ export function useCreateScheme() {
   const qc = useQueryClient();
   const toast = useToast();
   return useMutation({
-    mutationFn: (payload: { code: string; name: string; year: number; rules?: Record<string, unknown> }) =>
-      schemesService.create(payload),
+    mutationFn: (payload: SchemePayload) => schemesService.create(payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.schemes.all() });
       toast.success('Scheme created');
@@ -46,7 +45,7 @@ export function useUpdateScheme() {
       payload,
     }: {
       id: string;
-      payload: Partial<{ code: string; name: string; year: number; rules: Record<string, unknown> }>;
+      payload: Partial<SchemePayload>;
     }) => schemesService.update(id, payload),
     onSuccess: (_d, vars) => {
       invalidationRules.onSchemeUpdated(qc, vars.id);

@@ -4,6 +4,68 @@ import { HfInference } from '@huggingface/inference';
 import { PrismaClient } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
 import { HF_MODELS, type HfModelConfig, type HfModelKey } from './hf-models';
+import { parseMarksSheet, type ExtractedMark } from '../upload/marks-file.parser';
+
+/**
+ * Parses OCR output into mark rows.
+ *
+ * The OCR model returns the text it read. The text is laid out in the same
+ * way a spreadsheet is — a header line followed by one line per mark — so it
+ * goes through the same sheet parser. Rows that cannot be read are reported
+ * rather than dropped silently.
+ */
+function parseOcrText(text: string): {
+  rows: ExtractedMark[];
+  errors: Array<{ row: number; error: string }>;
+} {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (!lines.length) {
+    return { rows: [], errors: [{ row: 1, error: 'No text was recognised' }] };
+  }
+
+  // The header is the first line naming a roll number and a subject column.
+  const headerIndex = lines.findIndex((line) => {
+    const normalised = line.toLowerCase().replace(/[_-]/g, ' ');
+    return normalised.includes('roll') && normalised.includes('subject');
+  });
+
+  if (headerIndex === -1) {
+    return {
+      rows: [],
+      errors: [
+        {
+          row: 1,
+          error:
+            'The recognised text has no header row naming "Roll No" and "Subject". Upload a spreadsheet instead.',
+        },
+      ],
+    };
+  }
+
+  const headerCells = lines[headerIndex].split(/\s{2,}/).map((cell) => cell.trim());
+  const dataRows = lines
+    .slice(headerIndex + 1)
+    .map((line) => line.split(/\s{2,}/).map((cell) => cell.trim()))
+    .filter((cells) => cells.length >= 2);
+
+  try {
+    return parseMarksSheet(headerCells, dataRows);
+  } catch (err) {
+    return {
+      rows: [],
+      errors: [
+        {
+          row: 1,
+          error: err instanceof Error ? err.message : 'The recognised text could not be read',
+        },
+      ],
+    };
+  }
+}
 
 export interface OcrProcessResult {
   extractedText: string;
@@ -102,16 +164,26 @@ export class OcrService {
         }
       }
 
+      // The recognised text is parsed into mark rows so the review screen has
+      // the same shape as it does for a spreadsheet upload.
+      const parsed = parseOcrText(extractedText);
+
+      const extractedData: Prisma.InputJsonValue = {
+        text: extractedText,
+        model: modelConfig.modelId,
+        rows: parsed.rows as unknown as Prisma.InputJsonValue,
+        errors: parsed.errors as unknown as Prisma.InputJsonValue,
+        totalRows: parsed.rows.length,
+        errorCount: parsed.errors.length,
+        ...(tables !== undefined ? { tables } : {}),
+      };
+
       await this.prisma.uploadJob.update({
         where: { id: jobId },
         data: {
           status: 'EXTRACTED',
           progress: 80,
-          extractedData: {
-            text: extractedText,
-            tables,
-            model: modelConfig.modelId,
-          },
+          extractedData,
         },
       });
 

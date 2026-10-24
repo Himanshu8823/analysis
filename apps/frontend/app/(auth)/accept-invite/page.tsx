@@ -130,15 +130,15 @@ function AcceptInviteForm() {
       </div>
 
       <div className="mb-lg flex flex-col gap-xs rounded-md border border-hairline bg-surface-soft px-sm py-base">
-        <div className="flex flex-col gap-xs sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-xs md:flex-row md:items-center md:justify-between">
           <span className="text-body-sm text-body">Name</span>
           <span className="text-body-sm font-semibold text-ink">{invite.name}</span>
         </div>
-        <div className="flex flex-col gap-xs sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-xs md:flex-row md:items-center md:justify-between">
           <span className="text-body-sm text-body">Email</span>
           <span className="text-body-sm font-semibold text-ink">{invite.email}</span>
         </div>
-        <div className="flex flex-col gap-xs sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-xs md:flex-row md:items-center md:justify-between">
           <span className="text-body-sm text-body">Role</span>
           <span className="cb-badge">{invite.roleName}</span>
         </div>

@@ -1,7 +1,8 @@
 import {
-  IsString, IsNotEmpty, IsInt, IsUUID, IsBoolean, IsOptional, Min,
+  IsString, IsNotEmpty, IsInt, IsBoolean, IsOptional, Min,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsEntityId } from '@/common/validators/is-entity-id.validator';
 
 export class CreateStudentDto {
   @ApiProperty({ example: 'CS2022-001' })
@@ -15,7 +16,7 @@ export class CreateStudentDto {
   name: string;
 
   @ApiProperty()
-  @IsUUID('4')
+  @IsEntityId()
   branchId: string;
 
   @ApiProperty({ example: 2 })
@@ -29,15 +30,15 @@ export class CreateStudentDto {
   semester: number;
 
   @ApiProperty()
-  @IsUUID('4')
+  @IsEntityId()
   schemeId: string;
 
   @ApiProperty()
-  @IsUUID('4')
+  @IsEntityId()
   batchId: string;
 
   @ApiProperty()
-  @IsUUID('4')
+  @IsEntityId()
   academicYearId: string;
 
   @ApiProperty({ required: false, default: true })

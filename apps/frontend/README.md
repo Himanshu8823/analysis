@@ -61,15 +61,14 @@ mobile. Modals are full-width sheets on mobile and centered dialogs at `md:`.
 | Route | Description | Hooks |
 |---|---|---|
 | `/login` | Sign in with email + password | `useLogin` |
-| `/register` | Create an account | `useRegister` |
 | `/forgot-password` | Send password reset link | `useForgotPassword` |
 | `/dashboard` | KPI cards + recent uploads | `useDashboard` |
-| `/upload` | Excel/PDF dropzone + job polling | `useUploadFile` / `useUploadJob` / `useConfirmUpload` |
+| `/upload` | Excel/PDF dropzone + job polling | `useCreateUploadJob` / `useUploadJob` / `useConfirmUpload` |
 | `/students` | CRUD + bulk import + filters | `useStudents` / `useBranches` / `useSchemes` / `useImportStudents` |
 | `/reports` | Generate + download Excel reports | `useGenerateReport` / `useReports` / `useDownloadReport` |
 | `/toppers` | Subject + class toppers with tie handling | `useSubjectToppers` / `useClassToppers` |
 | `/analytics` | KPI cards + 3 chart types | `useOverview` / `usePassFail` / `useSubjectDifficulty` / `usePerformanceTrends` |
-| `/admin/users` | User CRUD + role assignment | `useUsers` / `useCreateUser` / `useUpdateUser` |
+| `/admin/members` | Members, pending invites, roles | `useMembers` / `useInvites` / `useInviteUser` |
 | `/admin/schemes` | View + edit scheme rules JSON | `useSchemes` / `useUpdateScheme` |
 
 ## Caching & Invalidation

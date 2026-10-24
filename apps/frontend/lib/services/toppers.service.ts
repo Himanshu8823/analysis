@@ -1,61 +1,80 @@
 import { apiClient } from '@/lib/api/client';
 import { ENDPOINTS } from '@/lib/api/endpoints';
 
-export interface TopperEntry {
+export interface RankedTopper {
+  rank: number;
   studentId: string;
   rollNo: string;
   name: string;
-  marksObtained: number;
-  maxMarks: number;
+  score: number;
   percentage: number;
-  rank: number;
-  isTied?: boolean;
+  isTie: boolean;
 }
 
+/** `GET /toppers/subject-wise` — per-subject winners with tie handling. */
 export interface SubjectTopper {
   subjectId: string;
   subjectCode: string;
   subjectName: string;
-  toppers: TopperEntry[];
+  topperMarks: number;
+  maxMarks: number;
+  toppers: RankedTopper[];
 }
 
+/** `GET /toppers/class` — the class leaderboard. */
 export interface ClassTopper {
-  studentId: string;
-  rollNo: string;
-  name: string;
-  totalMarks: number;
-  totalMaxMarks: number;
-  percentage: number;
-  rank: number;
-  isTied?: boolean;
+  ranking: Array<{
+    rank: number;
+    studentId: string;
+    rollNo: string;
+    name: string;
+    totalMarks: number;
+    maxTotalMarks: number;
+    percentage: number;
+    creditsEarned: number;
+  }>;
 }
 
-export interface SubjectTopperFilters {
+/** `GET /toppers/class?rankingRule=…` — leaderboard with an explicit rule. */
+export interface ClassTopperByRule {
+  /** The rule the backend applied — `marks`, `percentage` or `credits`. */
+  rule: RankingRule;
+  totalStudents: number;
+  ranking: RankedTopper[];
+}
+
+/**
+ * The ranking rules the backend understands.
+ *
+ * The API uses the lowercase names; `normaliseRankingRule` on the backend also
+ * accepts the uppercase aliases, so both spellings work on the wire — but the
+ * response always echoes the lowercase name.
+ */
+export type RankingRule = 'marks' | 'percentage' | 'credits';
+
+export interface TopperFilters {
   branchId?: string;
   schemeId?: string;
   semester?: number;
+  academicYearId?: string;
 }
 
-export interface ClassTopperFilters extends SubjectTopperFilters {
-  rankingRule?: 'TOTAL_MARKS' | 'PERCENTAGE' | 'CREDITS';
+export interface ClassTopperFilters extends TopperFilters {
+  rankingRule?: RankingRule;
+  limit?: number;
 }
 
 export const toppersService = {
-  subjectToppers: async (filters: SubjectTopperFilters): Promise<{ data: SubjectTopper[] }> => {
-    const params: Record<string, string> = {};
-    if (filters.branchId) params.branchId = filters.branchId;
-    if (filters.schemeId) params.schemeId = filters.schemeId;
-    if (filters.semester) params.semester = String(filters.semester);
-    const res = await apiClient.get(ENDPOINTS.TOPPERS.SUBJECT_WISE(params));
+  subjectWise: async (filters: TopperFilters): Promise<SubjectTopper[]> => {
+    const res = await apiClient.get(ENDPOINTS.TOPPERS.SUBJECT_WISE, {
+      params: filters,
+    });
     return res.data.data;
   },
-  classToppers: async (filters: ClassTopperFilters): Promise<{ data: ClassTopper[] }> => {
-    const params: Record<string, string> = {};
-    if (filters.branchId) params.branchId = filters.branchId;
-    if (filters.schemeId) params.schemeId = filters.schemeId;
-    if (filters.semester) params.semester = String(filters.semester);
-    if (filters.rankingRule) params.rankingRule = filters.rankingRule;
-    const res = await apiClient.get(ENDPOINTS.TOPPERS.CLASS(params));
+  classToppers: async (
+    filters: ClassTopperFilters,
+  ): Promise<ClassTopperByRule | ClassTopper> => {
+    const res = await apiClient.get(ENDPOINTS.TOPPERS.CLASS, { params: filters });
     return res.data.data;
   },
 };

@@ -7,7 +7,10 @@ interface Session {
     id: string;
     email: string;
     name: string;
+    /** The primary role — what the sidebar and header badge gate on. */
     role: string;
+    /** Every role the member holds. */
+    roles?: string[];
     branchId?: string | null;
     /**
      * When true, the account must change its password before it can use the
@@ -35,12 +38,24 @@ export function setSession(session: Session): void {
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
-export function setSessionToken(accessToken: string): void {
+/**
+ * Replaces the tokens in the stored session.
+ *
+ * The backend rotates the refresh token on every refresh, so both tokens have
+ * to be replaced together — keeping the old refresh token would make the next
+ * refresh fail.
+ */
+export function setSessionTokens(accessToken: string, refreshToken?: string): void {
   const current = getSession();
-  if (current) {
-    current.accessToken = accessToken;
-    setSession(current);
-  }
+  if (!current) return;
+  current.accessToken = accessToken;
+  if (refreshToken) current.refreshToken = refreshToken;
+  setSession(current);
+}
+
+/** Replaces only the access token. */
+export function setSessionToken(accessToken: string): void {
+  setSessionTokens(accessToken);
 }
 
 /**

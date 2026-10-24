@@ -1,7 +1,8 @@
 import {
-  IsString, IsNotEmpty, IsInt, IsUUID, IsBoolean, IsOptional, IsArray, Min,
+  IsString, IsNotEmpty, IsInt, IsBoolean, IsOptional, IsArray, Min,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsEntityId } from '@/common/validators/is-entity-id.validator';
 
 interface SubjectComponent {
   type: string;
@@ -27,7 +28,7 @@ export class CreateSubjectDto {
   credits: number;
 
   @ApiProperty()
-  @IsUUID('4')
+  @IsEntityId()
   branchId: string;
 
   @ApiProperty({ example: 5 })
@@ -36,7 +37,7 @@ export class CreateSubjectDto {
   semester: number;
 
   @ApiProperty()
-  @IsUUID('4')
+  @IsEntityId()
   schemeId: string;
 
   @ApiProperty({ example: 2 })

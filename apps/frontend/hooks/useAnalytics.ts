@@ -5,7 +5,7 @@ import {
   analyticsService,
   type AnalyticsFilters,
   type OverviewStats,
-  type PassFailBucket,
+  type PassFailStats,
   type SubjectDifficulty,
   type PerformanceTrendPoint,
 } from '@/lib/services/analytics.service';
@@ -20,7 +20,7 @@ export function useOverview(filters?: AnalyticsFilters) {
 }
 
 export function usePassFail(filters?: AnalyticsFilters) {
-  return useQuery<{ data: PassFailBucket[] }>({
+  return useQuery<PassFailStats>({
     queryKey: queryKeys.analytics.passFail(filters),
     queryFn: () => analyticsService.passFail(filters),
     staleTime: 60 * 1000,
@@ -28,7 +28,7 @@ export function usePassFail(filters?: AnalyticsFilters) {
 }
 
 export function useSubjectDifficulty(filters?: AnalyticsFilters) {
-  return useQuery<{ data: SubjectDifficulty[] }>({
+  return useQuery<SubjectDifficulty[]>({
     queryKey: queryKeys.analytics.subjectDifficulty(filters),
     queryFn: () => analyticsService.subjectDifficulty(filters),
     staleTime: 5 * 60 * 1000,
@@ -36,8 +36,8 @@ export function useSubjectDifficulty(filters?: AnalyticsFilters) {
 }
 
 export function usePerformanceTrends(filters?: AnalyticsFilters) {
-  return useQuery<{ data: PerformanceTrendPoint[] }>({
-    queryKey: ['analytics', 'performance-trends', filters],
+  return useQuery<PerformanceTrendPoint[]>({
+    queryKey: queryKeys.analytics.performanceTrends(filters),
     queryFn: () => analyticsService.performanceTrends(filters),
     staleTime: 5 * 60 * 1000,
   });

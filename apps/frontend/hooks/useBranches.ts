@@ -6,7 +6,7 @@ import { queryKeys } from '@/lib/query/queryKeys';
 import { useToast } from '@/lib/utils/notifications';
 
 export function useBranches() {
-  return useQuery<{ data: Branch[] }>({
+  return useQuery<Branch[]>({
     queryKey: queryKeys.branches.list(),
     queryFn: () => branchesService.list(),
     staleTime: 5 * 60 * 1000,

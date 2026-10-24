@@ -3,8 +3,9 @@
 import { Suspense, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useLogin } from '@/hooks/useAuth';
+import { useToast } from '@/lib/utils/notifications';
 import { Spinner } from '@/components/feedback/Spinner';
 import { FieldError } from '@/components/feedback/FieldError';
 
@@ -12,7 +13,7 @@ interface AxiosLikeError {
   response?: {
     status?: number;
     data?: {
-      message?: string;
+      message?: string | string[];
       retryAfter?: number;
     };
   };
@@ -42,13 +43,12 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const { mutate: login, isPending } = useLogin();
+  const toast = useToast();
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setError(null);
     setEmailError(null);
     setPasswordError(null);
 
@@ -70,13 +70,13 @@ function LoginForm() {
           const status = e.response?.status;
           const retryAfter = e.response?.data?.retryAfter;
           if (status === 429) {
-            setError(
+            // The shared toast already shows an error — this only sharpens the
+            // message with the retry window the backend reports.
+            toast.error(
               retryAfter
                 ? `Too many login attempts. Try again in ${Math.ceil(retryAfter / 60)} minute(s).`
                 : 'Too many login attempts. Please wait and try again.',
             );
-          } else {
-            setError(e.response?.data?.message ?? 'Invalid email or password');
           }
         },
       },
@@ -126,16 +126,6 @@ function LoginForm() {
           />
           {passwordError ? <FieldError id="password-error" message={passwordError} /> : null}
         </label>
-
-        {error ? (
-          <div
-            role="alert"
-            className="flex items-start gap-xs rounded-md border border-hairline bg-surface-soft px-sm py-xs text-body-sm text-semantic-down"
-          >
-            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden />
-            {error}
-          </div>
-        ) : null}
 
         <button
           type="submit"

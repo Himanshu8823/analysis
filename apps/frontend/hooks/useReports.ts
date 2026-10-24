@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { reportsService, type GenerateReportPayload, type Report } from '@/lib/services/reports.service';
 import { queryKeys } from '@/lib/query/queryKeys';
 import { invalidationRules } from '@/lib/query/invalidationRules';
+import type { ListResponse } from '@/lib/types/api';
 import { useToast } from '@/lib/utils/notifications';
 
 export function useGenerateReport() {
@@ -21,7 +22,7 @@ export function useGenerateReport() {
 }
 
 export function useReports() {
-  return useQuery<{ data: Report[] }>({
+  return useQuery<ListResponse<Report>>({
     queryKey: queryKeys.reports.list(),
     queryFn: () => reportsService.list(),
     staleTime: 60 * 1000,
@@ -35,7 +36,7 @@ export function useReport(id: string | null) {
     enabled: !!id,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      if (status === 'PENDING' || status === 'GENERATING') return 3000;
+      if (status === 'PENDING' || status === 'PROCESSING') return 3000;
       return false;
     },
   });

@@ -3,7 +3,7 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-const FILE_TYPES = ['EXCEL', 'PDF_TEXT', 'PDF_IMAGE'] as const;
+const FILE_TYPES = ['EXCEL', 'PDF_TEXT', 'PDF_IMAGE', 'CSV'] as const;
 
 export class CreateUploadJobDto {
   @ApiProperty()

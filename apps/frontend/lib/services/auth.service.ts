@@ -11,6 +11,24 @@ interface AuthUser {
   email: string;
   name: string;
   role: string;
+  roles?: string[];
+  branchId?: string | null;
+  mustChangePassword: boolean;
+}
+
+/**
+ * The `me` endpoint returns the primary role (`role`) alongside the full list
+ * (`roles: [...]`), while `login` returns a single primary role (`role`).
+ * Both are normalised to the same shape here so every consumer of the session
+ * user can rely on a single `role` string.
+ */
+interface AuthMeResponse {
+  id: string;
+  email: string;
+  name: string;
+  role?: string;
+  roles: string[];
+  permissions?: string[];
   branchId?: string | null;
   mustChangePassword: boolean;
 }
@@ -21,6 +39,20 @@ interface AuthResponse {
   user: AuthUser;
 }
 
+/** Normalises the `me` payload into the same shape `login` returns. */
+function toAuthUser(me: AuthMeResponse): AuthUser {
+  const roles = me.roles ?? [];
+  return {
+    id: me.id,
+    email: me.email,
+    name: me.name,
+    role: me.role ?? roles[0] ?? '',
+    roles,
+    branchId: me.branchId ?? null,
+    mustChangePassword: me.mustChangePassword,
+  };
+}
+
 export const authService = {
   login: async (payload: LoginPayload): Promise<AuthResponse> => {
     const res = await apiClient.post(ENDPOINTS.AUTH.LOGIN, payload);
@@ -29,9 +61,9 @@ export const authService = {
   logout: async (): Promise<void> => {
     await apiClient.post(ENDPOINTS.AUTH.LOGOUT);
   },
-  me: async () => {
+  me: async (): Promise<AuthUser> => {
     const res = await apiClient.get(ENDPOINTS.AUTH.ME);
-    return res.data.data;
+    return toAuthUser(res.data.data as AuthMeResponse);
   },
   refresh: async (refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> => {
     const res = await apiClient.post(ENDPOINTS.AUTH.REFRESH, { refreshToken });

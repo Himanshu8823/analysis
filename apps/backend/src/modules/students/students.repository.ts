@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import type { Prisma, Student } from '@prisma/client';
 import { CreateStudentDto, UpdateStudentDto } from './dto';
+import type { ParsedStudentRow } from './student-import.parser';
 
 @Injectable()
 export class StudentsRepository {
@@ -103,5 +104,66 @@ export class StudentsRepository {
       where: { id },
       data: { isActive: false },
     });
+  }
+
+  /**
+   * Inserts many students in one transaction. The unique constraint on
+   * `(rollNo, academicYearId)` is the source of truth for duplicates — the
+   * pre-check below only exists so the caller gets a per-row message instead
+   * of a single rolled-back transaction.
+   */
+  async bulkCreate(
+    rows: CreateStudentDto[],
+  ): Promise<{ inserted: number; errors: Array<{ row: number; error: string }> }> {
+    if (!rows.length) return { inserted: 0, errors: [] };
+
+    const academicYearIds = [...new Set(rows.map((row) => row.academicYearId))];
+    const rollNos = [...new Set(rows.map((row) => row.rollNo))];
+
+    const existing = await this.prisma.student.findMany({
+      where: {
+        rollNo: { in: rollNos },
+        academicYearId: { in: academicYearIds },
+      },
+      select: { rollNo: true, academicYearId: true },
+    });
+    const existingKeys = new Set(existing.map((e) => `${e.rollNo}::${e.academicYearId}`));
+
+    const errors: Array<{ row: number; error: string }> = [];
+    const accepted: CreateStudentDto[] = [];
+    const seenInFile = new Set<string>();
+
+    rows.forEach((row, index) => {
+      const key = `${row.rollNo}::${row.academicYearId}`;
+      if (existingKeys.has(key)) {
+        errors.push({ row: index + 1, error: `Roll No "${row.rollNo}" already exists` });
+        return;
+      }
+      if (seenInFile.has(key)) {
+        errors.push({ row: index + 1, error: `Roll No "${row.rollNo}" is duplicated in the file` });
+        return;
+      }
+      seenInFile.add(key);
+      accepted.push(row);
+    });
+
+    if (!accepted.length) return { inserted: 0, errors };
+
+    const result = await this.prisma.student.createMany({
+      data: accepted.map((row) => ({
+        rollNo: row.rollNo,
+        name: row.name,
+        branchId: row.branchId,
+        currentYear: row.currentYear,
+        semester: row.semester,
+        schemeId: row.schemeId,
+        batchId: row.batchId,
+        academicYearId: row.academicYearId,
+        isActive: row.isActive ?? true,
+      })),
+      skipDuplicates: true,
+    });
+
+    return { inserted: result.count, errors };
   }
 }

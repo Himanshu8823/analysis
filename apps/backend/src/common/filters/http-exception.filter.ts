@@ -4,6 +4,8 @@ import type { Request, Response } from 'express';
 interface ExceptionResponseShape {
   message?: unknown;
   code?: string;
+  /** Seconds the client should wait before retrying (rate-limit responses). */
+  retryAfter?: number;
 }
 
 @Catch()
@@ -18,6 +20,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message: string | object = 'Internal server error';
     let code = 'INTERNAL_ERROR';
+    let retryAfter: number | undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -28,6 +31,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         const shaped = exceptionResponse as ExceptionResponseShape;
         message = shaped.message ?? exceptionResponse;
         code = shaped.code ?? code;
+        retryAfter = shaped.retryAfter;
       }
     } else if (exception instanceof Error) {
       message = exception.message;
@@ -38,11 +42,17 @@ export class HttpExceptionFilter implements ExceptionFilter {
       exception instanceof Error ? exception.stack : undefined,
     );
 
+    // Tell the client exactly how long to wait before retrying.
+    if (retryAfter !== undefined) {
+      response.setHeader('Retry-After', String(retryAfter));
+    }
+
     response.status(status).json({
       success: false,
       error: {
         code,
         message,
+        ...(retryAfter !== undefined ? { retryAfter } : {}),
       },
       timestamp: new Date().toISOString(),
       path: request.url,

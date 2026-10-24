@@ -14,7 +14,7 @@ import { InviteUserDto, ListInvitesDto } from './dto';
 import { EmailService } from '../email/email.service';
 import { renderInviteEmail } from '../email/templates/invite.template';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
-import { BRANCH_SCOPED_ROLES, INVITABLE_ROLES, isUserRole } from '@result-analysis/shared-types';
+import { BRANCH_SCOPED_ROLES, INVITABLE_ROLES, isUserRole } from '@/common/constants/roles';
 import type { InviteStatus, UserRole } from '@result-analysis/shared-types';
 import type { Invite } from '@prisma/client';
 

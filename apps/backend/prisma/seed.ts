@@ -40,6 +40,16 @@ const PERMISSIONS = [
   { name: 'rbac:write', resource: 'rbac', action: 'write' },
   { name: 'invites:read', resource: 'invites', action: 'read' },
   { name: 'invites:write', resource: 'invites', action: 'write' },
+  { name: 'dashboard:read', resource: 'dashboard', action: 'read' },
+  { name: 'branches:read', resource: 'branches', action: 'read' },
+  { name: 'branches:write', resource: 'branches', action: 'write' },
+  { name: 'branches:delete', resource: 'branches', action: 'delete' },
+  { name: 'schemes:read', resource: 'schemes', action: 'read' },
+  { name: 'schemes:write', resource: 'schemes', action: 'write' },
+  { name: 'subjects:read', resource: 'subjects', action: 'read' },
+  { name: 'subjects:write', resource: 'subjects', action: 'write' },
+  { name: 'subjects:delete', resource: 'subjects', action: 'delete' },
+  { name: 'toppers:read', resource: 'toppers', action: 'read' },
 ] as const;
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -57,6 +67,16 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'upload:process',
     'analytics:read',
     'users:read',
+    'dashboard:read',
+    'branches:read',
+    'branches:write',
+    'branches:delete',
+    'schemes:read',
+    'schemes:write',
+    'subjects:read',
+    'subjects:write',
+    'subjects:delete',
+    'toppers:read',
   ],
   HOD: [
     'students:read',
@@ -69,6 +89,12 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'upload:process',
     'analytics:read',
     'analytics:read_own_department',
+    'dashboard:read',
+    'branches:read',
+    'schemes:read',
+    'subjects:read',
+    'subjects:write',
+    'toppers:read',
   ],
   TEACHER: [
     'students:read',
@@ -76,6 +102,11 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'marks:edit_own_subject',
     'reports:read',
     'upload:read',
+    'dashboard:read',
+    'branches:read',
+    'schemes:read',
+    'subjects:read',
+    'toppers:read',
   ],
   PRINCIPAL: [
     'students:read',
@@ -83,8 +114,13 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'reports:read',
     'reports:download',
     'analytics:read',
+    'dashboard:read',
+    'branches:read',
+    'schemes:read',
+    'subjects:read',
+    'toppers:read',
   ],
-  STUDENT: [],
+  STUDENT: ['dashboard:read'],
 };
 
 const BRANCHES = [
@@ -242,31 +278,37 @@ async function main(): Promise<void> {
   const adminEmail = 'admin@dbatu.edu';
   const adminPass = 'Admin@123';
   const passwordHash = await bcrypt.hash(adminPass, 12);
-  const admin = await prisma.user.upsert({
-    where: { email: adminEmail },
-    create: {
-      email: adminEmail,
-      name: 'System Administrator',
-      passwordHash,
-      isActive: true,
-    },
-    update: { name: 'System Administrator', isActive: true },
-  });
-
   const adminRole = await prisma.role.findUnique({ where: { name: 'SUPER_ADMIN' } });
-  if (adminRole) {
+  if (!adminRole) {
+    throw new Error('SUPER_ADMIN role is missing — the role seed did not run.');
+  }
+
+  // The user and the role assignment are written together so a failure
+  // cannot leave an account without its SUPER_ADMIN role.
+  await prisma.$transaction(async (tx) => {
+    const admin = await tx.user.upsert({
+      where: { email: adminEmail },
+      create: {
+        email: adminEmail,
+        name: 'System Administrator',
+        passwordHash,
+        isActive: true,
+      },
+      update: { name: 'System Administrator', isActive: true },
+    });
+
     // Prisma 5.8 cannot address a NULL column in a compound unique selector
     // (`branchId: Prisma.DbNull` is a type error), so the lookup is done
     // explicitly and the row is created only when it is missing.
-    const existingAdminRole = await prisma.userRole.findFirst({
+    const existingAdminRole = await tx.userRole.findFirst({
       where: { userId: admin.id, roleId: adminRole.id, branchId: null },
     });
     if (!existingAdminRole) {
-      await prisma.userRole.create({
+      await tx.userRole.create({
         data: { userId: admin.id, roleId: adminRole.id },
       });
     }
-  }
+  });
 
   console.log(
     `Seed complete. Admin user: ${adminEmail} / ${adminPass} (change after first login).`,

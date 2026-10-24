@@ -1,4 +1,5 @@
 import { apiClient } from '@/lib/api/client';
+import { ENDPOINTS } from '@/lib/api/endpoints';
 
 export interface DashboardKpi {
   label: string;
@@ -22,11 +23,12 @@ export interface DashboardData {
     averagePercentage: number;
   };
   recentUploads: RecentUpload[];
+  academicYear: { id: string; year: string } | null;
 }
 
 export const dashboardService = {
   getDashboard: async (): Promise<DashboardData> => {
-    const res = await apiClient.get('/dashboard');
+    const res = await apiClient.get(ENDPOINTS.DASHBOARD.GET);
     return res.data.data;
   },
 };

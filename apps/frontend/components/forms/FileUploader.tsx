@@ -17,6 +17,8 @@ interface FileUploaderProps {
   hint?: string;
   /** Called when a dropped/selected file is not an accepted type. */
   onReject?: (reason: string) => void;
+  /** Blocks the picker entirely — used when the surrounding form is incomplete. */
+  disabled?: boolean;
 }
 
 /**
@@ -39,10 +41,12 @@ export function FileUploader({
   isUploading = false,
   hint,
   onReject,
+  disabled = false,
 }: FileUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const blocked = isUploading || disabled;
 
   const handleFiles = useCallback(
     (files: FileList | null) => {
@@ -63,6 +67,7 @@ export function FileUploader({
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
+    if (blocked) return;
     handleFiles(e.dataTransfer.files);
   };
 
@@ -80,16 +85,16 @@ export function FileUploader({
         }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={onDrop}
-        className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed bg-surface-soft px-md py-xl text-center transition-colors ${
+        className={`flex w-full max-w-3xl flex-col items-center justify-center rounded-xl border-2 border-dashed bg-surface-soft px-md py-xl text-center transition-colors ${
           isDragging ? 'border-primary bg-surface-strong' : 'border-hairline'
-        } ${isUploading ? 'opacity-60' : ''}`}
+        } ${blocked ? 'opacity-60' : ''}`}
       >
         <input
           ref={inputRef}
           type="file"
           accept={ACCEPTED_EXT}
           onChange={onChange}
-          disabled={isUploading}
+          disabled={blocked}
           className="sr-only"
           aria-label="Upload file"
         />
@@ -101,7 +106,7 @@ export function FileUploader({
             type="button"
             className="font-semibold text-primary underline-offset-4 hover:underline disabled:cursor-not-allowed"
             onClick={() => inputRef.current?.click()}
-            disabled={isUploading}
+            disabled={blocked}
           >
             Click to upload
           </button>{' '}

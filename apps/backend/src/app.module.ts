@@ -14,12 +14,15 @@ import emailConfig from './config/email.config';
 import { PrismaModule } from './database/prisma.module';
 
 import { CacheModule } from './modules/cache/cache.module';
+import { StorageModule } from './modules/storage/storage.module';
 import { EmailModule } from './modules/email/email.module';
 import { InvitesModule } from './modules/invites/invites.module';
+import { PasswordResetModule } from './modules/password-reset/password-reset.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { BranchesModule } from './modules/branches/branches.module';
+import { AcademicModule } from './modules/academic/academic.module';
 import { SchemesModule } from './modules/schemes/schemes.module';
 import { SubjectsModule } from './modules/subjects/subjects.module';
 import { StudentsModule } from './modules/students/students.module';
@@ -30,6 +33,7 @@ import { OcrModule } from './modules/ocr/ocr.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { ToppersModule } from './modules/toppers/toppers.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { HealthModule } from './modules/health/health.module';
@@ -76,13 +80,18 @@ import { ForcePasswordChangeGuard } from './common/guards/force-password-change.
     // Cache (global — consumed by the guards and the auth/RBAC services)
     CacheModule,
 
+    // Storage (global — consumed by the upload module)
+    StorageModule,
+
     // Feature modules (sorted by dependency order)
     EmailModule,
     InvitesModule,
+    PasswordResetModule,
     AuthModule,
     UsersModule,
     RbacModule,
     BranchesModule,
+    AcademicModule,
     SchemesModule,
     SubjectsModule,
     StudentsModule,
@@ -93,6 +102,7 @@ import { ForcePasswordChangeGuard } from './common/guards/force-password-change.
     ReportsModule,
     ToppersModule,
     AnalyticsModule,
+    DashboardModule,
     AuditLogsModule,
     NotificationsModule,
     HealthModule,

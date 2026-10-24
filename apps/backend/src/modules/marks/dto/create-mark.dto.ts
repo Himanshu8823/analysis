@@ -1,17 +1,18 @@
 import {
-  IsString, IsNotEmpty, IsNumber, IsUUID, IsBoolean, IsOptional, Min, IsIn,
+  IsString, IsNotEmpty, IsNumber, IsBoolean, IsOptional, Min, IsIn,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsEntityId } from '@/common/validators/is-entity-id.validator';
 
 const EXAM_TYPES = ['CA1', 'CA2', 'MID_SEM', 'WRITTEN', 'PRACTICAL', 'ORAL'] as const;
 
 export class CreateMarkDto {
   @ApiProperty()
-  @IsUUID('4')
+  @IsEntityId()
   studentId: string;
 
   @ApiProperty()
-  @IsUUID('4')
+  @IsEntityId()
   subjectId: string;
 
   @ApiProperty({ enum: EXAM_TYPES })
@@ -40,7 +41,7 @@ export class CreateMarkDto {
   isWithheld?: boolean;
 
   @ApiProperty()
-  @IsUUID('4')
+  @IsEntityId()
   academicYearId: string;
 
   @ApiProperty({ required: false })

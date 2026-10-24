@@ -5,6 +5,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { MarksService } from './marks.service';
 import { CreateMarkDto, BulkCreateMarksDto, UpdateMarkDto } from './dto';
 import { Roles, Permissions, CurrentUser } from '@/common/decorators';
+import { parseOptionalInt, parseOptionalString } from '@/common/utils/query-params';
 import type { JwtPayload } from '@/common/types';
 
 @ApiTags('Marks')
@@ -38,13 +39,35 @@ export class MarksController {
     @Query('examType') examType?: string,
     @Query('academicYearId') academicYearId?: string,
   ) {
-    return this.service.findAll({ studentId, subjectId, examType, academicYearId });
+    return this.service.findAll({
+      studentId: parseOptionalString(studentId),
+      subjectId: parseOptionalString(subjectId),
+      examType: parseOptionalString(examType),
+      academicYearId: parseOptionalString(academicYearId),
+    });
   }
 
-  @Get(':id')
+  // Static segments are declared before `@Get(':id')` so the literal paths win
+  // over the parameter route.
+  @Get('calculate/class')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'HOD')
   @Permissions('marks:read')
-  async findById(@Param('id') id: string) {
-    return this.service.findById(id);
+  @ApiOperation({
+    summary:
+      'Calculate every student in a class (branch+scheme+semester+academicYear)',
+  })
+  async calculateClass(
+    @Query('branchId') branchId: string,
+    @Query('schemeId') schemeId: string,
+    @Query('semester') semester: string,
+    @Query('academicYearId') academicYearId: string,
+  ) {
+    return this.service.calculateClassResult({
+      branchId,
+      schemeId,
+      semester: parseOptionalInt(semester),
+      academicYearId,
+    });
   }
 
   @Get('calculate/:studentId')
@@ -60,25 +83,10 @@ export class MarksController {
     return this.service.calculateStudentResult(studentId, academicYearId);
   }
 
-  @Get('calculate/class')
-  @Roles('SUPER_ADMIN', 'ADMIN', 'HOD')
+  @Get(':id')
   @Permissions('marks:read')
-  @ApiOperation({
-    summary:
-      'Calculate every student in a class (branch+scheme+semester+academicYear)',
-  })
-  async calculateClass(
-    @Query('branchId') branchId: string,
-    @Query('schemeId') schemeId: string,
-    @Query('semester') semester: number,
-    @Query('academicYearId') academicYearId: string,
-  ) {
-    return this.service.calculateClassResult({
-      branchId,
-      schemeId,
-      semester: Number(semester),
-      academicYearId,
-    });
+  async findById(@Param('id') id: string) {
+    return this.service.findById(id);
   }
 
   @Put(':id')

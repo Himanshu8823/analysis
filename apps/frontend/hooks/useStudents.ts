@@ -1,13 +1,19 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { studentsService, type Student, type StudentListFilters } from '@/lib/services/students.service';
+import {
+  studentsService,
+  type Student,
+  type StudentListFilters,
+  type BulkImportScope,
+} from '@/lib/services/students.service';
 import { queryKeys } from '@/lib/query/queryKeys';
 import { invalidationRules } from '@/lib/query/invalidationRules';
+import type { ListResponse } from '@/lib/types/api';
 import { useToast } from '@/lib/utils/notifications';
 
 export function useStudents(filters?: StudentListFilters) {
-  return useQuery<{ data: Student[]; meta?: { total: number; page: number; pageSize: number } }>({
+  return useQuery<ListResponse<Student>>({
     queryKey: queryKeys.students.list(filters),
     queryFn: () => studentsService.list(filters),
     staleTime: 60 * 1000,
@@ -67,7 +73,8 @@ export function useImportStudents() {
   const qc = useQueryClient();
   const toast = useToast();
   return useMutation({
-    mutationFn: (file: File) => studentsService.bulkImport(file),
+    mutationFn: ({ file, scope }: { file: File; scope?: BulkImportScope }) =>
+      studentsService.bulkImportFile(file, scope),
     onSuccess: (result) => {
       invalidationRules.onStudentCreated(qc);
       if (result.failed > 0) {

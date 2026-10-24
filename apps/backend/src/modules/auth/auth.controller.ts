@@ -48,8 +48,13 @@ export class AuthController {
   @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  async refresh(@Body() dto: RefreshTokenDto) {
-    return this.authService.refresh(dto.refreshToken);
+  @Throttle({ default: { limit: 20, ttl: 900000 } }) // 20 per 15 min
+  @ApiOperation({ summary: 'Exchange a refresh token for a new token pair' })
+  async refresh(@Body() dto: RefreshTokenDto, @Req() request: Request) {
+    return this.authService.refresh(dto.refreshToken, {
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+    });
   }
 
   @Post('logout')

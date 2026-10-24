@@ -99,11 +99,16 @@ export class UsersRepository {
         { name: { contains: params.search, mode: 'insensitive' } },
       ];
     }
-    if (params.role) {
-      where.userRoles = { some: { role: { name: params.role } } };
-    }
-    if (params.branchId) {
-      where.userRoles = { some: { branchId: params.branchId } };
+    // Role and branch filters both live on the `userRoles` relation, so they
+    // have to be combined into a single predicate — assigning `where.userRoles`
+    // twice would silently drop the first filter.
+    if (params.role || params.branchId) {
+      where.userRoles = {
+        some: {
+          ...(params.role ? { role: { name: params.role } } : {}),
+          ...(params.branchId ? { branchId: params.branchId } : {}),
+        },
+      };
     }
 
     const [items, total] = await Promise.all([

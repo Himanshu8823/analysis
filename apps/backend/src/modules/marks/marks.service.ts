@@ -1,8 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import type { Mark, Subject } from '@prisma/client';
 import { MarksRepository } from './marks.repository';
-import { MarksCalculatorService } from './calculator.service';
 import { CalculatorFactory } from './calculator';
 import { CreateMarkDto, BulkCreateMarksDto, UpdateMarkDto } from './dto';
 import type { StudentCalculationResult } from './calculator';
@@ -10,7 +9,7 @@ import type { StudentCalculationResult } from './calculator';
 export interface ClassCalculationFilter {
   branchId: string;
   schemeId: string;
-  semester: number;
+  semester?: number;
   academicYearId: string;
 }
 
@@ -25,7 +24,6 @@ export interface ClassStudentResult {
 export class MarksService {
   constructor(
     private readonly repository: MarksRepository,
-    private readonly calculator: MarksCalculatorService,
     private readonly factory: CalculatorFactory,
     private readonly prisma: PrismaClient,
   ) {}
@@ -69,6 +67,9 @@ export class MarksService {
     studentId: string,
     academicYearId: string,
   ): Promise<StudentCalculationResult> {
+    if (!academicYearId) {
+      throw new BadRequestException('academicYearId is required');
+    }
     const student = await this.prisma.student.findUnique({
       where: { id: studentId },
       include: { scheme: true },
@@ -107,6 +108,9 @@ export class MarksService {
   async calculateClassResult(
     filters: ClassCalculationFilter,
   ): Promise<{ schemeName: string; results: ClassStudentResult[] }> {
+    if (!filters.academicYearId) {
+      throw new BadRequestException('academicYearId is required');
+    }
     const scheme = await this.prisma.scheme.findUnique({
       where: { id: filters.schemeId },
     });

@@ -3,12 +3,17 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { AnalyticsService } from './analytics.service';
 import { Roles, Permissions } from '@/common/decorators';
+import { parseOptionalInt, parseOptionalString } from '@/common/utils/query-params';
 
 @ApiTags('Analytics')
 @ApiBearerAuth()
 @Controller('analytics')
 export class AnalyticsController {
   constructor(private readonly service: AnalyticsService) {}
+
+  // `academicYearId` is optional everywhere: when it is omitted the service
+  // falls back to the active academic year, so the client never has to know
+  // which year happens to be configured.
 
   @Get('overview')
   @Roles('SUPER_ADMIN', 'ADMIN', 'HOD', 'PRINCIPAL')
@@ -18,16 +23,16 @@ export class AnalyticsController {
     summary: 'High-level overview: students, subjects, pass %, avg %',
   })
   async overview(
-    @Query('academicYearId') academicYearId: string,
+    @Query('academicYearId') academicYearId?: string,
     @Query('branchId') branchId?: string,
     @Query('schemeId') schemeId?: string,
-    @Query('semester') semester?: number,
+    @Query('semester') semester?: string,
   ) {
     return this.service.getOverview({
-      academicYearId,
-      branchId,
-      schemeId,
-      semester: semester !== undefined ? Number(semester) : undefined,
+      academicYearId: parseOptionalString(academicYearId),
+      branchId: parseOptionalString(branchId),
+      schemeId: parseOptionalString(schemeId),
+      semester: parseOptionalInt(semester),
     });
   }
 
@@ -36,16 +41,16 @@ export class AnalyticsController {
   @Permissions('analytics:read')
   @ApiOperation({ summary: 'Detailed pass/fail breakdown with class buckets' })
   async passFail(
-    @Query('academicYearId') academicYearId: string,
+    @Query('academicYearId') academicYearId?: string,
     @Query('branchId') branchId?: string,
     @Query('schemeId') schemeId?: string,
-    @Query('semester') semester?: number,
+    @Query('semester') semester?: string,
   ) {
     return this.service.passFail({
-      academicYearId,
-      branchId,
-      schemeId,
-      semester: semester !== undefined ? Number(semester) : undefined,
+      academicYearId: parseOptionalString(academicYearId),
+      branchId: parseOptionalString(branchId),
+      schemeId: parseOptionalString(schemeId),
+      semester: parseOptionalInt(semester),
     });
   }
 
@@ -54,16 +59,16 @@ export class AnalyticsController {
   @Permissions('analytics:read')
   @ApiOperation({ summary: 'Per-subject statistics + difficulty rating' })
   async subjects(
-    @Query('academicYearId') academicYearId: string,
+    @Query('academicYearId') academicYearId?: string,
     @Query('branchId') branchId?: string,
     @Query('schemeId') schemeId?: string,
-    @Query('semester') semester?: number,
+    @Query('semester') semester?: string,
   ) {
     return this.service.subjectStats({
-      academicYearId,
-      branchId,
-      schemeId,
-      semester: semester !== undefined ? Number(semester) : undefined,
+      academicYearId: parseOptionalString(academicYearId),
+      branchId: parseOptionalString(branchId),
+      schemeId: parseOptionalString(schemeId),
+      semester: parseOptionalInt(semester),
     });
   }
 
@@ -72,16 +77,16 @@ export class AnalyticsController {
   @Permissions('analytics:read')
   @ApiOperation({ summary: 'Per-subject difficulty rating (alias of /subjects)' })
   async subjectDifficulty(
-    @Query('academicYearId') academicYearId: string,
+    @Query('academicYearId') academicYearId?: string,
     @Query('branchId') branchId?: string,
     @Query('schemeId') schemeId?: string,
-    @Query('semester') semester?: number,
+    @Query('semester') semester?: string,
   ) {
     return this.service.subjectDifficulty({
-      academicYearId,
-      branchId,
-      schemeId,
-      semester: semester !== undefined ? Number(semester) : undefined,
+      academicYearId: parseOptionalString(academicYearId),
+      branchId: parseOptionalString(branchId),
+      schemeId: parseOptionalString(schemeId),
+      semester: parseOptionalInt(semester),
     });
   }
 
@@ -92,12 +97,12 @@ export class AnalyticsController {
   async performanceTrends(
     @Query('branchId') branchId?: string,
     @Query('schemeId') schemeId?: string,
-    @Query('semester') semester?: number,
+    @Query('semester') semester?: string,
   ) {
     return this.service.performanceTrends({
-      branchId,
-      schemeId,
-      semester: semester !== undefined ? Number(semester) : undefined,
+      branchId: parseOptionalString(branchId),
+      schemeId: parseOptionalString(schemeId),
+      semester: parseOptionalInt(semester),
     });
   }
 }

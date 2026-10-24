@@ -7,6 +7,7 @@ import { Throttle } from '@nestjs/throttler';
 import { ReportsService } from './reports.service';
 import { CreateReportDto } from './dto';
 import { Roles, Permissions, CurrentUser } from '@/common/decorators';
+import { parseOptionalInt, parseOptionalString } from '@/common/utils/query-params';
 import type { JwtPayload } from '@/common/types';
 
 @ApiTags('Reports')
@@ -27,13 +28,19 @@ export class ReportsController {
   @Get()
   @Permissions('reports:read')
   async findAll(
-    @Query('page') page?: number,
-    @Query('pageSize') pageSize?: number,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
     @Query('status') status?: string,
     @Query('type') type?: string,
     @Query('generatedBy') generatedBy?: string,
   ) {
-    return this.service.findAll({ page, pageSize, status, type, generatedBy });
+    return this.service.findAll({
+      page: parseOptionalInt(page),
+      pageSize: parseOptionalInt(pageSize),
+      status: parseOptionalString(status),
+      type: parseOptionalString(type),
+      generatedBy: parseOptionalString(generatedBy),
+    });
   }
 
   @Get(':id')

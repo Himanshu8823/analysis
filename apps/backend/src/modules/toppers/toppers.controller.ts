@@ -1,24 +1,27 @@
 import {
-  Controller, Get, Post, Body, Query,
+  Controller, Get, Post, Body, Query, BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { IsIn, IsInt, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ToppersService } from './toppers.service';
+import { normaliseRankingRule } from './algorithms';
 import { Roles, Permissions } from '@/common/decorators';
+import { parseOptionalInt, parseOptionalString } from '@/common/utils/query-params';
+import { IsEntityId } from '@/common/validators/is-entity-id.validator';
 
 export class ClassToppersQueryDto {
-  @IsUUID('4')
+  @IsEntityId()
   branchId: string;
 
-  @IsUUID('4')
+  @IsEntityId()
   schemeId: string;
 
   @IsInt()
   @Type(() => Number)
   semester: number;
 
-  @IsUUID('4')
+  @IsEntityId()
   academicYearId: string;
 
   @IsOptional()
@@ -40,30 +43,51 @@ export class ToppersController {
 
   @Get('subject')
   @Roles('SUPER_ADMIN', 'ADMIN', 'HOD', 'TEACHER', 'PRINCIPAL')
-  @Permissions('analytics:read')
+  @Permissions('toppers:read')
   @ApiOperation({ summary: 'Get subject-wise toppers (raw aggregate mode)' })
   async subject(
-    @Query('academicYearId') academicYearId: string,
+    @Query('academicYearId') academicYearId?: string,
     @Query('branchId') branchId?: string,
     @Query('schemeId') schemeId?: string,
-    @Query('semester') semester?: number,
+    @Query('semester') semester?: string,
   ) {
     return this.service.findSubjectToppers({
-      academicYearId,
-      branchId,
-      schemeId,
-      semester: semester !== undefined ? Number(semester) : undefined,
+      academicYearId: parseOptionalString(academicYearId),
+      branchId: parseOptionalString(branchId),
+      schemeId: parseOptionalString(schemeId),
+      semester: parseOptionalInt(semester),
     });
   }
 
-  @Post('subject-wise')
+  @Get('subject-wise')
   @Roles('SUPER_ADMIN', 'ADMIN', 'HOD', 'TEACHER', 'PRINCIPAL')
-  @Permissions('analytics:read')
+  @Permissions('toppers:read')
   @ApiOperation({
     summary:
       'Per-subject toppers with tie handling for a branch+scheme+semester',
   })
   async subjectWise(
+    @Query('branchId') branchId?: string,
+    @Query('schemeId') schemeId?: string,
+    @Query('semester') semester?: string,
+    @Query('academicYearId') academicYearId?: string,
+  ) {
+    return this.service.findSubjectWiseToppers({
+      branchId: parseOptionalString(branchId),
+      schemeId: parseOptionalString(schemeId),
+      semester: parseOptionalInt(semester),
+      academicYearId: parseOptionalString(academicYearId),
+    });
+  }
+
+  @Post('subject-wise')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'HOD', 'TEACHER', 'PRINCIPAL')
+  @Permissions('toppers:read')
+  @ApiOperation({
+    summary:
+      'Per-subject toppers with tie handling for a branch+scheme+semester',
+  })
+  async subjectWiseWithBody(
     @Body() body: ClassToppersQueryDto,
   ) {
     return this.service.findSubjectWiseToppers({
@@ -76,22 +100,47 @@ export class ToppersController {
 
   @Get('class')
   @Roles('SUPER_ADMIN', 'ADMIN', 'HOD', 'PRINCIPAL')
-  @Permissions('analytics:read')
+  @Permissions('toppers:read')
   @ApiOperation({ summary: 'Get class toppers (overall ranking)' })
   async class(
-    @Query('academicYearId') academicYearId: string,
+    @Query('academicYearId') academicYearId?: string,
     @Query('branchId') branchId?: string,
     @Query('schemeId') schemeId?: string,
-    @Query('semester') semester?: number,
-    @Query('limit') limit?: number,
+    @Query('semester') semester?: string,
+    @Query('limit') limit?: string,
+    @Query('rankingRule') rankingRule?: string,
   ) {
-    return this.service.findClassToppers({
-      academicYearId,
-      branchId,
-      schemeId,
-      semester: semester !== undefined ? Number(semester) : undefined,
-      limit: limit !== undefined ? Number(limit) : undefined,
-    });
+    const params = {
+      academicYearId: parseOptionalString(academicYearId),
+      branchId: parseOptionalString(branchId),
+      schemeId: parseOptionalString(schemeId),
+      semester: parseOptionalInt(semester),
+      limit: parseOptionalInt(limit),
+    };
+
+    // A ranking rule needs the full class context, so it is served by the
+    // strategy-based endpoint rather than the aggregate one.
+    const rule = parseOptionalString(rankingRule);
+    if (rule) {
+      const normalised = normaliseRankingRule(rule);
+      if (!normalised) {
+        throw new BadRequestException(
+          `Unsupported ranking rule "${rule}". Use one of: ${this.service.listSupportedRules().join(', ')}.`,
+        );
+      }
+      return this.service.findClassToppersByRule(
+        {
+          branchId: params.branchId ?? '',
+          schemeId: params.schemeId ?? '',
+          semester: params.semester ?? 0,
+          academicYearId: params.academicYearId ?? '',
+        },
+        normalised,
+        params.limit,
+      );
+    }
+
+    return this.service.findClassToppers(params);
   }
 
   @Post('class')

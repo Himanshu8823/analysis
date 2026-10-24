@@ -4,12 +4,12 @@ import {
   IsNotEmpty,
   IsIn,
   IsOptional,
-  IsUUID,
   MaxLength,
   MinLength,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { INVITABLE_ROLES } from '@result-analysis/shared-types';
+import { INVITABLE_ROLES } from '@/common/constants/roles';
+import { IsEntityId } from '@/common/validators/is-entity-id.validator';
 
 /**
  * The set of roles an administrator may grant through an invitation.
@@ -48,6 +48,6 @@ export class InviteUserDto {
     description: 'Branch scope for branch-scoped roles (HOD, PRINCIPAL, TEACHER).',
   })
   @IsOptional()
-  @IsUUID('4')
+  @IsEntityId()
   branchId?: string;
 }

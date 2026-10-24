@@ -16,7 +16,7 @@ export class ToppersRepository {
     branchId?: string;
     schemeId?: string;
     semester?: number;
-    academicYearId: string;
+    academicYearId?: string;
   }): Promise<{
     students: Student[];
     marks: Mark[];
@@ -24,11 +24,12 @@ export class ToppersRepository {
   }> {
     const studentWhere: {
       isActive: boolean;
-      academicYearId: string;
+      academicYearId?: string;
       branchId?: string;
       schemeId?: string;
       semester?: number;
-    } = { isActive: true, academicYearId: params.academicYearId };
+    } = { isActive: true };
+    if (params.academicYearId) studentWhere.academicYearId = params.academicYearId;
     if (params.branchId) studentWhere.branchId = params.branchId;
     if (params.schemeId) studentWhere.schemeId = params.schemeId;
     if (params.semester !== undefined) studentWhere.semester = params.semester;
@@ -39,7 +40,7 @@ export class ToppersRepository {
     });
 
     const markWhere: {
-      academicYearId: string;
+      academicYearId?: string;
       isAbsent: boolean;
       isWithheld: boolean;
       student?: typeof studentWhere;
@@ -50,10 +51,10 @@ export class ToppersRepository {
         semester?: number;
       };
     } = {
-      academicYearId: params.academicYearId,
       isAbsent: false,
       isWithheld: false,
     };
+    if (params.academicYearId) markWhere.academicYearId = params.academicYearId;
     if (params.branchId || params.schemeId || params.semester !== undefined) {
       markWhere.subject = { isActive: true };
       if (params.branchId) markWhere.subject.branchId = params.branchId;
@@ -156,10 +157,10 @@ export class ToppersRepository {
     branchId?: string;
     schemeId?: string;
     semester?: number;
-    academicYearId: string;
+    academicYearId?: string;
   }): Promise<SubjectTopper[]> {
     const markWhere: {
-      academicYearId: string;
+      academicYearId?: string;
       isAbsent: boolean;
       isWithheld: boolean;
       subject?: {
@@ -169,11 +170,11 @@ export class ToppersRepository {
         semester?: number;
       };
     } = {
-      academicYearId: params.academicYearId,
       isAbsent: false,
       isWithheld: false,
       subject: { isActive: true },
     };
+    if (params.academicYearId) markWhere.academicYearId = params.academicYearId;
     if (params.branchId) markWhere.subject!.branchId = params.branchId;
     if (params.schemeId) markWhere.subject!.schemeId = params.schemeId;
     if (params.semester !== undefined) {
@@ -253,11 +254,11 @@ export class ToppersRepository {
     branchId?: string;
     schemeId?: string;
     semester?: number;
-    academicYearId: string;
+    academicYearId?: string;
     limit?: number;
   }): Promise<ClassTopper> {
     const where: {
-      academicYearId: string;
+      academicYearId?: string;
       isAbsent: boolean;
       isWithheld: boolean;
       student?: {
@@ -267,11 +268,11 @@ export class ToppersRepository {
         semester?: number;
       };
     } = {
-      academicYearId: params.academicYearId,
       isAbsent: false,
       isWithheld: false,
       student: { isActive: true },
     };
+    if (params.academicYearId) where.academicYearId = params.academicYearId;
     if (params.branchId) where.student!.branchId = params.branchId;
     if (params.schemeId) where.student!.schemeId = params.schemeId;
     if (params.semester !== undefined) where.student!.semester = params.semester;

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Users, Percent, TrendingUp, Award } from 'lucide-react';
 import { Select } from '@/components/forms/Select';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { Spinner } from '@/components/feedback/Spinner';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
 import {
@@ -40,19 +41,19 @@ export default function AnalyticsPage() {
   const subjectDifficulty = useSubjectDifficulty(filters);
   const performanceTrends = usePerformanceTrends(filters);
 
-  const branches = branchesData?.data ?? [];
-  const schemes = schemesData?.data ?? [];
+  const branches = branchesData ?? [];
+  const schemes = schemesData ?? [];
 
   const kpiCards = [
     {
       label: 'Total students',
-      value: formatters.percentage(overview.data?.totalStudents ?? 0, 0).replace('%', ''),
+      value: String(overview.data?.totalStudents ?? 0),
       icon: Users,
       tone: 'text-primary',
     },
     {
       label: 'Pass percentage',
-      value: formatters.percentage(overview.data?.passPercentage ?? 0, 1),
+      value: formatters.percentage(overview.data?.overallPassPercentage ?? 0, 1),
       icon: Percent,
       tone: 'text-semantic-up',
     },
@@ -77,14 +78,11 @@ export default function AnalyticsPage() {
     performanceTrends.isLoading;
 
   return (
-    <section className="space-y-lg">
-      <header className="flex flex-col gap-xs">
-        <span className="cb-badge">Analytics</span>
-        <h1 className="font-display text-title-lg text-ink md:text-display-sm">Analytics</h1>
-        <p className="text-body-sm text-body">
-          Cohort-wide metrics and charts based on the selected branch, scheme, and semester.
-        </p>
-      </header>
+    <section className="flex flex-col gap-6 md:gap-8">
+      <PageHeader
+        title="Analytics"
+        description="Cohort-wide metrics and charts based on the selected branch, scheme, and semester."
+      />
 
       <article className="cb-surface-card" aria-label="Filters">
         <div className="grid grid-cols-1 gap-base md:grid-cols-3">
@@ -108,7 +106,7 @@ export default function AnalyticsPage() {
             <option value="">Select scheme</option>
             {schemes.map((scheme) => (
               <option key={scheme.id} value={scheme.id}>
-                {scheme.code} · {scheme.name}
+                {scheme.name}
               </option>
             ))}
           </Select>
@@ -173,12 +171,15 @@ export default function AnalyticsPage() {
                   Pass / Fail distribution
                 </h3>
               </header>
-              {passFail.data && passFail.data.data.length > 0 ? (
+              {passFail.data && passFail.data.totalStudents > 0 ? (
                 <PieChart
-                  data={passFail.data.data.map((b) => ({
-                    name: b.status,
-                    value: b.count,
-                  }))}
+                  data={[
+                    { name: 'Distinction', value: passFail.data.distinction },
+                    { name: 'First class', value: passFail.data.firstClass },
+                    { name: 'Second class', value: passFail.data.secondClass },
+                    { name: 'ATKT', value: passFail.data.atktCount },
+                    { name: 'Fail', value: passFail.data.failCount },
+                  ].filter((bucket) => bucket.value > 0)}
                   ariaLabel="Pass and fail distribution pie chart"
                 />
               ) : (
@@ -192,9 +193,9 @@ export default function AnalyticsPage() {
                   Subject difficulty (avg %)
                 </h3>
               </header>
-              {subjectDifficulty.data && subjectDifficulty.data.data.length > 0 ? (
+              {subjectDifficulty.data && subjectDifficulty.data.length > 0 ? (
                 <BarChart
-                  data={subjectDifficulty.data.data.map((s) => ({
+                  data={subjectDifficulty.data.map((s) => ({
                     name: s.subjectCode,
                     value: s.averagePercentage,
                   }))}
@@ -216,14 +217,14 @@ export default function AnalyticsPage() {
                   Performance trends
                 </h3>
               </header>
-              {performanceTrends.data && performanceTrends.data.data.length > 0 ? (
+              {performanceTrends.data && performanceTrends.data.length > 0 ? (
                 <LineChart
-                  data={performanceTrends.data.data.map((t) => ({
-                    month: t.month,
+                  data={performanceTrends.data.map((t) => ({
+                    year: t.year,
                     averagePercentage: t.averagePercentage,
                     passPercentage: t.passPercentage,
                   }))}
-                  xKey="month"
+                  xKey="year"
                   series={[
                     { key: 'averagePercentage', label: 'Average %' },
                     { key: 'passPercentage', label: 'Pass %' },

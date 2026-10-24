@@ -1,13 +1,16 @@
 import {
-  Body, Controller, Delete, Get, Param, Post, Query, UseInterceptors,
+  Body, Controller, Delete, Get, Param, Post, Query, UploadedFile, UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { UploadService } from './upload.service';
 import {
   CreateUploadJobDto,
   ConfirmUploadDto,
 } from './dto';
 import { Roles, Permissions, CurrentUser } from '@/common/decorators';
+import { parseOptionalInt, parseOptionalString } from '@/common/utils/query-params';
 import { Throttle } from '@nestjs/throttler';
 import type { JwtPayload } from '@/common/types';
 
@@ -36,16 +39,47 @@ export class UploadController {
     });
   }
 
+  /**
+   * Uploads the file itself and registers the job in one call.
+   *
+   * This is what the browser uses — it cannot hand the server a `blob:` URL,
+   * and a presigned-storage round trip needs a live bucket. The bytes are
+   * written to storage here, and the job gets a URL the parser can fetch.
+   */
+  @Post('file')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Permissions('upload:create')
+  @Throttle({ default: { limit: 10, ttl: 60 * 60 * 1000 } }) // 10/hour/user
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload a file and register the parsing job' })
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }),
+  )
+  async uploadFile(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    if (!file) {
+      throw new BadRequestException('A file is required');
+    }
+    return this.service.createJobFromFile(file, user.sub);
+  }
+
   @Get()
   @Roles('SUPER_ADMIN', 'ADMIN', 'HOD', 'TEACHER')
   @Permissions('upload:read')
   async findAll(
-    @Query('page') page?: number,
-    @Query('pageSize') pageSize?: number,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
     @Query('status') status?: string,
     @Query('uploadedBy') uploadedBy?: string,
   ) {
-    return this.service.findAll({ page, pageSize, status, uploadedBy });
+    return this.service.findAll({
+      page: parseOptionalInt(page),
+      pageSize: parseOptionalInt(pageSize),
+      status: parseOptionalString(status),
+      uploadedBy: parseOptionalString(uploadedBy),
+    });
   }
 
   @Get('jobs/:jobId')
@@ -78,11 +112,15 @@ export class UploadController {
   @Get('jobs')
   @Permissions('upload:read')
   async listJobs(
-    @Query('page') page?: number,
-    @Query('pageSize') pageSize?: number,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
     @Query('status') status?: string,
   ) {
-    return this.service.findAll({ page, pageSize, status });
+    return this.service.findAll({
+      page: parseOptionalInt(page),
+      pageSize: parseOptionalInt(pageSize),
+      status: parseOptionalString(status),
+    });
   }
 
   @Delete(':id')

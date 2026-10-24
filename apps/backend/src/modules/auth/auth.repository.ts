@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import { isUserRole } from '@result-analysis/shared-types';
+import { isUserRole } from '@/common/constants/roles';
 import type { UserRole } from '@result-analysis/shared-types';
 
 @Injectable()
@@ -104,6 +104,14 @@ export class AuthRepository {
       where: { userId, revokedAt: null },
       orderBy: { createdAt: 'desc' },
       include: { user: true },
+    });
+  }
+
+  /** Revokes a single refresh token — used when a token is rotated. */
+  async revokeRefreshToken(id: string): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: { id, revokedAt: null },
+      data: { revokedAt: new Date() },
     });
   }
 

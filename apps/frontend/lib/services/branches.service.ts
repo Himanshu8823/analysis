@@ -5,24 +5,29 @@ export interface Branch {
   id: string;
   code: string;
   name: string;
+  isActive?: boolean;
 }
 
-interface ListResponse<T> {
-  data: T[];
-  meta?: { total: number; page: number; pageSize: number };
+/** The body `POST /branches` accepts. */
+export interface CreateBranchPayload {
+  code: string;
+  name: string;
+  isActive?: boolean;
 }
 
 export const branchesService = {
-  list: async (): Promise<ListResponse<Branch>> => {
+  /** The backend returns a plain array for branches (no pagination). */
+  list: async (): Promise<Branch[]> => {
     const res = await apiClient.get(ENDPOINTS.BRANCHES.LIST);
     return res.data.data;
   },
-  create: async (payload: { code: string; name: string }) => {
+  create: async (payload: CreateBranchPayload) => {
     const res = await apiClient.post(ENDPOINTS.BRANCHES.CREATE, payload);
     return res.data.data;
   },
-  update: async (id: string, payload: { code?: string; name?: string }) => {
-    const res = await apiClient.patch(ENDPOINTS.BRANCHES.UPDATE(id), payload);
+  /** The backend exposes `PUT /branches/:id`, not `PATCH`. */
+  update: async (id: string, payload: Partial<CreateBranchPayload>) => {
+    const res = await apiClient.put(ENDPOINTS.BRANCHES.UPDATE(id), payload);
     return res.data.data;
   },
   delete: async (id: string) => {

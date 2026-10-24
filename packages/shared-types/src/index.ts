@@ -199,7 +199,7 @@ export interface Report {
   type: ReportType;
   filters: Record<string, unknown>;
   fileUrl?: string;
-  status: 'PENDING' | 'GENERATING' | 'READY' | 'FAILED';
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
   createdAt: Date;
 }
 

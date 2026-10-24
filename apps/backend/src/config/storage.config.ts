@@ -21,5 +21,14 @@ export default () => ({
       forcePathStyle: process.env.AWS_S3_FORCE_PATH_STYLE === 'true',
     },
     maxFileSize: parseInt(process.env.MAX_FILE_SIZE_BYTES ?? '52428800', 10), // 50MB
+    /**
+     * Local-disk storage. The multipart upload endpoint writes the file here
+     * and hands back a URL the backend can fetch it from, so the upload flow
+     * works without a live bucket.
+     */
+    local: {
+      directory: process.env.STORAGE_LOCAL_DIR ?? 'uploads',
+      publicBaseUrl: process.env.STORAGE_PUBLIC_BASE_URL ?? '',
+    },
   },
 });

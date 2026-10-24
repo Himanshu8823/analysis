@@ -3,11 +3,19 @@
 import { useMemo, useState } from 'react';
 import { Loader2, CheckCircle2, AlertCircle, FileCheck2 } from 'lucide-react';
 import { FileUploader } from '@/components/forms/FileUploader';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { Select } from '@/components/forms/Select';
 import { Spinner } from '@/components/feedback/Spinner';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
-import { useUploadFile, useUploadJob, useConfirmUpload } from '@/hooks/useUpload';
+import { useCreateUploadJob, useUploadJob, useConfirmUpload } from '@/hooks/useUpload';
+import { useBranches } from '@/hooks/useBranches';
+import { useSchemes } from '@/hooks/useSchemes';
+import { useAcademicYears } from '@/hooks/useAcademic';
 import { formatters } from '@/lib/utils/formatters';
-import type { UploadJob } from '@/lib/services/upload.service';
+import type {
+  ExtractedMarkRow,
+  UploadJob,
+} from '@/lib/services/upload.service';
 
 const STATUS_LABEL: Record<UploadJob['status'], string> = {
   PENDING: 'Pending',
@@ -26,39 +34,107 @@ const STATUS_TONE: Record<UploadJob['status'], string> = {
 };
 
 export default function UploadPage() {
-  const [jobId, setJobId] = useState<string | null>(null);
-  const { mutate: upload, isPending: uploading } = useUploadFile();
-  const { data: job, isLoading: jobLoading, isError } = useUploadJob(jobId);
+  const [branchId, setBranchId] = useState('');
+  const [schemeId, setSchemeId] = useState('');
+  const [semester, setSemester] = useState(1);
+  const [academicYearId, setAcademicYearId] = useState('');
+
+  const { data: branchesData } = useBranches();
+  const { data: schemesData } = useSchemes();
+  const { data: academicYears } = useAcademicYears();
+
+  const { mutate: createJob, isPending: uploading } = useCreateUploadJob();
+  const { data: job, isLoading: jobLoading, isError } = useUploadJob();
   const { mutate: confirm, isPending: confirming } = useConfirmUpload();
 
+  const branches = branchesData ?? [];
+  const schemes = schemesData ?? [];
+  const years = academicYears ?? [];
+
+  const activeYear = years.find((y) => y.isActive) ?? years[0];
+
+  const scopeReady = !!branchId && !!schemeId && !!academicYearId && semester > 0;
+
   const handleFile = (file: File) => {
-    upload(file, {
-      onSuccess: (result) => setJobId(result.id),
-      onError: () => setJobId(null),
-    });
+    if (!scopeReady) return;
+    createJob(file);
   };
 
-  const rows = useMemo(() => job?.extractedRows ?? [], [job?.extractedRows]);
+  const rows = useMemo(() => (job ? extractRows(job) : []), [job]);
+  const parseErrors = job?.extractedData?.errors ?? [];
 
   return (
-    <section className="mx-auto flex max-w-4xl flex-col gap-lg">
-      <header className="flex flex-col gap-xs">
-        <span className="cb-badge">Upload</span>
-        <h1 className="font-display text-title-lg text-ink md:text-display-sm">
-          Upload Results
-        </h1>
-        <p className="text-body-sm text-body md:text-body-md">
-          Drop an Excel or PDF result file. We extract the data, you review and confirm.
-        </p>
-      </header>
+    <section className="flex flex-col gap-6 md:gap-8">
+      <PageHeader
+        title="Upload Results"
+        description="Drop an Excel or PDF result file. We extract the data, you review and confirm."
+      />
+
+      <article className="cb-surface-card" aria-label="Upload scope">
+        <div className="grid grid-cols-1 gap-base md:grid-cols-2 lg:grid-cols-4">
+          <Select
+            label="Branch"
+            value={branchId}
+            onChange={(e) => setBranchId(e.target.value)}
+          >
+            <option value="">Select branch</option>
+            {branches.map((branch) => (
+              <option key={branch.id} value={branch.id}>
+                {branch.code} · {branch.name}
+              </option>
+            ))}
+          </Select>
+          <Select
+            label="Scheme"
+            value={schemeId}
+            onChange={(e) => setSchemeId(e.target.value)}
+          >
+            <option value="">Select scheme</option>
+            {schemes.map((scheme) => (
+              <option key={scheme.id} value={scheme.id}>
+                {scheme.name}
+              </option>
+            ))}
+          </Select>
+          <Select
+            label="Semester"
+            value={String(semester)}
+            onChange={(e) => setSemester(Number(e.target.value))}
+          >
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+              <option key={n} value={n}>
+                Semester {n}
+              </option>
+            ))}
+          </Select>
+          <Select
+            label="Academic year"
+            value={academicYearId || activeYear?.id || ''}
+            onChange={(e) => setAcademicYearId(e.target.value)}
+          >
+            {years.map((year) => (
+              <option key={year.id} value={year.id}>
+                {year.year}
+              </option>
+            ))}
+          </Select>
+        </div>
+        {!scopeReady ? (
+          <p className="mt-base text-body-sm text-body">
+            Pick a branch, scheme and academic year before uploading — the extracted
+            rows are matched against that scope.
+          </p>
+        ) : null}
+      </article>
 
       <FileUploader
         onFile={handleFile}
         isUploading={uploading}
+        disabled={!scopeReady}
         hint="Excel, CSV, or PDF up to 50MB"
       />
 
-      {jobId && jobLoading ? (
+      {jobLoading ? (
         <div className="flex items-center gap-sm">
           <Spinner size={20} />
           <span className="text-body-sm text-body">Fetching latest status…</span>
@@ -68,7 +144,7 @@ export default function UploadPage() {
       {isError ? (
         <ErrorBanner
           message="We lost track of this upload. Refresh and try again."
-          retry={() => setJobId(null)}
+          retry={() => window.location.reload()}
         />
       ) : null}
 
@@ -76,7 +152,16 @@ export default function UploadPage() {
         <JobStatusCard
           job={job}
           rows={rows}
-          onConfirm={() => confirm({ jobId: job.id, edits: { rows } })}
+          parseErrors={parseErrors}
+          onConfirm={() =>
+            confirm({
+              jobId: job.id,
+              payload: {
+                rows,
+                metadata: { branchId, schemeId, semester, academicYearId },
+              },
+            })
+          }
           confirming={confirming}
         />
       ) : null}
@@ -84,14 +169,47 @@ export default function UploadPage() {
   );
 }
 
+/**
+ * The extractor stores the rows under `extractedData.rows`. Anything that is
+ * not shaped like a mark row is ignored rather than sent to the API, because
+ * the confirm DTO rejects unknown properties.
+ */
+function extractRows(job: UploadJob): ExtractedMarkRow[] {
+  const raw = Array.isArray(job.extractedData?.rows) ? job.extractedData.rows : [];
+  return raw.flatMap((entry) => {
+    if (typeof entry !== 'object' || entry === null) return [];
+    const row = entry as unknown as Record<string, unknown>;
+    const rollNo = String(row.rollNo ?? '').trim();
+    const subjectCode = String(row.subjectCode ?? '').trim();
+    const examType = String(row.examType ?? '').trim();
+    if (!rollNo || !subjectCode || !examType) return [];
+
+    const marksObtained = Number(row.marksObtained);
+    const maxMarks = Number(row.maxMarks);
+    if (!Number.isFinite(marksObtained) || !Number.isFinite(maxMarks)) return [];
+
+    return [
+      {
+        rollNo,
+        subjectCode,
+        examType,
+        marksObtained,
+        maxMarks,
+        ...(row.isAbsent === undefined ? {} : { isAbsent: Boolean(row.isAbsent) }),
+      },
+    ];
+  });
+}
+
 interface JobStatusCardProps {
   job: UploadJob;
-  rows: Array<Record<string, unknown>>;
+  rows: ExtractedMarkRow[];
+  parseErrors: Array<{ row: number; error: string }>;
   onConfirm: () => void;
   confirming: boolean;
 }
 
-function JobStatusCard({ job, rows, onConfirm, confirming }: JobStatusCardProps) {
+function JobStatusCard({ job, rows, parseErrors, onConfirm, confirming }: JobStatusCardProps) {
   return (
     <article className="cb-surface-card flex flex-col gap-base" aria-labelledby="job-status-title">
       <header className="flex flex-col gap-xs">
@@ -132,21 +250,21 @@ function JobStatusCard({ job, rows, onConfirm, confirming }: JobStatusCardProps)
             <table className="min-w-full text-body-sm">
               <thead className="bg-surface-soft text-left text-caption uppercase text-muted">
                 <tr>
-                  {Object.keys(rows[0]).map((key) => (
-                    <th key={key} className="px-base py-sm font-semibold">
-                      {key}
-                    </th>
-                  ))}
+                  <th className="px-base py-sm font-semibold">Roll No</th>
+                  <th className="px-base py-sm font-semibold">Subject</th>
+                  <th className="px-base py-sm font-semibold">Exam</th>
+                  <th className="px-base py-sm font-semibold">Marks</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.slice(0, 8).map((row, idx) => (
-                  <tr key={idx} className="border-t border-hairline">
-                    {Object.values(row).map((value, i) => (
-                      <td key={i} className="px-base py-sm text-ink">
-                        {String(value ?? '')}
-                      </td>
-                    ))}
+                  <tr key={`${row.rollNo}-${row.subjectCode}-${row.examType}-${idx}`} className="border-t border-hairline">
+                    <td className="num px-base py-sm text-ink">{row.rollNo}</td>
+                    <td className="px-base py-sm text-ink">{row.subjectCode}</td>
+                    <td className="px-base py-sm text-ink">{row.examType}</td>
+                    <td className="num px-base py-sm text-ink">
+                      {row.marksObtained} / {row.maxMarks}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -178,6 +296,28 @@ function JobStatusCard({ job, rows, onConfirm, confirming }: JobStatusCardProps)
         <div className="flex items-start gap-sm rounded-md border border-hairline bg-surface-soft px-base py-sm text-body-sm text-body">
           <AlertCircle className="mt-0.5 h-4 w-4 text-muted" aria-hidden />
           <span>No rows were extracted. Re-upload a clearer file.</span>
+        </div>
+      ) : null}
+
+      {parseErrors.length > 0 ? (
+        <div className="flex flex-col gap-sm rounded-md border border-hairline bg-surface-soft px-base py-sm">
+          <div className="flex items-start gap-sm text-body-sm text-body">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-semantic-down" aria-hidden />
+            <span>
+              {parseErrors.length} row{parseErrors.length === 1 ? '' : 's'} could not be read and
+              will be skipped.
+            </span>
+          </div>
+          <ul className="flex flex-col gap-xs text-caption text-muted">
+            {parseErrors.slice(0, 5).map((entry) => (
+              <li key={`${entry.row}-${entry.error}`}>
+                Row {entry.row}: {entry.error}
+              </li>
+            ))}
+            {parseErrors.length > 5 ? (
+              <li>…and {parseErrors.length - 5} more</li>
+            ) : null}
+          </ul>
         </div>
       ) : null}
 

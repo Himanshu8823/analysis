@@ -5,6 +5,12 @@ import type { Config } from 'tailwindcss';
  * documented in DESIGN.md (source: `npx getdesign@latest add coinbase`).
  *
  * NEVER add a color, font, radius, spacing, or shadow outside this list.
+ *
+ * Note on `theme` vs `theme.extend`: token overrides live under `extend` so
+ * they replace the matching Tailwind defaults while the rest of the default
+ * scale stays available. Overriding a whole scale at the `theme` level would
+ * silently drop utilities the codebase relies on (focus rings, shadows,
+ * numeric widths), which is how dead focus states get shipped.
  */
 const config: Config = {
   content: [
@@ -81,54 +87,45 @@ const config: Config = {
       caption: ['13px', { lineHeight: '1.5', letterSpacing: '0', fontWeight: '400' }],
       'caption-strong': ['12px', { lineHeight: '1.5', letterSpacing: '0', fontWeight: '600' }],
     },
-    // Radius tokens from DESIGN.md rounded.*.
-    borderRadius: {
-      none: '0px',
-      xs: '4px',
-      sm: '8px',
-      md: '12px',
-      lg: '16px',
-      xl: '24px',
-      pill: '100px',
-      full: '9999px',
-    },
-    // Spacing tokens from DESIGN.md spacing.*.
-    spacing: {
-      'xxs': '4px',
-      'xs': '8px',
-      'sm': '12px',
-      'base': '16px',
-      'md': '20px',
-      'lg': '24px',
-      'xl': '32px',
-      'xxl': '48px',
-      'section': '96px',
-      // Standard Tailwind spacing preserved so utilities keep working.
-      '0': '0px',
-      '1': '4px',
-      '2': '8px',
-      '3': '12px',
-      '4': '16px',
-      '5': '20px',
-      '6': '24px',
-      '8': '32px',
-      '10': '40px',
-      '12': '48px',
-      '16': '64px',
-      '20': '80px',
-      '24': '96px',
-    },
     // 3 mandatory breakpoints: mobile / tablet / desktop.
     screens: {
       // Mobile is the default (< 768px) — no prefix needed.
       md: '768px', // tablet
       lg: '1024px', // desktop
     },
-    // Coinbase system has one shadow tier.
-    boxShadow: {
-      coinbase: '0 1px 2px rgba(10, 11, 13, 0.06), 0 1px 1px rgba(10, 11, 13, 0.04)',
-    },
     extend: {
+      // Radius tokens from DESIGN.md rounded.*.
+      // These override the matching Tailwind defaults (sm/md/lg/xl keep the
+      // Coinbase values) while leaving the rest of the scale intact.
+      borderRadius: {
+        none: '0px',
+        xs: '4px',
+        sm: '8px',
+        md: '12px',
+        lg: '16px',
+        xl: '24px',
+        pill: '100px',
+        full: '9999px',
+      },
+      // Spacing tokens from DESIGN.md spacing.*.
+      // Extending (rather than replacing) keeps Tailwind's numeric scale
+      // available, so utilities like w-44 or basis-56 still resolve.
+      spacing: {
+        'xxs': '4px',
+        'xs': '8px',
+        'sm': '12px',
+        'base': '16px',
+        'md': '20px',
+        'lg': '24px',
+        'xl': '32px',
+        'xxl': '48px',
+        'section': '96px',
+      },
+      // Coinbase system has one shadow tier. The default scale is kept so
+      // utilities like shadow and shadow-none continue to resolve.
+      boxShadow: {
+        coinbase: '0 1px 2px rgba(10, 11, 13, 0.06), 0 1px 1px rgba(10, 11, 13, 0.04)',
+      },
       // Semantic background/text aliases mapping to the Coinbase palette.
       backgroundColor: {
         background: '#ffffff',
@@ -138,9 +135,40 @@ const config: Config = {
         background: '#ffffff',
         foreground: '#0a0b0d',
       },
+      // shadcn/ui component tokens. Each maps to a Coinbase palette value —
+      // no new colors are introduced by the shadcn integration.
+      borderColor: {
+        border: 'hsl(var(--border))',
+        input: 'hsl(var(--input))',
+        ring: 'hsl(var(--ring))',
+      },
+      ringColor: {
+        ring: 'hsl(var(--ring))',
+      },
+      // Focus rings are a functional (not decorative) part of the design
+      // system, so the default widths are preserved here.
+      ringOffsetWidth: {
+        0: '0px',
+        1: '1px',
+        2: '2px',
+      },
+      keyframes: {
+        'accordion-down': {
+          from: { height: '0' },
+          to: { height: 'var(--radix-accordion-content-height)' },
+        },
+        'accordion-up': {
+          from: { height: 'var(--radix-accordion-content-height)' },
+          to: { height: '0' },
+        },
+      },
+      animation: {
+        'accordion-down': 'accordion-down 0.2s ease-out',
+        'accordion-up': 'accordion-up 0.2s ease-out',
+      },
     },
   },
-  plugins: [],
+  plugins: [require('tailwindcss-animate')],
 };
 
 export default config;

@@ -5,6 +5,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto, ListMembersDto, UpdateUserDto } from './dto';
 import { CurrentUser, Roles, Permissions } from '@/common/decorators';
+import { parseOptionalInt, parseOptionalString } from '@/common/utils/query-params';
 import type { JwtPayload } from '@/common/types';
 
 @ApiTags('Users')
@@ -26,15 +27,15 @@ export class UsersController {
   @Permissions('users:read')
   @ApiOperation({ summary: 'List users (paginated)' })
   async findAll(
-    @Query('page') page?: number,
-    @Query('pageSize') pageSize?: number,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
     @Query('search') search?: string,
     @Query('isActive') isActive?: string,
   ) {
     return this.service.findAll({
-      page,
-      pageSize,
-      search,
+      page: parseOptionalInt(page),
+      pageSize: parseOptionalInt(pageSize),
+      search: parseOptionalString(search),
       isActive: isActive === undefined ? undefined : isActive === 'true',
     });
   }

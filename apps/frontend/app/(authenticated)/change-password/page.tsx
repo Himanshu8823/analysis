@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useChangePassword } from '@/hooks/useAuth';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 export default function ChangePasswordPage() {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -43,14 +44,11 @@ export default function ChangePasswordPage() {
   };
 
   return (
-    <section className="space-y-lg">
-      <div className="flex flex-col gap-xs">
-        <span className="cb-badge">Account</span>
-        <h1 className="text-title-sm text-ink">Change password</h1>
-        <p className="text-body-sm text-body">
-          Choose a new password for your account.
-        </p>
-      </div>
+    <section className="flex flex-col gap-6 md:gap-8">
+      <PageHeader
+        title="Change password"
+        description="Choose a new password for your account."
+      />
 
       <div className="cb-card max-w-lg">
         <form onSubmit={onSubmit} className="flex flex-col gap-base" noValidate>

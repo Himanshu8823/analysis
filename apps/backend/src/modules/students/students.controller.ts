@@ -1,11 +1,20 @@
 import {
-  Controller, Get, Post, Put, Delete, Body, Param, Query,
+  Controller, Get, Post, Put, Delete, Body, Param, Query, UploadedFile, UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { StudentsService } from './students.service';
-import { CreateStudentDto, UpdateStudentDto } from './dto';
+import {
+  CreateStudentDto, UpdateStudentDto, BulkImportStudentsDto,
+} from './dto';
+import { parseStudentFile } from './student-import.parser';
 import { Roles, Permissions, CurrentUser } from '@/common/decorators';
+import { parseOptionalInt, parseOptionalString } from '@/common/utils/query-params';
 import type { JwtPayload } from '@/common/types';
+
+/** The upload limit the importer enforces — 5 MB, 5 000 rows. */
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 @ApiTags('Students')
 @ApiBearerAuth()
@@ -25,25 +34,68 @@ export class StudentsController {
   @Permissions('students:read')
   @ApiOperation({ summary: 'List students (paginated)' })
   async findAll(
-    @Query('page') page?: number,
-    @Query('pageSize') pageSize?: number,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
     @Query('branchId') branchId?: string,
     @Query('schemeId') schemeId?: string,
-    @Query('currentYear') currentYear?: number,
-    @Query('semester') semester?: number,
+    @Query('currentYear') currentYear?: string,
+    @Query('semester') semester?: string,
     @Query('academicYearId') academicYearId?: string,
     @Query('search') search?: string,
   ) {
     return this.service.findAll({
-      page,
-      pageSize,
-      branchId,
-      schemeId,
-      currentYear: currentYear !== undefined ? Number(currentYear) : undefined,
-      semester: semester !== undefined ? Number(semester) : undefined,
-      academicYearId,
-      search,
+      page: parseOptionalInt(page),
+      pageSize: parseOptionalInt(pageSize),
+      branchId: parseOptionalString(branchId),
+      schemeId: parseOptionalString(schemeId),
+      currentYear: parseOptionalInt(currentYear),
+      semester: parseOptionalInt(semester),
+      academicYearId: parseOptionalString(academicYearId),
+      search: parseOptionalString(search),
     });
+  }
+
+  /**
+   * Declared before `@Get(':id')` so the literal path wins over the
+   * parameter route.
+   */
+  @Post('bulk-import')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Permissions('students:write')
+  @ApiOperation({ summary: 'Bulk import students from JSON rows' })
+  async bulkImport(@Body() dto: BulkImportStudentsDto) {
+    return this.service.bulkImport(dto);
+  }
+
+  @Post('bulk-import/file')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Permissions('students:write')
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Bulk import students from a CSV or Excel file' })
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: MAX_UPLOAD_BYTES } }),
+  )
+  async bulkImportFile(
+    @UploadedFile() file: Express.Multer.File,
+    @Query('branchId') branchId?: string,
+    @Query('schemeId') schemeId?: string,
+    @Query('batchId') batchId?: string,
+    @Query('academicYearId') academicYearId?: string,
+    @Query('currentYear') currentYear?: string,
+    @Query('semester') semester?: string,
+  ) {
+    if (!file) {
+      throw new BadRequestException('A CSV or Excel file is required');
+    }
+    const parsed = await parseStudentFile(file.buffer, file.originalname);
+    return this.service.bulkImportFile(parsed.rows, {
+      branchId: parseOptionalString(branchId),
+      schemeId: parseOptionalString(schemeId),
+      batchId: parseOptionalString(batchId),
+      academicYearId: parseOptionalString(academicYearId),
+      currentYear: parseOptionalInt(currentYear),
+      semester: parseOptionalInt(semester),
+    }, parsed.errors);
   }
 
   @Get(':id')

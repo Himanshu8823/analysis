@@ -11,8 +11,6 @@ export const ENDPOINTS = {
     CHANGE_PASSWORD: '/auth/change-password',
   },
   USERS: {
-    LIST: '/users',
-    CREATE: '/users',
     GET: (id: string) => `/users/${id}`,
     UPDATE: (id: string) => `/users/${id}`,
     DELETE: (id: string) => `/users/${id}`,
@@ -33,6 +31,10 @@ export const ENDPOINTS = {
     UPDATE: (id: string) => `/branches/${id}`,
     DELETE: (id: string) => `/branches/${id}`,
   },
+  ACADEMIC: {
+    YEARS: '/academic/years',
+    BATCHES: '/academic/batches',
+  },
   SCHEMES: {
     LIST: '/schemes',
     CREATE: '/schemes',
@@ -42,8 +44,6 @@ export const ENDPOINTS = {
   SUBJECTS: {
     LIST: '/subjects',
     CREATE: '/subjects',
-    BY_BRANCH_SCHEME_SEM: (branchId: string, schemeId: string, sem: number) =>
-      `/subjects?branchId=${branchId}&schemeId=${schemeId}&semester=${sem}`,
     UPDATE: (id: string) => `/subjects/${id}`,
     DELETE: (id: string) => `/subjects/${id}`,
   },
@@ -51,6 +51,7 @@ export const ENDPOINTS = {
     LIST: '/students',
     CREATE: '/students',
     BULK_IMPORT: '/students/bulk-import',
+    BULK_IMPORT_FILE: '/students/bulk-import/file',
     GET: (id: string) => `/students/${id}`,
     UPDATE: (id: string) => `/students/${id}`,
     DELETE: (id: string) => `/students/${id}`,
@@ -59,21 +60,24 @@ export const ENDPOINTS = {
     LIST: '/marks',
     CREATE_BULK: '/marks/bulk',
     UPDATE: (id: string) => `/marks/${id}`,
-    CALCULATE: '/marks/calculate',
+    CALCULATE: (studentId: string) => `/marks/calculate/${studentId}`,
   },
   UPLOAD: {
     CREATE: '/upload',
+    UPLOAD_FILE: '/upload/file',
     GET_JOB: (jobId: string) => `/upload/jobs/${jobId}`,
     CONFIRM: (jobId: string) => `/upload/jobs/${jobId}/confirm`,
+    JOBS: '/upload/jobs',
   },
   REPORTS: {
-    GENERATE: '/reports/generate',
+    GENERATE: '/reports',
     LIST: '/reports',
+    GET: (id: string) => `/reports/${id}`,
     DOWNLOAD: (id: string) => `/reports/${id}/download`,
   },
   TOPPERS: {
-    SUBJECT_WISE: (params: Record<string, string>) => `/toppers/subject-wise?${new URLSearchParams(params)}`,
-    CLASS: (params: Record<string, string>) => `/toppers/class?${new URLSearchParams(params)}`,
+    SUBJECT_WISE: '/toppers/subject-wise',
+    CLASS: '/toppers/class',
   },
   ANALYTICS: {
     OVERVIEW: '/analytics/overview',
@@ -81,7 +85,7 @@ export const ENDPOINTS = {
     SUBJECT_DIFFICULTY: '/analytics/subject-difficulty',
     PERFORMANCE_TRENDS: '/analytics/performance-trends',
   },
-  AUDIT_LOGS: {
-    LIST: '/audit-logs',
+  DASHBOARD: {
+    GET: '/dashboard',
   },
 } as const;

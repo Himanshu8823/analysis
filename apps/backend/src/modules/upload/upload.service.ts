@@ -6,6 +6,7 @@ import { Queue } from 'bullmq';
 import { PrismaClient } from '@prisma/client';
 import type { Prisma, UploadJob } from '@prisma/client';
 import { UploadRepository } from './upload.repository';
+import { StorageService } from '../storage/storage.service';
 
 export interface CreateUploadJobInput {
   uploadedBy: string;
@@ -14,6 +15,11 @@ export interface CreateUploadJobInput {
   fileUrl: string;
   fileSize: number;
   metadata?: Record<string, unknown>;
+  /**
+   * The already-detected file type. When supplied, the URL is not fetched
+   * again just to work out the type.
+   */
+  detectedType?: FileTypeDetectionResult['type'];
 }
 
 export interface FileTypeDetectionResult {
@@ -38,6 +44,7 @@ export class UploadService {
   constructor(
     private readonly repository: UploadRepository,
     private readonly prisma: PrismaClient,
+    private readonly storage: StorageService,
     @InjectQueue('upload-jobs') private readonly uploadQueue: Queue,
     @InjectQueue('ocr-jobs') private readonly ocrQueue: Queue,
   ) {}
@@ -60,8 +67,9 @@ export class UploadService {
     const job = await this.repository.create(input);
 
     try {
-      const detection = await this.detectFileType(input.fileUrl);
-      const queue = detection.type === 'PDF_IMAGE' ? 'ocr-jobs' : 'upload-jobs';
+      const type =
+        input.detectedType ?? (await this.detectFileType(input.fileUrl)).type;
+      const queue = type === 'PDF_IMAGE' ? 'ocr-jobs' : 'upload-jobs';
 
       if (queue === 'ocr-jobs') {
         await this.ocrQueue.add(
@@ -72,7 +80,7 @@ export class UploadService {
       } else {
         await this.uploadQueue.add(
           'process',
-          { jobId: job.id, fileUrl: input.fileUrl, fileType: detection.type },
+          { jobId: job.id, fileUrl: input.fileUrl, fileType: type },
           { removeOnComplete: true, removeOnFail: 100 },
         );
       }
@@ -88,6 +96,78 @@ export class UploadService {
       });
       throw err;
     }
+  }
+
+  /**
+   * Creates an upload job from a multipart file.
+   *
+   * The bytes are written to local storage first, so the job gets a URL the
+   * backend can actually fetch — a `blob:` URL from the browser is useless
+   * to a server-side parser.
+   */
+  async createJobFromFile(
+    file: { buffer: Buffer; originalname: string; size: number },
+    uploadedBy: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<UploadJob> {
+    if (file.size > UploadService.MAX_FILE_SIZE) {
+      throw new BadRequestException(
+        `File exceeds ${UploadService.MAX_FILE_SIZE} byte limit`,
+      );
+    }
+
+    const stored = await this.storage.save(file.buffer, file.originalname);
+
+    // The file type decides which parser runs, so it is detected from the
+    // bytes rather than assumed — a CSV upload would otherwise be parsed as
+    // a spreadsheet.
+    const detection = await this.detectBufferType(file.buffer, file.originalname);
+
+    return this.createJob({
+      uploadedBy,
+      fileName: file.originalname,
+      fileType: detection.type,
+      fileUrl: stored.fileUrl,
+      fileSize: file.size,
+      metadata,
+      detectedType: detection.type,
+    });
+  }
+
+  /**
+   * Detects the file type from the uploaded bytes, falling back to the
+   * extension when the content is inconclusive.
+   */
+  private async detectBufferType(
+    buffer: Buffer,
+    filename: string,
+  ): Promise<FileTypeDetectionResult> {
+    const head = buffer.subarray(0, Math.min(buffer.length, 4096));
+    if (head.subarray(0, 4).equals(MAGIC.PDF)) {
+      const excerpt = head.toString('latin1');
+      const isImageOnly = /\/Subtype\s*\/Image/.test(excerpt);
+      return {
+        type: isImageOnly ? 'PDF_IMAGE' : 'PDF_TEXT',
+        mimeHint: 'application/pdf',
+      };
+    }
+    if (head.subarray(0, 4).equals(MAGIC.ZIP_XLSX)) {
+      return {
+        type: 'EXCEL',
+        mimeHint: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      };
+    }
+    if (this.looksLikeCsv(head)) {
+      return { type: 'CSV', mimeHint: 'text/csv' };
+    }
+
+    const lower = filename.toLowerCase();
+    if (lower.endsWith('.pdf')) return { type: 'PDF_TEXT', mimeHint: 'application/pdf' };
+    if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
+      return { type: 'EXCEL', mimeHint: 'application/vnd.ms-excel' };
+    }
+    if (lower.endsWith('.csv')) return { type: 'CSV', mimeHint: 'text/csv' };
+    return { type: 'UNKNOWN', mimeHint: '' };
   }
 
   async findAll(params: {
@@ -154,10 +234,15 @@ export class UploadService {
       academicYearId?: string;
     };
 
+    // `semester` is a number, so a plain falsy check would also reject a
+    // legitimate value and would accept `NaN`. Every field is validated
+    // explicitly instead.
+    const semester = Number(ctx.semester);
     if (
       !ctx.branchId ||
       !ctx.schemeId ||
-      !ctx.semester ||
+      !Number.isInteger(semester) ||
+      semester < 1 ||
       !ctx.academicYearId
     ) {
       throw new BadRequestException(
@@ -171,7 +256,7 @@ export class UploadService {
       where: {
         schemeId: ctx.schemeId,
         branchId: ctx.branchId,
-        semester: ctx.semester,
+        semester,
         code: { in: subjectCodes },
       },
       select: { id: true, code: true, schemeId: true, branchId: true, semester: true },
@@ -275,7 +360,11 @@ export class UploadService {
       if (buf.subarray(0, 4).equals(MAGIC.ZIP_XLSX)) {
         return { type: 'EXCEL', mimeHint: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
       }
-      if (buf[0] === 0x7b || buf[0] === 0x22 || buf.subarray(0, 3).equals(MAGIC.CSV_OK)) {
+      // A CSV is plain text: it either starts with a UTF-8 BOM or with a
+      // printable character, and contains no NUL byte the way a binary file
+      // does. The old check only caught JSON, so every real CSV fell through
+      // to UNKNOWN.
+      if (this.looksLikeCsv(buf)) {
         return { type: 'CSV', mimeHint: 'text/csv' };
       }
       return { type: 'UNKNOWN', mimeHint: fetched.headers.get('content-type') ?? '' };
@@ -289,5 +378,30 @@ export class UploadService {
       if (lower.endsWith('.csv')) return { type: 'CSV', mimeHint: 'text/csv' };
       return { type: 'UNKNOWN', mimeHint: '' };
     }
+  }
+
+  /**
+   * True when the buffer looks like delimited plain text rather than a
+   * binary format — a UTF-8 BOM, or printable ASCII with at least one
+   * separator and no NUL byte.
+   */
+  private looksLikeCsv(buf: Buffer): boolean {
+    if (buf.subarray(0, 3).equals(MAGIC.CSV_OK)) return true;
+    if (!buf.length) return false;
+
+    // A NUL byte means binary.
+    if (buf.includes(0)) return false;
+
+    const sample = buf.subarray(0, Math.min(buf.length, 4096));
+    let printable = 0;
+    for (const byte of sample) {
+      if (byte === 0x09 || byte === 0x0a || byte === 0x0d || (byte >= 0x20 && byte <= 0x7e)) {
+        printable += 1;
+      }
+    }
+    if (printable / sample.length < 0.9) return false;
+
+    const text = sample.toString('latin1');
+    return /[,\t;]/.test(text);
   }
 }

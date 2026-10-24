@@ -8,6 +8,7 @@ export const queryKeys = {
   members: {
     all: () => ['members'] as const,
     list: (filters?: unknown) => ['members', 'list', filters ?? null] as const,
+    detail: (id: string) => ['members', 'detail', id] as const,
     roles: () => ['members', 'roles'] as const,
   },
   invites: {
@@ -19,6 +20,12 @@ export const queryKeys = {
   branches: {
     all: () => ['branches'] as const,
     list: () => ['branches', 'list'] as const,
+  },
+  academic: {
+    all: () => ['academic'] as const,
+    years: () => ['academic', 'years'] as const,
+    batches: (admissionYearId?: string) =>
+      ['academic', 'batches', admissionYearId ?? null] as const,
   },
   schemes: {
     all: () => ['schemes'] as const,
@@ -60,5 +67,11 @@ export const queryKeys = {
     passFail: (filters?: unknown) => ['analytics', 'pass-fail', filters ?? null] as const,
     subjectDifficulty: (filters?: unknown) =>
       ['analytics', 'subject-difficulty', filters ?? null] as const,
+    performanceTrends: (filters?: unknown) =>
+      ['analytics', 'performance-trends', filters ?? null] as const,
+  },
+  dashboard: {
+    all: () => ['dashboard'] as const,
+    get: () => ['dashboard', 'get'] as const,
   },
 } as const;

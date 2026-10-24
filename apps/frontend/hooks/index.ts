@@ -5,6 +5,7 @@ export {
   useAcceptInvite,
   useChangePassword,
   useForgotPassword,
+  useResetPassword,
   useLogout,
   useCurrentUser,
 } from './useAuth';
@@ -32,7 +33,7 @@ export {
   useUpdateMark,
   useCalculateMarks,
 } from './useMarks';
-export { useUploadFile, useUploadJob, useConfirmUpload } from './useUpload';
+export { useCreateUploadJob, useUploadJob, useConfirmUpload } from './useUpload';
 export {
   useGenerateReport,
   useReports,

@@ -23,6 +23,16 @@ export function useRoles() {
   });
 }
 
+/** Fetches a single member for the edit page. */
+export function useMember(id: string | null) {
+  return useQuery({
+    queryKey: queryKeys.members.detail(id ?? ''),
+    queryFn: () => usersService.getMember(id as string),
+    enabled: !!id,
+    staleTime: 60 * 1000,
+  });
+}
+
 /** Activates or deactivates a member. */
 export function useSetMemberActive() {
   const qc = useQueryClient();

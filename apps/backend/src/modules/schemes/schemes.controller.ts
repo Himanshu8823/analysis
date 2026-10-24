@@ -14,34 +14,34 @@ export class SchemesController {
 
   @Post()
   @Roles('SUPER_ADMIN', 'ADMIN')
-  @Permissions('rbac:write')
+  @Permissions('schemes:write')
   @ApiOperation({ summary: 'Create scheme' })
   async create(@Body() dto: CreateSchemeDto) {
     return this.service.create(dto);
   }
 
   @Get()
-  @Permissions('marks:read')
+  @Permissions('schemes:read')
   async findAll() {
     return this.service.findAll();
   }
 
   @Get(':id')
-  @Permissions('marks:read')
+  @Permissions('schemes:read')
   async findById(@Param('id') id: string) {
     return this.service.findById(id);
   }
 
   @Put(':id')
   @Roles('SUPER_ADMIN', 'ADMIN')
-  @Permissions('rbac:write')
+  @Permissions('schemes:write')
   async update(@Param('id') id: string, @Body() dto: UpdateSchemeDto) {
     return this.service.update(id, dto);
   }
 
   @Delete(':id')
   @Roles('SUPER_ADMIN')
-  @Permissions('rbac:write')
+  @Permissions('schemes:write')
   async delete(@Param('id') id: string): Promise<void> {
     return this.service.delete(id);
   }

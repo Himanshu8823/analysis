@@ -39,7 +39,7 @@ export class AuthService {
     return this.config.get<number>('auth.bcryptRounds') ?? 12;
   }
 
-  async login(dto: LoginDto, metadata?: RequestMetadata) {
+  async login(dto: LoginDto, metadata?: RequestMetadata, options?: { skipAudit?: boolean }) {
     const user = await this.repository.findByEmail(dto.email);
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Invalid credentials');
@@ -82,14 +82,18 @@ export class AuthService {
       CACHE_TTL_SECONDS,
     );
 
-    await this.auditLogsService.log({
-      userId: user.id,
-      action: 'LOGIN',
-      resource: 'auth',
-      details: { email: user.email },
-      ipAddress: metadata?.ip,
-      userAgent: metadata?.userAgent,
-    });
+    // The accept-invite flow logs `INVITE_ACCEPTED` itself, so the login it
+    // triggers must not add a second, misleading `LOGIN` row.
+    if (!options?.skipAudit) {
+      await this.auditLogsService.log({
+        userId: user.id,
+        action: 'LOGIN',
+        resource: 'auth',
+        details: { email: user.email },
+        ipAddress: metadata?.ip,
+        userAgent: metadata?.userAgent,
+      });
+    }
 
     return {
       accessToken,
@@ -178,7 +182,11 @@ export class AuthService {
 
     // Reuse the login path so the token issuing, the refresh-token record and
     // the permission cache stay in one place.
-    return this.login({ email: user.email, password: dto.password }, metadata);
+    return this.login(
+      { email: user.email, password: dto.password },
+      metadata,
+      { skipAudit: true },
+    );
   }
 
   /**
@@ -229,7 +237,14 @@ export class AuthService {
     });
   }
 
-  async refresh(refreshToken: string) {
+  /**
+   * Exchanges a refresh token for a fresh access token.
+   *
+   * The refresh token is rotated: the presented one is revoked and a new one
+   * is issued, so a stolen refresh token is usable at most once. The client
+   * must store the returned `refreshToken` and send it on the next refresh.
+   */
+  async refresh(refreshToken: string, metadata?: RequestMetadata) {
     try {
       const payload = await this.jwtService.verifyAsync<{ sub: string }>(refreshToken, {
         secret: this.config.get<string>('auth.refreshSecret'),
@@ -246,6 +261,10 @@ export class AuthService {
         throw new UnauthorizedException('Invalid refresh token');
       }
 
+      if (!tokenRecord.user.isActive) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
       const userRoles = await this.repository.getUserRoles(userId);
       const primaryRole = await this.repository.getPrimaryRole(userId);
 
@@ -257,7 +276,24 @@ export class AuthService {
       };
 
       const accessToken = await this.jwtService.signAsync(newPayload);
-      return { accessToken };
+      const newRefreshToken = await this.jwtService.signAsync(
+        { sub: userId },
+        {
+          secret: this.config.get<string>('auth.refreshSecret'),
+          expiresIn: this.config.get<string>('auth.refreshExpiresIn'),
+        },
+      );
+
+      // Revoke the presented token and store the replacement's hash, so the
+      // old token cannot be replayed.
+      await this.repository.revokeRefreshToken(tokenRecord.id);
+      await this.repository.saveRefreshToken(
+        userId,
+        await bcrypt.hash(newRefreshToken, 10),
+        metadata,
+      );
+
+      return { accessToken, refreshToken: newRefreshToken };
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
@@ -292,12 +328,15 @@ export class AuthService {
     }
     const userRoles = await this.repository.getUserRoles(userId);
     const permissions = await this.repository.getUserPermissions(userId);
+    const primaryRole = await this.repository.getPrimaryRole(userId);
 
     return {
       id: user.id,
       email: user.email,
       name: user.name,
       isActive: user.isActive,
+      // `role` is the primary role the UI gates on; `roles` is the full list.
+      role: primaryRole,
       roles: userRoles.map((r) => r.name),
       permissions,
       branchId: userRoles[0]?.branchId ?? null,

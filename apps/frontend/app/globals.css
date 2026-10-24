@@ -53,6 +53,57 @@
     --space-xl: 32px;
     --space-xxl: 48px;
     --space-section: 96px;
+
+    /*
+     * shadcn/ui token aliases.
+     *
+     * These are NOT new colors — every value is the HSL form of an existing
+     * Coinbase token declared above. shadcn components reference
+     * `bg-background`, `text-foreground`, `border-border`, etc., so this block
+     * is the seam that lets the shadcn component library render in the
+     * Coinbase palette. The rule "never introduce a color outside the design
+     * system" still holds: no color exists here that is not already a
+     * Coinbase token.
+     */
+    --background: 0 0% 100%;
+    --foreground: 240 6% 5%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 6% 5%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 6% 5%;
+    --primary: 222 100% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 95%;
+    --secondary-foreground: 240 6% 5%;
+    --muted: 0 0% 97%;
+    --muted-foreground: 220 6% 50%;
+    --accent: 220 14% 95%;
+    --accent-foreground: 240 6% 5%;
+    --destructive: 355 70% 42%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 13% 88%;
+    --input: 220 13% 88%;
+    --ring: 222 100% 50%;
+    /*
+     * The sidebar sits on `{colors.surface-soft}` (#f7f7f7) so it reads as a
+     * distinct plane from the white content canvas, and the header bar shares
+     * that tone — the two rails frame the page rather than floating in it.
+     */
+    --sidebar: 0 0% 97%;
+    --sidebar-foreground: 240 6% 5%;
+    --sidebar-primary: 222 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 95%;
+    --sidebar-accent-foreground: 240 6% 5%;
+    /*
+     * The active nav item sits on the canvas color so it reads as a raised
+     * white pill against the light-gray sidebar plane — the same layering the
+     * design system uses elsewhere (card-on-card, never decorative shadow).
+     */
+    --sidebar-active: 0 0% 100%;
+    --sidebar-active-foreground: 240 6% 5%;
+    --sidebar-border: 220 13% 88%;
+    --sidebar-ring: 222 100% 50%;
   }
 
   html,
@@ -63,6 +114,125 @@
 
   * {
     border-color: var(--color-hairline);
+  }
+
+  /*
+   * shadcn/ui base layer.
+   *
+   * Maps the semantic shadcn variables (declared in `:root` above) onto
+   * Tailwind color utilities so `bg-background`, `text-muted-foreground`,
+   * `border-border`, `bg-sidebar` etc. resolve to the Coinbase palette.
+   */
+  @layer base {
+    :root {
+      --radius: 12px;
+    }
+
+    .border-border {
+      border-color: hsl(var(--border));
+    }
+    .border-input {
+      border-color: hsl(var(--input));
+    }
+    .border-ring {
+      border-color: hsl(var(--ring));
+    }
+    .bg-background {
+      background-color: hsl(var(--background));
+    }
+    .bg-foreground {
+      background-color: hsl(var(--foreground));
+    }
+    .bg-card {
+      background-color: hsl(var(--card));
+    }
+    .bg-popover {
+      background-color: hsl(var(--popover));
+    }
+    .bg-primary {
+      background-color: hsl(var(--primary));
+    }
+    .bg-primary\/90 {
+      background-color: hsl(var(--primary) / 0.9);
+    }
+    .bg-secondary {
+      background-color: hsl(var(--secondary));
+    }
+    .bg-muted {
+      background-color: hsl(var(--muted));
+    }
+    .bg-accent {
+      background-color: hsl(var(--accent));
+    }
+    .bg-destructive {
+      background-color: hsl(var(--destructive));
+    }
+    .text-foreground {
+      color: hsl(var(--foreground));
+    }
+    .text-card-foreground {
+      color: hsl(var(--card-foreground));
+    }
+    .text-popover-foreground {
+      color: hsl(var(--popover-foreground));
+    }
+    .text-primary {
+      color: hsl(var(--primary));
+    }
+    .text-primary-foreground {
+      color: hsl(var(--primary-foreground));
+    }
+    .text-secondary-foreground {
+      color: hsl(var(--secondary-foreground));
+    }
+    .text-muted-foreground {
+      color: hsl(var(--muted-foreground));
+    }
+    .text-accent-foreground {
+      color: hsl(var(--accent-foreground));
+    }
+    .text-destructive {
+      color: hsl(var(--destructive));
+    }
+    .text-destructive-foreground {
+      color: hsl(var(--destructive-foreground));
+    }
+    .text-sidebar-foreground {
+      color: hsl(var(--sidebar-foreground));
+    }
+    .text-sidebar-primary {
+      color: hsl(var(--sidebar-primary));
+    }
+    .text-sidebar-primary-foreground {
+      color: hsl(var(--sidebar-primary-foreground));
+    }
+    .text-sidebar-accent-foreground {
+      color: hsl(var(--sidebar-accent-foreground));
+    }
+    .bg-sidebar {
+      background-color: hsl(var(--sidebar));
+    }
+    .bg-sidebar-primary {
+      background-color: hsl(var(--sidebar-primary));
+    }
+    .bg-sidebar-accent {
+      background-color: hsl(var(--sidebar-accent));
+    }
+    .bg-sidebar-active {
+      background-color: hsl(var(--sidebar-active));
+    }
+    .text-sidebar-active-foreground {
+      color: hsl(var(--sidebar-active-foreground));
+    }
+    .border-sidebar-border {
+      border-color: hsl(var(--sidebar-border));
+    }
+    .ring-ring {
+      --tw-ring-color: hsl(var(--ring));
+    }
+    .ring-sidebar-ring {
+      --tw-ring-color: hsl(var(--sidebar-ring));
+    }
   }
 
   /* Display font stays at weight 400 — never bold display copy. */
@@ -201,6 +371,9 @@
   .cb-badge {
     display: inline-flex;
     align-items: center;
+    align-self: flex-start;
+    width: fit-content;
+    max-width: 100%;
     background-color: var(--color-surface-strong);
     color: var(--color-ink);
     font-family: var(--font-sans, 'Coinbase Sans', sans-serif);
