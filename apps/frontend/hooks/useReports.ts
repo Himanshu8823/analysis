@@ -26,6 +26,18 @@ export function useReports() {
     queryKey: queryKeys.reports.list(),
     queryFn: () => reportsService.list(),
     staleTime: 60 * 1000,
+    /**
+     * The list only polls while at least one report is still being built.
+     * Once every report has reached a terminal state the polling stops, so
+     * an idle list does not keep hitting the API.
+     */
+    refetchInterval: (query) => {
+      const items = query.state.data?.items ?? [];
+      const hasPending = items.some(
+        (report) => report.status === 'PENDING' || report.status === 'PROCESSING',
+      );
+      return hasPending ? 3000 : false;
+    },
   });
 }
 

@@ -67,8 +67,17 @@ export class UploadService {
     const job = await this.repository.create(input);
 
     try {
+      /**
+       * The type the file is actually parsed as decides which worker handles
+       * it. A type that was already detected from the bytes wins; otherwise
+       * the type the caller declared is used, and only if that is missing
+       * too is the URL sniffed again. Without the `input.fileType` step a
+       * caller asking for OCR would get the spreadsheet parser.
+       */
       const type =
-        input.detectedType ?? (await this.detectFileType(input.fileUrl)).type;
+        input.detectedType
+        ?? input.fileType
+        ?? (await this.detectFileType(input.fileUrl)).type;
       const queue = type === 'PDF_IMAGE' ? 'ocr-jobs' : 'upload-jobs';
 
       if (queue === 'ocr-jobs') {

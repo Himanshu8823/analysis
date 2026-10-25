@@ -43,7 +43,7 @@ type TabKey = 'members' | 'invites' | 'roles';
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'members', label: 'Members' },
-  { key: 'invites', label: 'Pending invitations' },
+  { key: 'invites', label: 'Invitations' },
   { key: 'roles', label: 'Roles' },
 ];
 
@@ -251,7 +251,14 @@ export default function AdminMembersPage() {
       key: 'status',
       header: 'Status',
       render: (row) => (
-        <span className={INVITE_STATUS_STYLES[row.status]}>{row.status}</span>
+        <div className="flex flex-col">
+          <span className={INVITE_STATUS_STYLES[row.status]}>
+            {row.supersededById ? 'SUPERSEDED' : row.status}
+          </span>
+          {row.supersededById ? (
+            <span className="text-caption text-muted">Replaced by a newer invite</span>
+          ) : null}
+        </div>
       ),
     },
     {
@@ -347,7 +354,13 @@ export default function AdminMembersPage() {
             >
               {t.label}
               {count !== undefined ? (
-                <span className="rounded-full bg-canvas px-xs text-caption text-muted">{count}</span>
+                <span
+                  title="Invitations still awaiting a response"
+                  aria-label={`${count} awaiting a response`}
+                  className="rounded-full bg-canvas px-xs text-caption text-muted"
+                >
+                  {count}
+                </span>
               ) : null}
             </button>
           );

@@ -30,6 +30,23 @@ export function SchemeFormFields({ id, initial, onSubmit }: SchemeFormFieldsProp
   });
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * True when the rules field holds something that is not valid JSON.
+   *
+   * The error is derived from the current text rather than latched, so it
+   * disappears the moment the JSON is fixed — a stale "Rules must be valid
+   * JSON" under a textarea that now parses is misleading.
+   */
+  const rulesAreInvalid = (() => {
+    if (!error) return false;
+    try {
+      JSON.parse(form.rulesJson || '{}');
+      return false;
+    } catch {
+      return true;
+    }
+  })();
+
   return (
     <form
       id={id}
@@ -97,7 +114,7 @@ export function SchemeFormFields({ id, initial, onSubmit }: SchemeFormFieldsProp
           spellCheck={false}
         />
       </label>
-      {error ? (
+      {rulesAreInvalid ? (
         <p className="md:col-span-2 text-body-sm text-semantic-down">{error}</p>
       ) : null}
     </form>

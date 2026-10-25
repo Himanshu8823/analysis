@@ -19,7 +19,8 @@ const CONTENT_TYPES: Record<string, string> = {
  *
  * The route is authenticated — a stored file may contain a result sheet, so
  * it must not be publicly readable. The parser workers read the same bytes
- * from disk directly, so they do not go through here.
+ * from disk directly via `StorageService.readByUrl`, so they do not go
+ * through here and are unaffected by this guard.
  */
 @ApiTags('Files')
 @ApiBearerAuth()

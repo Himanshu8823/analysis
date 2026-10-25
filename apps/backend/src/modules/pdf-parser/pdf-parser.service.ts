@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { StorageService } from '../storage/storage.service';
 // pdf-parse returns text + per-page metadata
 // We import the underlying library dynamically so tests can stub it out.
 import type { PdfParseResult, PdfPageText } from './pdf-parser.types';
@@ -18,7 +19,10 @@ import type { PdfParseResult, PdfPageText } from './pdf-parser.types';
 export class PdfParserService {
   private readonly logger = new Logger(PdfParserService.name);
 
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly storage: StorageService,
+  ) {}
 
   /**
    * Parse a PDF given its URL. Returns text + best-effort tables.
@@ -118,7 +122,18 @@ export class PdfParserService {
   // Internals
   // -------------------------------------------------------------------------
 
+  /**
+   * Loads the bytes of the PDF.
+   *
+   * A file the backend stored itself is read straight from disk: the `/files`
+   * route it was published under is JWT-guarded, so fetching it over HTTP
+   * would fail with a 401. Files that live somewhere else (an external
+   * bucket) are still fetched over HTTP.
+   */
   private async downloadAsBuffer(fileUrl: string): Promise<Buffer> {
+    const stored = await this.storage.readByUrl(fileUrl);
+    if (stored) return stored;
+
     const response = await fetch(fileUrl);
     if (!response.ok) {
       throw new Error(

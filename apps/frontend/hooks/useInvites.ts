@@ -17,6 +17,13 @@ export function useInvites(filters?: InviteListFilters) {
     queryKey: queryKeys.invites.list(filters),
     queryFn: () => invitesService.list(filters),
     staleTime: 30 * 1000,
+    /**
+     * An invitation's state changes on the server (accepted, revoked,
+     * superseded) and the tab counters have to agree with the list. The
+     * list is refetched whenever it is mounted so the two never drift
+     * apart.
+     */
+    refetchOnMount: 'always',
   });
 }
 
@@ -25,6 +32,7 @@ export function useInviteCounts() {
     queryKey: queryKeys.invites.counts(),
     queryFn: () => invitesService.counts(),
     staleTime: 30 * 1000,
+    refetchOnMount: 'always',
   });
 }
 

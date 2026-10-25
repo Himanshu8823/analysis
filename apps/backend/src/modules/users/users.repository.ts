@@ -1,7 +1,45 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import type { Prisma, User } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { CreateUserDto, UpdateUserDto } from './dto';
+
+/**
+ * The columns of a user that are safe to return over HTTP.
+ *
+ * `passwordHash` is deliberately absent. A bcrypt hash is enough to mount an
+ * offline cracking attack, so it never leaves the auth module. Every read
+ * path uses this one selection, so the shape cannot drift between endpoints.
+ */
+export const USER_PUBLIC_SELECT = {
+  id: true,
+  email: true,
+  name: true,
+  isActive: true,
+  mustChangePassword: true,
+  lastLoginAt: true,
+  createdAt: true,
+  updatedAt: true,
+  createdBy: true,
+  updatedBy: true,
+  invitedById: true,
+  invitedAt: true,
+} satisfies Prisma.UserSelect;
+
+/** A user row without the password hash. */
+export type PublicUser = Prisma.UserGetPayload<{ select: typeof USER_PUBLIC_SELECT }>;
+
+/**
+ * A user row without the password hash, together with the roles assigned to
+ * them. This is the shape the API returns for a single member.
+ */
+export type UserWithRoles = PublicUser & {
+  roles: Array<{
+    roleId: string;
+    roleName: string;
+    roleDescription: string | null;
+    branchId: string | null;
+  }>;
+};
 
 @Injectable()
 export class UsersRepository {
@@ -15,7 +53,7 @@ export class UsersRepository {
     data: Omit<CreateUserDto, 'password'>,
     passwordHash: string,
     createdBy: string,
-  ): Promise<User> {
+  ): Promise<PublicUser> {
     return this.prisma.user.create({
       data: {
         email: data.email.toLowerCase().trim(),
@@ -24,6 +62,7 @@ export class UsersRepository {
         isActive: data.isActive ?? true,
         createdBy,
       },
+      select: USER_PUBLIC_SELECT,
     });
   }
 
@@ -47,15 +86,7 @@ export class UsersRepository {
         orderBy: { createdAt: 'desc' },
         skip,
         take: pageSize,
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          isActive: true,
-          lastLoginAt: true,
-          createdAt: true,
-          updatedAt: true,
-        },
+        select: USER_PUBLIC_SELECT,
       }),
       this.prisma.user.count({ where }),
     ]);
@@ -71,8 +102,44 @@ export class UsersRepository {
     };
   }
 
-  async findById(id: string): Promise<User | null> {
-    return this.prisma.user.findUnique({ where: { id } });
+  /**
+   * Fetches a single user without the password hash.
+   *
+   * `passwordHash` is never returned — this row is serialised straight into an
+   * HTTP response, and a leaked hash is enough to mount an offline cracking
+   * attack. The assigned roles come along because the member screens need
+   * them to render the role chips and the branch scope.
+   */
+  async findById(id: string): Promise<UserWithRoles | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: {
+        ...USER_PUBLIC_SELECT,
+        userRoles: {
+          select: {
+            id: true,
+            branchId: true,
+            grantedAt: true,
+            role: { select: { id: true, name: true, description: true } },
+          },
+          orderBy: { grantedAt: 'desc' },
+        },
+      },
+    });
+
+    if (!user) return null;
+
+    const { userRoles, ...publicFields } = user;
+
+    return {
+      ...publicFields,
+      roles: userRoles.map((ur) => ({
+        roleId: ur.role.id,
+        roleName: ur.role.name,
+        roleDescription: ur.role.description,
+        branchId: ur.branchId,
+      })),
+    };
   }
 
   /**
@@ -174,8 +241,16 @@ export class UsersRepository {
     });
   }
 
-  async findByEmail(email: string): Promise<User | null> {
-    return this.prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+  /**
+   * Looks a user up by email for the administration screens. The password
+   * hash is not selected — nothing outside the auth module needs it, and
+   * this row may end up in an HTTP response.
+   */
+  async findByEmail(email: string): Promise<PublicUser | null> {
+    return this.prisma.user.findUnique({
+      where: { email: email.toLowerCase().trim() },
+      select: USER_PUBLIC_SELECT,
+    });
   }
 
   async update(
@@ -183,8 +258,13 @@ export class UsersRepository {
     data: Omit<UpdateUserDto, 'password'>,
     passwordHash: string | undefined,
     updatedBy: string,
-  ): Promise<User> {
-    return this.prisma.user.update({
+  ): Promise<UserWithRoles> {
+    /**
+     * The updated row is read back with the same column selection as
+     * `findById`, so a password change never echoes the new hash back to
+     * the client.
+     */
+    await this.prisma.user.update({
       where: { id },
       data: {
         ...(data.name !== undefined ? { name: data.name } : {}),
@@ -194,6 +274,12 @@ export class UsersRepository {
         updatedBy,
       },
     });
+
+    const updated = await this.findById(id);
+    if (!updated) {
+      throw new NotFoundException('User not found');
+    }
+    return updated;
   }
 
   async softDelete(id: string, deletedBy: string): Promise<void> {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authService } from '@/lib/services/auth.service';
 import { queryKeys } from '@/lib/query/queryKeys';
@@ -168,7 +169,21 @@ export function useLogout() {
 }
 
 export function useCurrentUser() {
-  const hasSession = typeof window !== 'undefined' && !!getSession();
+  /**
+   * The stored session is read in an effect, never during render.
+   *
+   * `localStorage` only exists in the browser, so reading it while rendering
+   * makes the server render and the first client render disagree — React
+   * then reports a hydration mismatch and throws the whole tree away. The
+   * state starts as `false` on both sides and settles to the real value once
+   * the client has mounted.
+   */
+  const [hasSession, setHasSession] = useState(false);
+
+  useEffect(() => {
+    setHasSession(!!getSession());
+  }, []);
+
   return useQuery<SessionUser>({
     queryKey: queryKeys.auth.me(),
     queryFn: () => authService.me(),

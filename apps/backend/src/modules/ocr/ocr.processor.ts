@@ -2,6 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { OcrService } from './ocr.service';
+import { StorageService } from '../storage/storage.service';
 import { PrismaClient } from '@prisma/client';
 import type { OcrProcessResult } from './ocr.service';
 
@@ -22,6 +23,7 @@ export class OcrProcessor extends WorkerHost {
   constructor(
     private readonly ocrService: OcrService,
     private readonly prisma: PrismaClient,
+    private readonly storage: StorageService,
   ) {
     super();
   }
@@ -36,7 +38,18 @@ export class OcrProcessor extends WorkerHost {
     return this.ocrService.processImage(jobId, buffer, model);
   }
 
+  /**
+   * Loads the bytes of the scanned file.
+   *
+   * A file the backend stored itself is read straight from disk: the `/files`
+   * route it was published under is JWT-guarded, so fetching it over HTTP
+   * would fail with a 401. Files that live somewhere else (an external
+   * bucket) are still fetched over HTTP.
+   */
   private async downloadFile(fileUrl: string): Promise<Buffer> {
+    const stored = await this.storage.readByUrl(fileUrl);
+    if (stored) return stored;
+
     const response = await fetch(fileUrl);
     if (!response.ok) {
       throw new Error(

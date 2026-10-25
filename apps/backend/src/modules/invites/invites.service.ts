@@ -84,9 +84,6 @@ export class InvitesService {
     // Supersede any outstanding invitation for the same address, so a resend
     // never leaves two live links for one person.
     const pending = await this.repository.findPendingByEmail(email);
-    if (pending) {
-      await this.repository.revoke(pending.id);
-    }
 
     // 256 bits of entropy, hex-encoded. The raw token exists only inside the
     // email link — only its SHA-256 hash is persisted.
@@ -104,6 +101,12 @@ export class InvitesService {
       expiresAt,
       invitedById,
     });
+
+    if (pending) {
+      // The old link is dead, but it is marked as replaced rather than simply
+      // revoked, so the list can tell the two apart.
+      await this.repository.supersede(pending.id, invite.id);
+    }
 
     const inviteUrl = this.buildInviteUrl(rawToken);
     await this.sendInviteEmail(invite, inviteUrl);
@@ -181,10 +184,6 @@ export class InvitesService {
       throw new BadRequestException('This invitation has already been accepted');
     }
 
-    if (invite.status === 'PENDING') {
-      await this.repository.revoke(id);
-    }
-
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = this.hashToken(rawToken);
     const expiresAt = new Date(Date.now() + this.inviteTtlHours * 60 * 60 * 1000);
@@ -198,6 +197,12 @@ export class InvitesService {
       expiresAt,
       invitedById,
     });
+
+    if (invite.status === 'PENDING') {
+      // The old link is dead, but it is marked as replaced rather than simply
+      // revoked, so the list can tell the two apart.
+      await this.repository.supersede(id, resent.id);
+    }
 
     const inviteUrl = this.buildInviteUrl(rawToken);
     await this.sendInviteEmail(resent, inviteUrl);
@@ -329,6 +334,12 @@ export class InvitesService {
       expiresAt: invite.expiresAt.toISOString(),
       acceptedAt: invite.acceptedAt ? invite.acceptedAt.toISOString() : null,
       createdAt: invite.createdAt.toISOString(),
+      /**
+       * Set when a resend replaced this invitation. The link is dead but the
+       * record is kept for the history, so the UI labels it as superseded
+       * rather than showing it as an ordinary revoked invitation.
+       */
+      supersededById: invite.supersededById ?? null,
     };
   }
 }

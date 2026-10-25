@@ -59,6 +59,19 @@ export class InvitesRepository {
     });
   }
 
+  /**
+   * Marks an invitation as replaced by a newer one.
+   *
+   * The link is dead but the record is kept, so the history stays readable
+   * and a stale invitation is not mistaken for a live one.
+   */
+  async supersede(id: string, supersededById: string): Promise<Invite> {
+    return this.prisma.invite.update({
+      where: { id },
+      data: { status: 'REVOKED', supersededById },
+    });
+  }
+
   /** Marks an invitation as expired. */
   async markExpired(id: string): Promise<Invite> {
     return this.prisma.invite.update({

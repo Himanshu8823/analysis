@@ -28,7 +28,13 @@ export default () => ({
      */
     local: {
       directory: process.env.STORAGE_LOCAL_DIR ?? 'uploads',
-      publicBaseUrl: process.env.STORAGE_PUBLIC_BASE_URL ?? '',
+      /**
+       * The base URL the local file store hands back to callers. Left
+       * `undefined` when it is not configured so `StorageService` can apply
+       * its own `http://localhost:<port>` fallback — an empty string would
+       * survive a `??` check and produce a relative, unusable file URL.
+       */
+      publicBaseUrl: process.env.STORAGE_PUBLIC_BASE_URL || undefined,
     },
   },
 });

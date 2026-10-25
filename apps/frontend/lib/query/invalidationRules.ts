@@ -1,17 +1,31 @@
 import { QueryClient } from '@tanstack/react-query';
 import { queryKeys } from './queryKeys';
 
+/**
+ * Invalidates every invitation query.
+ *
+ * The list query key embeds the active filters, so a single `invalidateQueries`
+ * on the bare `['invites']` prefix has to match on the *hash* of the nested
+ * filter object. Invalidate the list and the counts separately instead —
+ * both are named explicitly, so a change to the key factory cannot silently
+ * stop the list from refreshing.
+ */
+function invalidateInvites(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: ['invites', 'list'] });
+  qc.invalidateQueries({ queryKey: queryKeys.invites.counts() });
+}
+
 // Centralized invalidation rules for mutations
 export const invalidationRules = {
   onInviteSent: (qc: QueryClient) => {
-    qc.invalidateQueries({ queryKey: queryKeys.invites.all() });
+    invalidateInvites(qc);
     qc.invalidateQueries({ queryKey: queryKeys.members.all() });
   },
   onInviteRevoked: (qc: QueryClient) => {
-    qc.invalidateQueries({ queryKey: queryKeys.invites.all() });
+    invalidateInvites(qc);
   },
   onInviteResent: (qc: QueryClient) => {
-    qc.invalidateQueries({ queryKey: queryKeys.invites.all() });
+    invalidateInvites(qc);
   },
   onMemberUpdated: (qc: QueryClient) => {
     qc.invalidateQueries({ queryKey: queryKeys.members.all() });

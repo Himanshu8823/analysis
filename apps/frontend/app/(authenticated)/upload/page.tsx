@@ -53,7 +53,16 @@ export default function UploadPage() {
 
   const activeYear = years.find((y) => y.isActive) ?? years[0];
 
-  const scopeReady = !!branchId && !!schemeId && !!academicYearId && semester > 0;
+  /**
+   * The academic year falls back to the active one so the scope is usable
+   * without an explicit pick. The state variable alone would stay empty when
+   * there is only one academic year, because a Radix select never fires
+   * `onValueChange` for the value that is already selected.
+   */
+  const effectiveAcademicYearId = academicYearId || activeYear?.id || '';
+
+  const scopeReady =
+    !!branchId && !!schemeId && !!effectiveAcademicYearId && semester > 0;
 
   const handleFile = (file: File) => {
     if (!scopeReady) return;
@@ -109,7 +118,7 @@ export default function UploadPage() {
           </Select>
           <Select
             label="Academic year"
-            value={academicYearId || activeYear?.id || ''}
+            value={effectiveAcademicYearId}
             onChange={(e) => setAcademicYearId(e.target.value)}
           >
             {years.map((year) => (
@@ -158,7 +167,12 @@ export default function UploadPage() {
               jobId: job.id,
               payload: {
                 rows,
-                metadata: { branchId, schemeId, semester, academicYearId },
+                metadata: {
+                  branchId,
+                  schemeId,
+                  semester,
+                  academicYearId: effectiveAcademicYearId,
+                },
               },
             })
           }

@@ -65,6 +65,11 @@ export interface Invite {
   expiresAt: string;
   acceptedAt?: string | null;
   createdAt: string;
+  /**
+   * Set when a resend replaced this invitation. The record is kept for the
+   * history, but the link is dead — it is not a live invitation.
+   */
+  supersededById?: string | null;
   /** Present only on the create/resend response — lets an admin copy the link manually. */
   inviteUrl?: string;
 }

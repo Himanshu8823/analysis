@@ -34,9 +34,14 @@ export class StorageService {
       process.cwd(),
       this.config.get<string>('storage.local.directory') ?? 'uploads',
     );
+    /**
+     * The configured base URL, or the local server URL when none is set.
+     * `||` is deliberate: an empty string is not a usable base URL, and the
+     * `??` operator would let it through and produce relative file URLs.
+     */
     this.publicBaseUrl = (
       this.config.get<string>('storage.local.publicBaseUrl')
-      ?? `http://localhost:${this.config.get<number>('server.port') ?? 3001}`
+      || `http://localhost:${this.config.get<number>('server.port') ?? 3001}`
     ).replace(/\/+$/, '');
   }
 
@@ -75,6 +80,54 @@ export class StorageService {
   /** Reads a stored file back. */
   async read(relativePath: string): Promise<Buffer> {
     return readFile(this.resolveInsideRoot(relativePath));
+  }
+
+  /**
+   * Reads a stored file given the URL it was published under.
+   *
+   * The parser workers need the bytes of a file the backend itself stored.
+   * Fetching that URL over HTTP would hit the JWT guard on the `/files`
+   * route, so the bytes are read straight from disk instead — the path is
+   * derived from the URL and then resolved inside the storage root, so a
+   * crafted URL still cannot escape it.
+   *
+   * Returns `null` when the URL does not point at this store, which lets the
+   * caller fall back to fetching it over HTTP.
+   */
+  async readByUrl(fileUrl: string): Promise<Buffer | null> {
+    const relativePath = this.relativePathFromUrl(fileUrl);
+    if (!relativePath) return null;
+
+    try {
+      return await this.read(relativePath);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Extracts the storage-relative path from a published file URL.
+   *
+   * Returns `null` when the URL does not address this store — for example
+   * when the file lives in an external bucket.
+   */
+  private relativePathFromUrl(fileUrl: string): string | null {
+    let pathname: string;
+    try {
+      pathname = new URL(fileUrl).pathname;
+    } catch {
+      return null;
+    }
+
+    const marker = '/files/';
+    const index = pathname.indexOf(marker);
+    if (index === -1) return null;
+
+    const relativePath = decodeURIComponent(pathname.slice(index + marker.length));
+    if (!relativePath) return null;
+
+    // `resolveInsideRoot` rejects anything that tries to escape the root.
+    return relativePath;
   }
 
   /** Deletes a stored file. Missing files are ignored. */

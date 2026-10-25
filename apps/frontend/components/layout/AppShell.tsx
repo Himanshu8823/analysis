@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -28,7 +28,21 @@ export function AppShell({ children }: AppShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { data: user, isLoading, isError } = useCurrentUser();
-  const hasSession = typeof window !== 'undefined' && !!getSession();
+
+  /**
+   * The stored session is read in an effect, never during render.
+   *
+   * Reading `localStorage` during the render is only possible in the browser,
+   * so the first server render and the first client render would disagree on
+   * whether a session exists — React then reports a hydration mismatch and
+   * re-renders the whole tree. Keeping the value in state, initialised to a
+   * fixed value, keeps the server and the client markup identical.
+   */
+  const [hasSession, setHasSession] = useState(true);
+
+  useEffect(() => {
+    setHasSession(!!getSession());
+  }, []);
 
   useEffect(() => {
     if (!hasSession) {
@@ -55,7 +69,7 @@ export function AppShell({ children }: AppShellProps) {
     router.replace('/change-password');
   }, [pathname, router, user?.mustChangePassword]);
 
-  if (isLoading && hasSession) {
+  if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-canvas">
         <Spinner size={32} label="Loading session" />

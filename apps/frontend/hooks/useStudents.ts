@@ -11,6 +11,7 @@ import { queryKeys } from '@/lib/query/queryKeys';
 import { invalidationRules } from '@/lib/query/invalidationRules';
 import type { ListResponse } from '@/lib/types/api';
 import { useToast } from '@/lib/utils/notifications';
+import { extractErrorMessage } from './useAuth';
 
 export function useStudents(filters?: StudentListFilters) {
   return useQuery<ListResponse<Student>>({
@@ -38,7 +39,7 @@ export function useCreateStudent() {
       invalidationRules.onStudentCreated(qc);
       toast.success('Student added');
     },
-    onError: () => toast.error('Failed to add student'),
+    onError: (error) => toast.error(extractErrorMessage(error)),
   });
 }
 
@@ -52,7 +53,7 @@ export function useUpdateStudent() {
       qc.invalidateQueries({ queryKey: queryKeys.students.all() });
       toast.success('Student updated');
     },
-    onError: () => toast.error('Failed to update student'),
+    onError: (error) => toast.error(extractErrorMessage(error)),
   });
 }
 
@@ -65,7 +66,7 @@ export function useDeleteStudent() {
       qc.invalidateQueries({ queryKey: queryKeys.students.all() });
       toast.success('Student removed');
     },
-    onError: () => toast.error('Failed to delete student'),
+    onError: (error) => toast.error(extractErrorMessage(error)),
   });
 }
 
@@ -83,6 +84,6 @@ export function useImportStudents() {
         toast.success(`Imported ${result.inserted} students`);
       }
     },
-    onError: () => toast.error('Failed to import students'),
+    onError: (error) => toast.error(extractErrorMessage(error)),
   });
 }

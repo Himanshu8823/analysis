@@ -1,9 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
-import { UsersRepository } from './users.repository';
+import { UsersRepository, type PublicUser, type UserWithRoles } from './users.repository';
 import { CreateUserDto, ListMembersDto, UpdateUserDto } from './dto';
-import type { User } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
@@ -22,7 +21,7 @@ export class UsersService {
    * The hash is always computed here — the plaintext password never reaches the
    * repository, and no client-supplied hash is ever persisted.
    */
-  async create(dto: CreateUserDto, createdBy: string): Promise<User> {
+  async create(dto: CreateUserDto, createdBy: string): Promise<PublicUser> {
     const passwordHash = await bcrypt.hash(dto.password, this.bcryptRounds);
     const { password, ...rest } = dto;
     void password;
@@ -33,7 +32,7 @@ export class UsersService {
     return this.repository.findAll(params);
   }
 
-  async findById(id: string): Promise<User> {
+  async findById(id: string): Promise<UserWithRoles> {
     const user = await this.repository.findById(id);
     if (!user) {
       throw new NotFoundException('User not found');
@@ -59,7 +58,7 @@ export class UsersService {
     return this.repository.findRolesWithCounts();
   }
 
-  async update(id: string, dto: UpdateUserDto, updatedBy: string): Promise<User> {
+  async update(id: string, dto: UpdateUserDto, updatedBy: string): Promise<UserWithRoles> {
     const { password, ...rest } = dto;
     const passwordHash =
       password !== undefined ? await bcrypt.hash(password, this.bcryptRounds) : undefined;
@@ -70,11 +69,11 @@ export class UsersService {
     await this.repository.softDelete(id, deletedBy);
   }
 
-  async activate(id: string, updatedBy: string): Promise<User> {
+  async activate(id: string, updatedBy: string): Promise<UserWithRoles> {
     return this.repository.update(id, { isActive: true }, undefined, updatedBy);
   }
 
-  async deactivate(id: string, updatedBy: string): Promise<User> {
+  async deactivate(id: string, updatedBy: string): Promise<UserWithRoles> {
     return this.repository.update(id, { isActive: false }, undefined, updatedBy);
   }
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Pencil, FileCog } from 'lucide-react';
+import { Pencil, FileCog, Plus } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
@@ -19,6 +19,14 @@ export default function AdminSchemesPage() {
       <PageHeader
         title="Scheme Rules"
         description="Configure evaluation schemes (2019 / 2022 / 2024) and calculator strategies."
+        actions={
+          <Link
+            href="/admin/schemes/new"
+            className="cb-btn-primary inline-flex w-full items-center justify-center md:w-auto"
+          >
+            <Plus className="mr-1 h-4 w-4" aria-hidden /> Create scheme
+          </Link>
+        }
       />
 
       {isError ? (
@@ -32,8 +40,13 @@ export default function AdminSchemesPage() {
       ) : schemes.length === 0 ? (
         <EmptyState
           title="No schemes configured"
-          description="Schemes are typically created from the backend seed; once added they appear here for editing."
+          description="Create a scheme to define how marks are evaluated and calculated."
           icon={<FileCog className="h-8 w-8" aria-hidden />}
+          action={
+            <Link href="/admin/schemes/new" className="cb-btn-primary">
+              <Plus className="mr-1 h-4 w-4" aria-hidden /> Create scheme
+            </Link>
+          }
         />
       ) : (
         <div className="grid grid-cols-1 gap-base md:grid-cols-2 lg:grid-cols-3">

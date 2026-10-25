@@ -140,6 +140,13 @@ export function EditMemberFormFields({
     email: member.email,
   });
 
+  /**
+   * The role chips are rendered from the member's roles. The endpoint may
+   * omit the array entirely for a member with no role rows, so it is
+   * defaulted — reading `.length` off `undefined` would crash the page.
+   */
+  const assignedRoles = member.roles ?? [];
+
   return (
     <form
       id={id}
@@ -173,10 +180,10 @@ export function EditMemberFormFields({
       </label>
 
       <div className="flex flex-wrap gap-xs md:col-span-2">
-        {member.roles.length === 0 ? (
+        {assignedRoles.length === 0 ? (
           <span className="text-caption text-muted">No roles assigned</span>
         ) : (
-          member.roles.map((r) => (
+          assignedRoles.map((r) => (
             <span key={`${r.roleName}-${r.branchId ?? 'global'}`} className="cb-badge">
               {r.roleName}
             </span>

@@ -119,9 +119,13 @@ export class OcrService {
   /**
    * Process an image/PDF buffer using the supplied HF model. Updates the
    * UploadJob row with progress + extracted data as the work progresses.
+   *
+   * `jobId` is `null` for the standalone extract endpoint, which runs OCR on
+   * a URL without creating an upload job. In that case the progress and
+   * result updates are skipped — there is no row to write them to.
    */
   async processImage(
-    jobId: string,
+    jobId: string | null,
     fileBuffer: Buffer,
     modelConfig: HfModelConfig,
   ): Promise<OcrProcessResult> {
@@ -138,10 +142,12 @@ export class OcrService {
     }
 
     try {
-      await this.prisma.uploadJob.update({
-        where: { id: jobId },
-        data: { status: 'PROCESSING', progress: 30, startedAt: new Date() },
-      });
+      if (jobId) {
+        await this.prisma.uploadJob.update({
+          where: { id: jobId },
+          data: { status: 'PROCESSING', progress: 30, startedAt: new Date() },
+        });
+      }
 
       const textResult = await this.hf.imageToText({
         data: fileBuffer,
@@ -178,14 +184,16 @@ export class OcrService {
         ...(tables !== undefined ? { tables } : {}),
       };
 
-      await this.prisma.uploadJob.update({
-        where: { id: jobId },
-        data: {
-          status: 'EXTRACTED',
-          progress: 80,
-          extractedData,
-        },
-      });
+      if (jobId) {
+        await this.prisma.uploadJob.update({
+          where: { id: jobId },
+          data: {
+            status: 'EXTRACTED',
+            progress: 80,
+            extractedData,
+          },
+        });
+      }
 
       return {
         extractedText,
@@ -208,7 +216,10 @@ export class OcrService {
     return this.prisma.uploadJob.findUnique({ where: { id: jobId } });
   }
 
-  private async markJobFailed(jobId: string, message: string): Promise<void> {
+  private async markJobFailed(jobId: string | null, message: string): Promise<void> {
+    // The standalone extract endpoint has no upload job to mark as failed.
+    if (!jobId) return;
+
     try {
       await this.prisma.uploadJob.update({
         where: { id: jobId },

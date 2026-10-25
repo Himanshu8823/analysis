@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { useImportStudents } from '@/hooks/useStudents';
 import { useBranches } from '@/hooks/useBranches';
 import { useSchemes } from '@/hooks/useSchemes';
-import { useAcademicYears } from '@/hooks/useAcademic';
+import { useAcademicYears, useBatches } from '@/hooks/useAcademic';
 import type { BulkImportResult, BulkImportScope } from '@/lib/services/students.service';
 
 /**
@@ -23,6 +23,7 @@ export default function ImportStudentsPage() {
   const { data: branchesData } = useBranches();
   const { data: schemesData } = useSchemes();
   const { data: academicYears } = useAcademicYears();
+  const { data: batchData } = useBatches();
   const { mutate: importStudents, isPending: importing } = useImportStudents();
 
   const [result, setResult] = useState<BulkImportResult | null>(null);
@@ -30,10 +31,12 @@ export default function ImportStudentsPage() {
 
   const branches = branchesData ?? [];
   const schemes = schemesData ?? [];
+  const batches = batchData ?? [];
   const activeYear = academicYears?.find((y) => y.isActive) ?? academicYears?.[0];
 
   const [branchId, setBranchId] = useState('');
   const [schemeId, setSchemeId] = useState('');
+  const [batchId, setBatchId] = useState('');
   const [academicYearId, setAcademicYearId] = useState(activeYear?.id ?? '');
   const [currentYear, setCurrentYear] = useState(1);
   const [semester, setSemester] = useState(1);
@@ -41,6 +44,7 @@ export default function ImportStudentsPage() {
   const scope: BulkImportScope = {
     branchId: branchId || undefined,
     schemeId: schemeId || undefined,
+    batchId: batchId || undefined,
     academicYearId: academicYearId || undefined,
     currentYear,
     semester,
@@ -102,6 +106,18 @@ export default function ImportStudentsPage() {
             {academicYears?.map((year) => (
               <option key={year.id} value={year.id}>
                 {year.year}
+              </option>
+            ))}
+          </Select>
+          <Select
+            label="Batch"
+            value={batchId}
+            onChange={(e) => setBatchId(e.target.value)}
+          >
+            <option value="">From the sheet</option>
+            {batches.map((batch) => (
+              <option key={batch.id} value={batch.id}>
+                {batch.name}
               </option>
             ))}
           </Select>

@@ -423,11 +423,20 @@ model Invite {
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
 
-  invitedBy User    @relation("InvitesSent", fields: [invitedById], references: [id], onDelete: Cascade)
-  branch    Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  /// Set when a resend replaced this invitation. The link still exists but
+  /// it is dead — the newer invitation is the live one. It is kept so the
+  /// history stays readable and so a stale link is not mistaken for a live
+  /// one.
+  supersededById String? @map("superseded_by_id")
+
+  invitedBy     User     @relation("InvitesSent", fields: [invitedById], references: [id], onDelete: Cascade)
+  branch        Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  supersededBy  Invite?  @relation("InviteSuperseded", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes    Invite[] @relation("InviteSuperseded")
 
   @@index([email])
   @@index([status, expiresAt])
   @@index([invitedById])
+  @@index([supersededById])
   @@map("invites")
 }

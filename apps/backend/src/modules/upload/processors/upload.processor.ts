@@ -2,6 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { UploadService } from '../upload.service';
+import { StorageService } from '../../storage/storage.service';
 import { parseMarksFile } from '../marks-file.parser';
 
 interface UploadJobData {
@@ -22,7 +23,10 @@ interface UploadJobData {
 export class UploadProcessor extends WorkerHost {
   private readonly logger = new Logger(UploadProcessor.name);
 
-  constructor(private readonly uploadService: UploadService) {
+  constructor(
+    private readonly uploadService: UploadService,
+    private readonly storage: StorageService,
+  ) {
     super();
   }
 
@@ -71,8 +75,18 @@ export class UploadProcessor extends WorkerHost {
     }
   }
 
-  /** Downloads the uploaded file from the storage URL. */
+  /**
+   * Loads the bytes of the uploaded file.
+   *
+   * A file the backend stored itself is read straight from disk: the `/files`
+   * route it was published under is JWT-guarded, so fetching it over HTTP
+   * would fail with a 401. Files that live somewhere else (an external
+   * bucket) are still fetched over HTTP.
+   */
   private async fetchFile(fileUrl: string): Promise<Buffer> {
+    const stored = await this.storage.readByUrl(fileUrl);
+    if (stored) return stored;
+
     const response = await fetch(fileUrl);
     if (!response.ok) {
       throw new Error(`Could not fetch the uploaded file (HTTP ${response.status})`);

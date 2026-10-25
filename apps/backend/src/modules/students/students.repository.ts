@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
-import type { Prisma, Student } from '@prisma/client';
+import { ConflictException, Injectable } from '@nestjs/common';
+import { Prisma, PrismaClient } from '@prisma/client';
+import type { Student } from '@prisma/client';
 import { CreateStudentDto, UpdateStudentDto } from './dto';
 import type { ParsedStudentRow } from './student-import.parser';
 
@@ -9,19 +9,32 @@ export class StudentsRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
   async create(data: CreateStudentDto, _createdBy: string): Promise<Student> {
-    return this.prisma.student.create({
-      data: {
-        rollNo: data.rollNo,
-        name: data.name,
-        branchId: data.branchId,
-        currentYear: data.currentYear,
-        semester: data.semester,
-        schemeId: data.schemeId,
-        batchId: data.batchId,
-        academicYearId: data.academicYearId,
-        isActive: data.isActive ?? true,
-      },
-    });
+    try {
+      return await this.prisma.student.create({
+        data: {
+          rollNo: data.rollNo,
+          name: data.name,
+          branchId: data.branchId,
+          currentYear: data.currentYear,
+          semester: data.semester,
+          schemeId: data.schemeId,
+          batchId: data.batchId,
+          academicYearId: data.academicYearId,
+          isActive: data.isActive ?? true,
+        },
+      });
+    } catch (err) {
+      /**
+       * A roll number is unique per academic year. Without this the caller
+       * gets a raw Prisma error (HTTP 500) instead of a conflict (HTTP 409).
+       */
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException(
+          `Roll No "${data.rollNo}" already exists for this academic year`,
+        );
+      }
+      throw err;
+    }
   }
 
   async findAll(params: {
@@ -38,7 +51,11 @@ export class StudentsRepository {
     const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 20));
     const skip = (page - 1) * pageSize;
 
-    const where: Prisma.StudentWhereInput = {};
+    const where: Prisma.StudentWhereInput = {
+      // Soft-deleted students stay in the table for the audit trail, but they
+      // must not appear in the roster.
+      isActive: true,
+    };
     if (params.branchId) where.branchId = params.branchId;
     if (params.schemeId) where.schemeId = params.schemeId;
     if (params.currentYear !== undefined) where.currentYear = params.currentYear;
