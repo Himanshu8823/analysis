@@ -1,6 +1,4 @@
-import {
-  BadRequestException, Injectable, Logger, NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaClient } from '@prisma/client';
@@ -46,7 +44,7 @@ export class UploadService {
     private readonly prisma: PrismaClient,
     private readonly storage: StorageService,
     @InjectQueue('upload-jobs') private readonly uploadQueue: Queue,
-    @InjectQueue('ocr-jobs') private readonly ocrQueue: Queue,
+    @InjectQueue('ocr-jobs') private readonly ocrQueue: Queue
   ) {}
 
   /**
@@ -56,9 +54,7 @@ export class UploadService {
    */
   async createJob(input: CreateUploadJobInput): Promise<UploadJob> {
     if (input.fileSize > UploadService.MAX_FILE_SIZE) {
-      throw new BadRequestException(
-        `File exceeds ${UploadService.MAX_FILE_SIZE} byte limit`,
-      );
+      throw new BadRequestException(`File exceeds ${UploadService.MAX_FILE_SIZE} byte limit`);
     }
     if (!input.fileUrl.startsWith('http')) {
       throw new BadRequestException('fileUrl must be an absolute URL');
@@ -75,22 +71,20 @@ export class UploadService {
        * caller asking for OCR would get the spreadsheet parser.
        */
       const type =
-        input.detectedType
-        ?? input.fileType
-        ?? (await this.detectFileType(input.fileUrl)).type;
+        input.detectedType ?? input.fileType ?? (await this.detectFileType(input.fileUrl)).type;
       const queue = type === 'PDF_IMAGE' ? 'ocr-jobs' : 'upload-jobs';
 
       if (queue === 'ocr-jobs') {
         await this.ocrQueue.add(
           'process',
           { jobId: job.id, fileUrl: input.fileUrl },
-          { removeOnComplete: true, removeOnFail: 100 },
+          { removeOnComplete: true, removeOnFail: 100 }
         );
       } else {
         await this.uploadQueue.add(
           'process',
           { jobId: job.id, fileUrl: input.fileUrl, fileType: type },
-          { removeOnComplete: true, removeOnFail: 100 },
+          { removeOnComplete: true, removeOnFail: 100 }
         );
       }
 
@@ -117,12 +111,10 @@ export class UploadService {
   async createJobFromFile(
     file: { buffer: Buffer; originalname: string; size: number },
     uploadedBy: string,
-    metadata?: Record<string, unknown>,
+    metadata?: Record<string, unknown>
   ): Promise<UploadJob> {
     if (file.size > UploadService.MAX_FILE_SIZE) {
-      throw new BadRequestException(
-        `File exceeds ${UploadService.MAX_FILE_SIZE} byte limit`,
-      );
+      throw new BadRequestException(`File exceeds ${UploadService.MAX_FILE_SIZE} byte limit`);
     }
 
     const stored = await this.storage.save(file.buffer, file.originalname);
@@ -149,7 +141,7 @@ export class UploadService {
    */
   private async detectBufferType(
     buffer: Buffer,
-    filename: string,
+    filename: string
   ): Promise<FileTypeDetectionResult> {
     const head = buffer.subarray(0, Math.min(buffer.length, 4096));
     if (head.subarray(0, 4).equals(MAGIC.PDF)) {
@@ -204,7 +196,7 @@ export class UploadService {
       startedAt?: Date;
       completedAt?: Date;
       fileType?: string;
-    },
+    }
   ): Promise<UploadJob> {
     return this.repository.updateStatus(id, update);
   }
@@ -228,12 +220,12 @@ export class UploadService {
       isAbsent?: boolean;
     }>,
     metadata?: Record<string, unknown>,
-    confirmedBy?: string,
+    confirmedBy?: string
   ): Promise<{ jobId: string; marksCreated: number }> {
     const job = await this.findById(jobId);
     if (job.status !== 'EXTRACTED') {
       throw new BadRequestException(
-        `Cannot confirm job in status ${job.status}; expected EXTRACTED`,
+        `Cannot confirm job in status ${job.status}; expected EXTRACTED`
       );
     }
     const ctx = (metadata ?? (job.metadata as Record<string, unknown> | null) ?? {}) as {
@@ -255,22 +247,29 @@ export class UploadService {
       !ctx.academicYearId
     ) {
       throw new BadRequestException(
-        'metadata.branchId, metadata.schemeId, metadata.semester and metadata.academicYearId are required to confirm',
+        'metadata.branchId, metadata.schemeId, metadata.semester and metadata.academicYearId are required to confirm'
       );
     }
 
-    // Resolve subjects by code within the chosen scheme/branch/semester.
+    // Resolve the subject offerings for the chosen class.
+    //
+    // A subject code is not enough on its own — the same code runs in more
+    // than one branch and semester, and marks belong to the offering (the
+    // subject as it runs in this particular class), not to the bare subject.
     const subjectCodes = [...new Set(rows.map((r) => r.subjectCode))];
-    const subjects = await this.prisma.subject.findMany({
+    const offerings = await this.prisma.subjectOffering.findMany({
       where: {
         schemeId: ctx.schemeId,
         branchId: ctx.branchId,
         semester,
-        code: { in: subjectCodes },
+        isActive: true,
+        subject: { code: { in: subjectCodes }, isActive: true },
       },
-      select: { id: true, code: true, schemeId: true, branchId: true, semester: true },
+      select: { id: true, subject: { select: { code: true } } },
     });
-    const subjectByCode = new Map(subjects.map((s) => [s.code, s]));
+    const offeringsByCode = new Map<string, { id: string }>(
+      offerings.map((o) => [o.subject.code, { id: o.id }])
+    );
 
     // Resolve students by rollNo within the chosen academic year.
     const rollNos = [...new Set(rows.map((r) => r.rollNo))];
@@ -284,31 +283,34 @@ export class UploadService {
     const studentByRollNo = new Map(students.map((s) => [s.rollNo, s]));
 
     const ops: Prisma.PrismaPromise<unknown>[] = [];
-    const skipped: Array<{ reason: string; row: typeof rows[number] }> = [];
+    const skipped: Array<{ reason: string; row: (typeof rows)[number] }> = [];
     for (const row of rows) {
       const student = studentByRollNo.get(row.rollNo);
-      const subject = subjectByCode.get(row.subjectCode);
+      const offering = offeringsByCode.get(row.subjectCode);
       if (!student) {
         skipped.push({ reason: `student not found: ${row.rollNo}`, row });
         continue;
       }
-      if (!subject) {
-        skipped.push({ reason: `subject not found: ${row.subjectCode}`, row });
+      if (!offering) {
+        skipped.push({
+          reason: `subject is not offered in this class: ${row.subjectCode}`,
+          row,
+        });
         continue;
       }
       ops.push(
         this.prisma.mark.upsert({
           where: {
-            studentId_subjectId_examType_academicYearId: {
+            studentId_subjectOfferingId_examType_academicYearId: {
               studentId: student.id,
-              subjectId: subject.id,
+              subjectOfferingId: offering.id,
               examType: row.examType,
               academicYearId: ctx.academicYearId,
             },
           },
           create: {
             studentId: student.id,
-            subjectId: subject.id,
+            subjectOfferingId: offering.id,
             examType: row.examType,
             marksObtained: row.marksObtained,
             maxMarks: row.maxMarks,
@@ -322,7 +324,7 @@ export class UploadService {
             isAbsent: row.isAbsent ?? false,
             updatedBy: confirmedBy,
           },
-        }),
+        })
       );
     }
 
@@ -332,7 +334,7 @@ export class UploadService {
 
     if (skipped.length > 0) {
       this.logger.warn(
-        `Skipped ${skipped.length} rows while confirming upload ${jobId}: ${JSON.stringify(skipped.slice(0, 5))}`,
+        `Skipped ${skipped.length} rows while confirming upload ${jobId}: ${JSON.stringify(skipped.slice(0, 5))}`
       );
     }
 
@@ -367,7 +369,10 @@ export class UploadService {
         };
       }
       if (buf.subarray(0, 4).equals(MAGIC.ZIP_XLSX)) {
-        return { type: 'EXCEL', mimeHint: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
+        return {
+          type: 'EXCEL',
+          mimeHint: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        };
       }
       // A CSV is plain text: it either starts with a UTF-8 BOM or with a
       // printable character, and contains no NUL byte the way a binary file
@@ -383,7 +388,8 @@ export class UploadService {
       // Fallback: rely on a guess from the URL itself
       const lower = fileUrl.toLowerCase();
       if (lower.endsWith('.pdf')) return { type: 'PDF_TEXT', mimeHint: 'application/pdf' };
-      if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) return { type: 'EXCEL', mimeHint: 'application/vnd.ms-excel' };
+      if (lower.endsWith('.xlsx') || lower.endsWith('.xls'))
+        return { type: 'EXCEL', mimeHint: 'application/vnd.ms-excel' };
       if (lower.endsWith('.csv')) return { type: 'CSV', mimeHint: 'text/csv' };
       return { type: 'UNKNOWN', mimeHint: '' };
     }

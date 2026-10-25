@@ -12,11 +12,7 @@ export class PasswordResetRepository {
     });
   }
 
-  async create(data: {
-    userId: string;
-    tokenHash: string;
-    expiresAt: Date;
-  }): Promise<void> {
+  async create(data: { userId: string; tokenHash: string; expiresAt: Date }): Promise<void> {
     await this.prisma.passwordReset.create({
       data: {
         userId: data.userId,

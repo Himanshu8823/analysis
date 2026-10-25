@@ -21,8 +21,7 @@ export const HF_MODELS: Record<string, HfModelConfig> = {
   },
   TROCR_HANDWRITTEN: {
     modelId: 'microsoft/trocr-base-handwritten',
-    apiUrl:
-      'https://api-inference.huggingface.co/models/microsoft/trocr-base-handwritten',
+    apiUrl: 'https://api-inference.huggingface.co/models/microsoft/trocr-base-handwritten',
     maxInputSizeBytes: 10 * 1024 * 1024,
     supportsTableDetection: false,
     supportsHandwritten: true,

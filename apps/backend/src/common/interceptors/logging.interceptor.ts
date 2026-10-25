@@ -19,7 +19,7 @@ export class LoggingInterceptor implements NestInterceptor {
       tap(() => {
         const duration = Date.now() - now;
         this.logger.log(`<- ${method} ${url} - ${duration}ms [user:${userId}]`);
-      }),
+      })
     );
   }
 }

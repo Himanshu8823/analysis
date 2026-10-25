@@ -1,6 +1,4 @@
-import {
-  IsString, IsNotEmpty, IsBoolean, IsOptional, IsISO8601, IsObject,
-} from 'class-validator';
+import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsISO8601, IsObject } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateSchemeDto {

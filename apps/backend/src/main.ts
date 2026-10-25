@@ -37,14 +37,14 @@ async function bootstrap(): Promise<void> {
       forbidNonWhitelisted: true,
       transform: true,
       transformOptions: { enableImplicitConversion: true },
-    }),
+    })
   );
 
   // Global interceptors
   app.useGlobalInterceptors(
     new LoggingInterceptor(),
     new TransformInterceptor(),
-    new TimeoutInterceptor(),
+    new TimeoutInterceptor()
   );
 
   // Global filter

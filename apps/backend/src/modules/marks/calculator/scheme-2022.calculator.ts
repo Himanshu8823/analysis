@@ -5,6 +5,7 @@ import type {
   ISchemeCalculator,
   SubjectBreakdown,
   SubjectCalculationResult,
+  SubjectOfferingContext,
   StudentCalculationResult,
 } from './scheme-calculator.interface';
 
@@ -40,20 +41,16 @@ export class Scheme2022Calculator implements ISchemeCalculator {
 
   validateComponents(
     components: Array<{ type: string; marksObtained: number; maxMarks: number }>,
-    subject: Subject,
+    subject: Subject
   ): ComponentValidation {
     const issues: string[] = [];
-    const config = subject.components as
-      | { hasTheory?: boolean; hasPractical?: boolean }
-      | null;
+    const config = subject.components as { hasTheory?: boolean; hasPractical?: boolean } | null;
     const hasTheory = config?.hasTheory ?? true;
     const hasPractical = config?.hasPractical ?? false;
 
     if (
       hasTheory &&
-      !components.find((c) =>
-        (INTERNAL_COMPONENT_TYPES as readonly string[]).includes(c.type),
-      )
+      !components.find((c) => (INTERNAL_COMPONENT_TYPES as readonly string[]).includes(c.type))
     ) {
       issues.push('Missing internal components (CT/Mid/Micro)');
     }
@@ -70,7 +67,7 @@ export class Scheme2022Calculator implements ISchemeCalculator {
     };
   }
 
-  calculateSubjectResult(marks: Mark[], subject: Subject): SubjectCalculationResult {
+  calculateSubjectResult(marks: Mark[], _subject: Subject): SubjectCalculationResult {
     const breakdown: SubjectBreakdown[] = marks.map((m) => ({
       type: m.examType,
       obtained: m.isAbsent ? 0 : m.marksObtained,
@@ -78,22 +75,15 @@ export class Scheme2022Calculator implements ISchemeCalculator {
       isAbsent: m.isAbsent,
     }));
 
-    const totalObtained = marks.reduce(
-      (sum, m) => sum + (m.isAbsent ? 0 : m.marksObtained),
-      0,
-    );
+    const totalObtained = marks.reduce((sum, m) => sum + (m.isAbsent ? 0 : m.marksObtained), 0);
     const totalMax = marks.reduce((sum, m) => sum + m.maxMarks, 0);
     const percentage = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
 
     const internalMarks = marks
-      .filter((m) =>
-        (INTERNAL_COMPONENT_TYPES as readonly string[]).includes(m.examType),
-      )
+      .filter((m) => (INTERNAL_COMPONENT_TYPES as readonly string[]).includes(m.examType))
       .reduce((sum, m) => sum + (m.isAbsent ? 0 : m.marksObtained), 0);
 
-    const written = marks.find(
-      (m) => m.examType === 'WRITTEN' || m.examType === 'EXTERNAL',
-    );
+    const written = marks.find((m) => m.examType === 'WRITTEN' || m.examType === 'EXTERNAL');
     const practical = marks.find((m) => m.examType === 'PRACTICAL');
 
     const reasons: string[] = [];
@@ -101,11 +91,7 @@ export class Scheme2022Calculator implements ISchemeCalculator {
     if (written && !written.isAbsent && written.marksObtained < EXTERNAL_MIN_2022) {
       reasons.push(`External below ${EXTERNAL_MIN_2022}/${EXTERNAL_2022_MAX}`);
     }
-    if (
-      practical &&
-      !practical.isAbsent &&
-      practical.marksObtained < PRACTICAL_MIN_2022
-    ) {
+    if (practical && !practical.isAbsent && practical.marksObtained < PRACTICAL_MIN_2022) {
       reasons.push(`Practical below ${PRACTICAL_MIN_2022}/${PRACTICAL_2022_MAX}`);
     }
     if (internalMarks < INTERNAL_MIN_2022) {
@@ -128,29 +114,31 @@ export class Scheme2022Calculator implements ISchemeCalculator {
   calculateStudentResult(
     _studentId: string,
     marks: Mark[],
-    subjects: Subject[],
+    offerings: SubjectOfferingContext[]
   ): StudentCalculationResult {
-    const subjectResults = subjects.map((subject) => {
-      const subjectMarks = marks.filter((m) => m.subjectId === subject.id);
+    const subjectResults = offerings.map((offering) => {
+      const subjectMarks = marks.filter((m) => m.subjectOfferingId === offering.id);
       return {
-        subjectId: subject.id,
-        ...this.calculateSubjectResult(subjectMarks, subject),
+        subjectOfferingId: offering.id,
+        subjectId: offering.subject.id,
+        subjectCode: offering.subject.code,
+        subjectName: offering.subject.name,
+        ...this.calculateSubjectResult(subjectMarks, offering.subject),
       };
     });
 
     const totalObtained = subjectResults.reduce((s, r) => s + r.totalObtained, 0);
     const totalMax = subjectResults.reduce((s, r) => s + r.totalMax, 0);
-    const overallPercentage =
-      totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
+    const overallPercentage = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
 
-    const earnedCredits = subjects.reduce((sum, sub) => {
-      const r = subjectResults.find((x) => x.subjectId === sub.id);
-      return sum + (r?.isPass ? sub.credits : 0);
+    const earnedCredits = offerings.reduce((sum, offering) => {
+      const r = subjectResults.find((x) => x.subjectOfferingId === offering.id);
+      return sum + (r?.isPass ? offering.subject.credits : 0);
     }, 0);
-    const totalCredits = subjects.reduce((sum, sub) => sum + sub.credits, 0);
+    const totalCredits = offerings.reduce((sum, offering) => sum + offering.subject.credits, 0);
 
     const passCount = subjectResults.filter((r) => r.isPass).length;
-    const isOverallPass = passCount === subjects.length && subjects.length > 0;
+    const isOverallPass = passCount === offerings.length && offerings.length > 0;
 
     return {
       subjectResults,
@@ -160,7 +148,7 @@ export class Scheme2022Calculator implements ISchemeCalculator {
       totalCredits,
       earnedCredits,
       isOverallPass,
-      subjectCount: subjects.length,
+      subjectCount: offerings.length,
       passCount,
     };
   }

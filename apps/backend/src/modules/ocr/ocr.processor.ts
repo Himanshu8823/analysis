@@ -23,7 +23,7 @@ export class OcrProcessor extends WorkerHost {
   constructor(
     private readonly ocrService: OcrService,
     private readonly prisma: PrismaClient,
-    private readonly storage: StorageService,
+    private readonly storage: StorageService
   ) {
     super();
   }
@@ -52,9 +52,7 @@ export class OcrProcessor extends WorkerHost {
 
     const response = await fetch(fileUrl);
     if (!response.ok) {
-      throw new Error(
-        `Failed to download ${fileUrl} (status=${response.status})`,
-      );
+      throw new Error(`Failed to download ${fileUrl} (status=${response.status})`);
     }
     const arrayBuffer = await response.arrayBuffer();
     return Buffer.from(arrayBuffer);

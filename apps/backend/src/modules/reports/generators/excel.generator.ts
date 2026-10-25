@@ -41,7 +41,7 @@ export class ExcelReportGenerator {
 
   constructor(
     private readonly prisma: PrismaClient,
-    private readonly factory: CalculatorFactory,
+    private readonly factory: CalculatorFactory
   ) {}
 
   async generateCompleteReport(filters: ReportFilters): Promise<Buffer> {
@@ -76,15 +76,25 @@ export class ExcelReportGenerator {
     }
     const calc = this.factory.fromScheme(scheme);
 
-    const subjects = await this.prisma.subject.findMany({
+    // The subjects of a class are the ones offered in it, so they come from
+    // the offerings rather than the catalogue.
+    const offerings = await this.prisma.subjectOffering.findMany({
       where: {
         branchId: filters.branchId,
         schemeId: filters.schemeId,
         semester: filters.semester,
+        academicYearId: filters.academicYearId,
         isActive: true,
       },
-      orderBy: { code: 'asc' },
+      include: { subject: true },
+      orderBy: { subject: { code: 'asc' } },
     });
+    const subjects = offerings.map((o) => o.subject);
+    const offeringContexts = offerings.map((o) => ({
+      id: o.id,
+      semester: o.semester,
+      subject: o.subject,
+    }));
 
     const students = await this.prisma.student.findMany({
       where: {
@@ -100,13 +110,13 @@ export class ExcelReportGenerator {
     const marks = await this.prisma.mark.findMany({
       where: {
         academicYearId: filters.academicYearId,
+        subjectOfferingId: { in: offerings.map((o) => o.id) },
         student: {
           branchId: filters.branchId,
           schemeId: filters.schemeId,
           semester: filters.semester,
         },
       },
-      include: { subject: true },
     });
 
     // Compute per-student result using scheme-aware calculator
@@ -120,11 +130,7 @@ export class ExcelReportGenerator {
     const rows = new Map<string, StudentRowResult>();
     for (const student of students) {
       const studentMarks = marksByStudent.get(student.id) ?? [];
-      const result = calc.calculateStudentResult(
-        student.id,
-        studentMarks,
-        subjects,
-      );
+      const result = calc.calculateStudentResult(student.id, studentMarks, offeringContexts);
       const perSubject = new Map<
         string,
         { obtained: number; max: number; percentage: number; isPass: boolean }
@@ -159,7 +165,7 @@ export class ExcelReportGenerator {
 
   private async addStudentWiseSheet(
     wb: ExcelJS.Workbook,
-    data: Awaited<ReturnType<ExcelReportGenerator['loadContext']>>,
+    data: Awaited<ReturnType<ExcelReportGenerator['loadContext']>>
   ): Promise<void> {
     const sheet = wb.addWorksheet('Student_Wise_Result');
     const header: string[] = [
@@ -200,7 +206,7 @@ export class ExcelReportGenerator {
 
   private async addSchemeWiseSheet(
     wb: ExcelJS.Workbook,
-    data: Awaited<ReturnType<ExcelReportGenerator['loadContext']>>,
+    data: Awaited<ReturnType<ExcelReportGenerator['loadContext']>>
   ): Promise<void> {
     const sheet = wb.addWorksheet('Scheme_Wise_Marks');
     sheet.columns = [
@@ -212,7 +218,15 @@ export class ExcelReportGenerator {
       { width: 14 },
       { width: 14 },
     ];
-    sheet.addRow(['Scheme', 'Subject Code', 'Subject Name', 'Max Marks', 'Credits', 'Pass Marks', 'Has Practical']);
+    sheet.addRow([
+      'Scheme',
+      'Subject Code',
+      'Subject Name',
+      'Max Marks',
+      'Credits',
+      'Pass Marks',
+      'Has Practical',
+    ]);
     sheet.getRow(1).font = { bold: true };
 
     for (const sub of data.subjects) {
@@ -231,7 +245,7 @@ export class ExcelReportGenerator {
 
   private async addSubjectAnalysisSheet(
     wb: ExcelJS.Workbook,
-    data: Awaited<ReturnType<ExcelReportGenerator['loadContext']>>,
+    data: Awaited<ReturnType<ExcelReportGenerator['loadContext']>>
   ): Promise<void> {
     const sheet = wb.addWorksheet('Subject_Analysis');
     sheet.columns = [
@@ -260,7 +274,7 @@ export class ExcelReportGenerator {
       const studentScores = data.students
         .map((s) => data.rows.get(s.id)?.perSubject.get(sub.id))
         .filter((v): v is { obtained: number; max: number; percentage: number; isPass: boolean } =>
-          Boolean(v && v.max > 0),
+          Boolean(v && v.max > 0)
         );
 
       if (studentScores.length === 0) {
@@ -269,8 +283,7 @@ export class ExcelReportGenerator {
       }
 
       const total = studentScores.length;
-      const avg =
-        studentScores.reduce((sum, v) => sum + v.percentage, 0) / total;
+      const avg = studentScores.reduce((sum, v) => sum + v.percentage, 0) / total;
       const highest = Math.max(...studentScores.map((v) => v.percentage));
       const lowest = Math.min(...studentScores.map((v) => v.percentage));
       const passCount = studentScores.filter((v) => v.isPass).length;
@@ -292,7 +305,7 @@ export class ExcelReportGenerator {
 
   private async addStudentAnalysisSheet(
     wb: ExcelJS.Workbook,
-    data: Awaited<ReturnType<ExcelReportGenerator['loadContext']>>,
+    data: Awaited<ReturnType<ExcelReportGenerator['loadContext']>>
   ): Promise<void> {
     const sheet = wb.addWorksheet('Student_Analysis');
     sheet.columns = [
@@ -332,21 +345,15 @@ export class ExcelReportGenerator {
 
   private async addClassToppersSheet(
     wb: ExcelJS.Workbook,
-    data: Awaited<ReturnType<ExcelReportGenerator['loadContext']>>,
+    data: Awaited<ReturnType<ExcelReportGenerator['loadContext']>>
   ): Promise<void> {
     const sheet = wb.addWorksheet('Class_Toppers');
-    sheet.columns = [
-      { width: 8 },
-      { width: 16 },
-      { width: 24 },
-      { width: 16 },
-      { width: 16 },
-    ];
+    sheet.columns = [{ width: 8 }, { width: 16 }, { width: 24 }, { width: 16 }, { width: 16 }];
     sheet.addRow(['Rank', 'Roll No', 'Name', 'Total Marks', 'Percentage']);
     sheet.getRow(1).font = { bold: true };
 
     const sorted = [...data.rows.values()].sort(
-      (a, b) => b.overallPercentage - a.overallPercentage,
+      (a, b) => b.overallPercentage - a.overallPercentage
     );
     sorted.slice(0, 20).forEach((row, idx) => {
       sheet.addRow([
@@ -361,7 +368,7 @@ export class ExcelReportGenerator {
 
   private async addPassFailSheet(
     wb: ExcelJS.Workbook,
-    data: Awaited<ReturnType<ExcelReportGenerator['loadContext']>>,
+    data: Awaited<ReturnType<ExcelReportGenerator['loadContext']>>
   ): Promise<void> {
     const sheet = wb.addWorksheet('Pass_Fail_Analysis');
     sheet.columns = [{ width: 22 }, { width: 14 }, { width: 14 }];
@@ -373,10 +380,10 @@ export class ExcelReportGenerator {
     const failed = totalStudents - passed;
     const distinction = [...data.rows.values()].filter((r) => r.overallPercentage >= 75).length;
     const firstClass = [...data.rows.values()].filter(
-      (r) => r.overallPercentage >= 60 && r.overallPercentage < 75,
+      (r) => r.overallPercentage >= 60 && r.overallPercentage < 75
     ).length;
     const secondClass = [...data.rows.values()].filter(
-      (r) => r.overallPercentage >= 50 && r.overallPercentage < 60,
+      (r) => r.overallPercentage >= 50 && r.overallPercentage < 60
     ).length;
 
     const fmt = (n: number) =>
@@ -391,7 +398,7 @@ export class ExcelReportGenerator {
 
   private async addChartsDataSheet(
     wb: ExcelJS.Workbook,
-    data: Awaited<ReturnType<ExcelReportGenerator['loadContext']>>,
+    data: Awaited<ReturnType<ExcelReportGenerator['loadContext']>>
   ): Promise<void> {
     const sheet = wb.addWorksheet('Charts_Data');
     sheet.columns = [{ width: 16 }, { width: 16 }];

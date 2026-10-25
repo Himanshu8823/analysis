@@ -23,9 +23,7 @@ export function IsEntityId(validationOptions?: {
   return (target: object, propertyKey: string | symbol) => {
     IsString(validationOptions)(target, propertyKey);
     IsNotEmpty({
-      message:
-        validationOptions?.message ??
-        `${String(propertyKey)} must be a non-empty id`,
+      message: validationOptions?.message ?? `${String(propertyKey)} must be a non-empty id`,
     })(target, propertyKey);
   };
 }

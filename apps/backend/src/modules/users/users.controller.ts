@@ -1,10 +1,8 @@
-import {
-  Controller, Get, Post, Put, Delete, Body, Param, Query,
-} from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto, ListMembersDto, UpdateUserDto } from './dto';
-import { CurrentUser, Roles, Permissions } from '@/common/decorators';
+import { CurrentUser, Permissions } from '@/common/decorators';
 import { parseOptionalInt, parseOptionalString } from '@/common/utils/query-params';
 import type { JwtPayload } from '@/common/types';
 
@@ -15,7 +13,6 @@ export class UsersController {
   constructor(private readonly service: UsersService) {}
 
   @Post()
-  @Roles('SUPER_ADMIN', 'ADMIN')
   @Permissions('users:write')
   @ApiOperation({ summary: 'Create new user' })
   async create(@Body() dto: CreateUserDto, @CurrentUser() user: JwtPayload) {
@@ -23,14 +20,13 @@ export class UsersController {
   }
 
   @Get()
-  @Roles('SUPER_ADMIN', 'ADMIN', 'HOD')
   @Permissions('users:read')
   @ApiOperation({ summary: 'List users (paginated)' })
   async findAll(
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('search') search?: string,
-    @Query('isActive') isActive?: string,
+    @Query('isActive') isActive?: string
   ) {
     return this.service.findAll({
       page: parseOptionalInt(page),
@@ -46,7 +42,6 @@ export class UsersController {
    * Declared before `:id` so the literal path wins over the parameter route.
    */
   @Get('members')
-  @Roles('SUPER_ADMIN')
   @Permissions('users:read')
   @ApiOperation({ summary: 'List members with their roles' })
   async findMembers(@Query() dto: ListMembersDto) {
@@ -55,7 +50,6 @@ export class UsersController {
 
   /** Lists the roles that can be assigned, with member counts. */
   @Get('roles')
-  @Roles('SUPER_ADMIN')
   @Permissions('users:read')
   @ApiOperation({ summary: 'List roles with member counts' })
   async findRoles() {
@@ -69,18 +63,16 @@ export class UsersController {
   }
 
   @Put(':id')
-  @Roles('SUPER_ADMIN', 'ADMIN')
   @Permissions('users:write')
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateUserDto,
-    @CurrentUser() user: JwtPayload,
+    @CurrentUser() user: JwtPayload
   ) {
     return this.service.update(id, dto, user.sub);
   }
 
   @Delete(':id')
-  @Roles('SUPER_ADMIN')
   @Permissions('users:write')
   async delete(@Param('id') id: string, @CurrentUser() user: JwtPayload): Promise<void> {
     return this.service.delete(id, user.sub);

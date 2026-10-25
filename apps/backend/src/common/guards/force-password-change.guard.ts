@@ -36,7 +36,7 @@ export class ForcePasswordChangeGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly prisma: PrismaClient,
-    @Inject(CACHE_SERVICE) private readonly cache: CacheService,
+    @Inject(CACHE_SERVICE) private readonly cache: CacheService
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -64,9 +64,7 @@ export class ForcePasswordChangeGuard implements CanActivate {
       return true;
     }
 
-    throw new ForbiddenException(
-      'You must change your password before using the system',
-    );
+    throw new ForbiddenException('You must change your password before using the system');
   }
 
   private async mustChangePassword(userId: string): Promise<boolean> {

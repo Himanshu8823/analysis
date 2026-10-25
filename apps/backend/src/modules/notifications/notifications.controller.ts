@@ -1,10 +1,8 @@
-import {
-  Controller, Get, Post, Delete, Body, Param, Query,
-} from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { CreateNotificationDto } from './dto';
-import { Roles, CurrentUser } from '@/common/decorators';
+import { Permissions, CurrentUser } from '@/common/decorators';
 import { parseOptionalInt } from '@/common/utils/query-params';
 import type { JwtPayload } from '@/common/types';
 
@@ -20,7 +18,7 @@ export class NotificationsController {
     @CurrentUser() user: JwtPayload,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
-    @Query('unreadOnly') unreadOnly?: string,
+    @Query('unreadOnly') unreadOnly?: string
   ) {
     return this.service.findAllForUser({
       userId: user.sub,
@@ -31,7 +29,7 @@ export class NotificationsController {
   }
 
   @Post()
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Permissions('notifications:write')
   @ApiOperation({ summary: 'Create a notification (admin/system)' })
   async create(@Body() dto: CreateNotificationDto) {
     return this.service.create(dto);

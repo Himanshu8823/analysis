@@ -15,7 +15,6 @@ import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { InvitesService } from './invites.service';
 import { InviteUserDto, ListInvitesDto } from './dto';
-import { Roles } from '@/common/decorators/roles.decorator';
 import { Permissions } from '@/common/decorators/permissions.decorator';
 import { Public } from '@/common/decorators/public.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
@@ -28,17 +27,15 @@ export class InvitesController {
   /**
    * Creates an invitation and emails the acceptance link.
    *
-   * Super Admin only — the caller must hold both `SUPER_ADMIN` and
-   * `invites:write`.
+   * The caller must hold the `invites:write` permission.
    */
   @Post()
-  @Roles('SUPER_ADMIN')
   @Permissions('invites:write')
   @HttpCode(HttpStatus.CREATED)
   async create(
     @Body() dto: InviteUserDto,
     @CurrentUser() user: JwtPayload,
-    @Req() request: Request,
+    @Req() request: Request
   ) {
     return this.invitesService.create(dto, user.sub, {
       ip: request.ip,
@@ -48,7 +45,6 @@ export class InvitesController {
 
   /** Lists invitations, newest first. */
   @Get()
-  @Roles('SUPER_ADMIN')
   @Permissions('invites:read')
   async findAll(@Query() query: ListInvitesDto) {
     return this.invitesService.findAll(query);
@@ -56,7 +52,6 @@ export class InvitesController {
 
   /** Counts invitations per status — used for the tab counters. */
   @Get('counts')
-  @Roles('SUPER_ADMIN')
   @Permissions('invites:read')
   async counts() {
     return this.invitesService.countByStatus();
@@ -80,12 +75,11 @@ export class InvitesController {
 
   /** Revokes a pending invitation. */
   @Post(':id/revoke')
-  @Roles('SUPER_ADMIN')
   @Permissions('invites:write')
   async revoke(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
-    @Req() request: Request,
+    @Req() request: Request
   ) {
     return this.invitesService.revoke(id, user.sub, {
       ip: request.ip,
@@ -95,13 +89,12 @@ export class InvitesController {
 
   /** Issues a fresh invitation and sends a new email. */
   @Post(':id/resend')
-  @Roles('SUPER_ADMIN')
   @Permissions('invites:write')
   @HttpCode(HttpStatus.CREATED)
   async resend(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
-    @Req() request: Request,
+    @Req() request: Request
   ) {
     return this.invitesService.resend(id, user.sub, {
       ip: request.ip,

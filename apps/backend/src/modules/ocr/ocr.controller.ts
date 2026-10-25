@@ -1,13 +1,11 @@
-import {
-  Body, Controller, Get, NotFoundException, Param, Post,
-} from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, Post } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { OcrService } from './ocr.service';
 import { StorageService } from '../storage/storage.service';
 import { OcrRequestDto } from './dto';
-import { Roles, Permissions } from '@/common/decorators';
+import { Permissions } from '@/common/decorators';
 
 @ApiTags('OCR')
 @ApiBearerAuth()
@@ -16,15 +14,13 @@ export class OcrController {
   constructor(
     private readonly service: OcrService,
     private readonly storage: StorageService,
-    @InjectQueue('ocr-jobs') private readonly ocrQueue: Queue,
+    @InjectQueue('ocr-jobs') private readonly ocrQueue: Queue
   ) {}
 
   @Post('extract')
-  @Roles('SUPER_ADMIN', 'ADMIN')
   @Permissions('upload:process')
   @ApiOperation({
-    summary:
-      'Trigger OCR extraction against a presigned file URL using HF Inference',
+    summary: 'Trigger OCR extraction against a presigned file URL using HF Inference',
   })
   async extract(@Body() dto: OcrRequestDto) {
     const model =
@@ -42,9 +38,7 @@ export class OcrController {
     if (!buffer) {
       const resp = await fetch(dto.fileUrl);
       if (!resp.ok) {
-        throw new Error(
-          `Could not download ${dto.fileUrl}: ${resp.status} ${resp.statusText}`,
-        );
+        throw new Error(`Could not download ${dto.fileUrl}: ${resp.status} ${resp.statusText}`);
       }
       buffer = Buffer.from(await resp.arrayBuffer());
     }
@@ -58,7 +52,6 @@ export class OcrController {
   }
 
   @Post('process/:jobId')
-  @Roles('SUPER_ADMIN', 'ADMIN')
   @Permissions('upload:process')
   @ApiOperation({ summary: 'Re-run OCR for an existing upload job (admin)' })
   async process(@Param('jobId') jobId: string) {
@@ -73,7 +66,7 @@ export class OcrController {
     await this.ocrQueue.add(
       'process',
       { jobId, fileUrl: (job as { fileUrl?: string }).fileUrl ?? '' },
-      { removeOnComplete: true, removeOnFail: 100 },
+      { removeOnComplete: true, removeOnFail: 100 }
     );
 
     return { jobId, current: job, queued: true };

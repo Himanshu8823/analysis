@@ -9,17 +9,9 @@ import { REPORT_QUEUE_NAME } from './reports.service';
 import { MarksModule } from '../marks/marks.module';
 
 @Module({
-  imports: [
-    BullModule.registerQueue({ name: REPORT_QUEUE_NAME }),
-    MarksModule,
-  ],
+  imports: [BullModule.registerQueue({ name: REPORT_QUEUE_NAME }), MarksModule],
   controllers: [ReportsController],
-  providers: [
-    ReportsService,
-    ReportsRepository,
-    ExcelReportGenerator,
-    ReportsProcessor,
-  ],
+  providers: [ReportsService, ReportsRepository, ExcelReportGenerator, ReportsProcessor],
   exports: [ReportsService, ExcelReportGenerator],
 })
 export class ReportsModule {}

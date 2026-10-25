@@ -1,15 +1,20 @@
 import {
-  Body, Controller, Delete, Get, Param, Post, Query, UploadedFile, UseInterceptors,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+  UploadedFile,
+  UseInterceptors,
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { UploadService } from './upload.service';
-import {
-  CreateUploadJobDto,
-  ConfirmUploadDto,
-} from './dto';
-import { Roles, Permissions, CurrentUser } from '@/common/decorators';
+import { CreateUploadJobDto, ConfirmUploadDto } from './dto';
+import { Permissions, CurrentUser, Audited, AuditAction, AuditResource } from '@/common/decorators';
 import { parseOptionalInt, parseOptionalString } from '@/common/utils/query-params';
 import { Throttle } from '@nestjs/throttler';
 import type { JwtPayload } from '@/common/types';
@@ -21,12 +26,14 @@ export class UploadController {
   constructor(private readonly service: UploadService) {}
 
   @Post()
-  @Roles('SUPER_ADMIN', 'ADMIN')
   @Permissions('upload:create')
   @Throttle({ default: { limit: 10, ttl: 60 * 60 * 1000 } }) // 10/hour/user
+  @Audited(AuditResource.UPLOAD_JOB, AuditAction.CREATE, {
+    resourceIdSource: 'response',
+    detailsFromBody: { fileName: 'fileName', fileType: 'fileType' },
+  })
   @ApiOperation({
-    summary:
-      'Register an upload and dispatch it to the matching parser/OCR queue',
+    summary: 'Register an upload and dispatch it to the matching parser/OCR queue',
   })
   async create(@Body() dto: CreateUploadJobDto, @CurrentUser() user: JwtPayload) {
     return this.service.createJob({
@@ -47,18 +54,15 @@ export class UploadController {
    * written to storage here, and the job gets a URL the parser can fetch.
    */
   @Post('file')
-  @Roles('SUPER_ADMIN', 'ADMIN')
   @Permissions('upload:create')
   @Throttle({ default: { limit: 10, ttl: 60 * 60 * 1000 } }) // 10/hour/user
+  @Audited(AuditResource.UPLOAD_JOB, AuditAction.CREATE, {
+    resourceIdSource: 'response',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload a file and register the parsing job' })
-  @UseInterceptors(
-    FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }),
-  )
-  async uploadFile(
-    @UploadedFile() file: Express.Multer.File,
-    @CurrentUser() user: JwtPayload,
-  ) {
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }))
+  async uploadFile(@UploadedFile() file: Express.Multer.File, @CurrentUser() user: JwtPayload) {
     if (!file) {
       throw new BadRequestException('A file is required');
     }
@@ -66,13 +70,12 @@ export class UploadController {
   }
 
   @Get()
-  @Roles('SUPER_ADMIN', 'ADMIN', 'HOD', 'TEACHER')
   @Permissions('upload:read')
   async findAll(
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('status') status?: string,
-    @Query('uploadedBy') uploadedBy?: string,
+    @Query('uploadedBy') uploadedBy?: string
   ) {
     return this.service.findAll({
       page: parseOptionalInt(page),
@@ -90,23 +93,21 @@ export class UploadController {
   }
 
   @Post('jobs/:jobId/confirm')
-  @Roles('SUPER_ADMIN', 'ADMIN', 'TEACHER')
   @Permissions('upload:process')
+  @Audited(AuditResource.UPLOAD_JOB, AuditAction.CONFIRM, {
+    resourceIdSource: 'param',
+    resourceIdField: 'jobId',
+    detailsFromBody: { rowCount: 'rows' },
+  })
   @ApiOperation({
-    summary:
-      'Confirm the extracted data and persist it to the marks table',
+    summary: 'Confirm the extracted data and persist it to the marks table',
   })
   async confirm(
     @Param('jobId') jobId: string,
     @Body() body: ConfirmUploadDto,
-    @CurrentUser() user: JwtPayload,
+    @CurrentUser() user: JwtPayload
   ) {
-    return this.service.confirmExtraction(
-      jobId,
-      body.rows,
-      body.metadata,
-      user.sub,
-    );
+    return this.service.confirmExtraction(jobId, body.rows, body.metadata, user.sub);
   }
 
   @Get('jobs')
@@ -114,7 +115,7 @@ export class UploadController {
   async listJobs(
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
-    @Query('status') status?: string,
+    @Query('status') status?: string
   ) {
     return this.service.findAll({
       page: parseOptionalInt(page),
@@ -124,8 +125,8 @@ export class UploadController {
   }
 
   @Delete(':id')
-  @Roles('SUPER_ADMIN', 'ADMIN')
   @Permissions('upload:process')
+  @Audited(AuditResource.UPLOAD_JOB, AuditAction.DELETE, { resourceIdSource: 'param' })
   async delete(@Param('id') id: string): Promise<void> {
     return this.service.delete(id);
   }

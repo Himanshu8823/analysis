@@ -9,11 +9,15 @@ export class ToppersRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
   /**
-   * Load the active students + their marks + subjects for the given filters.
-   * Used by both subject-level and class-level topper rankings.
+   * Load the active students + their marks + the subject offerings for the
+   * given filters. Used by both subject-level and class-level topper rankings.
+   *
+   * A "class" here is a branch + semester + scheme, so the subjects that
+   * count towards its ranking are the offerings for that class — not every
+   * subject in the college catalogue.
    */
   async loadClassContext(params: {
-    branchId?: string;
+    branchId?: string | string[];
     schemeId?: string;
     semester?: number;
     academicYearId?: string;
@@ -21,16 +25,26 @@ export class ToppersRepository {
     students: Student[];
     marks: Mark[];
     subjects: Subject[];
+    /** Offering id → subject id, so marks can be grouped by subject. */
+    offeringToSubject: Map<string, string>;
   }> {
+    // The scope may name one branch or a set of them (a user can hold a role
+    // in more than one branch), so the filter accepts either.
+    const branchFilter = params.branchId
+      ? Array.isArray(params.branchId)
+        ? { in: params.branchId }
+        : params.branchId
+      : undefined;
+
     const studentWhere: {
       isActive: boolean;
       academicYearId?: string;
-      branchId?: string;
+      branchId?: string | { in: string[] };
       schemeId?: string;
       semester?: number;
     } = { isActive: true };
     if (params.academicYearId) studentWhere.academicYearId = params.academicYearId;
-    if (params.branchId) studentWhere.branchId = params.branchId;
+    if (branchFilter) studentWhere.branchId = branchFilter;
     if (params.schemeId) studentWhere.schemeId = params.schemeId;
     if (params.semester !== undefined) studentWhere.semester = params.semester;
 
@@ -39,52 +53,53 @@ export class ToppersRepository {
       orderBy: { rollNo: 'asc' },
     });
 
+    const offeringWhere: {
+      isActive: boolean;
+      branchId?: string | { in: string[] };
+      schemeId?: string;
+      semester?: number;
+      academicYearId?: string;
+    } = { isActive: true };
+    if (branchFilter) offeringWhere.branchId = branchFilter;
+    if (params.schemeId) offeringWhere.schemeId = params.schemeId;
+    if (params.semester !== undefined) offeringWhere.semester = params.semester;
+    if (params.academicYearId) offeringWhere.academicYearId = params.academicYearId;
+
+    const offerings = await this.prisma.subjectOffering.findMany({
+      where: offeringWhere,
+      include: { subject: true },
+    });
+
+    const offeringToSubject = new Map<string, string>(offerings.map((o) => [o.id, o.subjectId]));
+    const subjects = offerings.map((o) => o.subject);
+
     const markWhere: {
       academicYearId?: string;
       isAbsent: boolean;
       isWithheld: boolean;
       student?: typeof studentWhere;
-      subject?: {
-        isActive: boolean;
-        branchId?: string;
-        schemeId?: string;
-        semester?: number;
-      };
+      subjectOfferingId?: { in: string[] };
     } = {
       isAbsent: false,
       isWithheld: false,
     };
     if (params.academicYearId) markWhere.academicYearId = params.academicYearId;
     if (params.branchId || params.schemeId || params.semester !== undefined) {
-      markWhere.subject = { isActive: true };
-      if (params.branchId) markWhere.subject.branchId = params.branchId;
-      if (params.schemeId) markWhere.subject.schemeId = params.schemeId;
-      if (params.semester !== undefined) {
-        markWhere.subject.semester = params.semester;
-      }
+      markWhere.student = { ...studentWhere };
+    }
+    if (offerings.length > 0) {
+      markWhere.subjectOfferingId = { in: offerings.map((o) => o.id) };
+    } else {
+      // No offerings for this class means there is nothing to rank.
+      return { students: [], marks: [], subjects: [], offeringToSubject };
     }
 
     const marks = await this.prisma.mark.findMany({
       where: markWhere,
-      include: { subject: true, student: true },
+      include: { subjectOffering: { include: { subject: true } }, student: true },
     });
 
-    const subjectWhere: { isActive: boolean } = { isActive: true };
-    if (params.branchId) {
-      (subjectWhere as Record<string, unknown>).branchId = params.branchId;
-    }
-    if (params.schemeId) {
-      (subjectWhere as Record<string, unknown>).schemeId = params.schemeId;
-    }
-    if (params.semester !== undefined) {
-      (subjectWhere as Record<string, unknown>).semester = params.semester;
-    }
-
-    const subjects = await this.prisma.subject.findMany({
-      where: subjectWhere,
-    });
-
-    return { students, marks, subjects };
+    return { students, marks, subjects, offeringToSubject };
   }
 
   /**
@@ -95,26 +110,23 @@ export class ToppersRepository {
     students: Student[],
     marks: Mark[],
     subjects: Subject[],
+    offeringToSubject: Map<string, string>
   ): Map<string, StudentSummary> {
-    const perStudentSubject = new Map<
-      string,
-      Map<string, { total: number; max: number }>
-    >();
+    const perStudentSubject = new Map<string, Map<string, { total: number; max: number }>>();
 
     for (const m of marks) {
+      const subjectId = offeringToSubject.get(m.subjectOfferingId) ?? m.subjectOfferingId;
       const subjMap =
         perStudentSubject.get(m.studentId) ?? new Map<string, { total: number; max: number }>();
-      const cur = subjMap.get(m.subjectId) ?? { total: 0, max: 0 };
+      const cur = subjMap.get(subjectId) ?? { total: 0, max: 0 };
       cur.total += m.marksObtained;
       cur.max += m.maxMarks;
-      subjMap.set(m.subjectId, cur);
+      subjMap.set(subjectId, cur);
       perStudentSubject.set(m.studentId, subjMap);
     }
 
     const summaries = new Map<string, StudentSummary>();
-    const creditsBySubjectId = new Map<string, number>(
-      subjects.map((s) => [s.id, s.credits]),
-    );
+    const creditsBySubjectId = new Map<string, number>(subjects.map((s) => [s.id, s.credits]));
 
     for (const student of students) {
       const subjMap = perStudentSubject.get(student.id) ?? new Map();
@@ -154,38 +166,57 @@ export class ToppersRepository {
   }
 
   async findSubjectToppers(params: {
-    branchId?: string;
+    branchId?: string | string[];
     schemeId?: string;
     semester?: number;
     academicYearId?: string;
   }): Promise<SubjectTopper[]> {
+    const offeringWhere: {
+      isActive: boolean;
+      branchId?: string | { in: string[] };
+      schemeId?: string;
+      semester?: number;
+      academicYearId?: string;
+    } = { isActive: true };
+    if (params.branchId) {
+      offeringWhere.branchId = Array.isArray(params.branchId)
+        ? { in: params.branchId }
+        : params.branchId;
+    }
+    if (params.schemeId) offeringWhere.schemeId = params.schemeId;
+    if (params.semester !== undefined) offeringWhere.semester = params.semester;
+    if (params.academicYearId) offeringWhere.academicYearId = params.academicYearId;
+
+    const offerings = await this.prisma.subjectOffering.findMany({
+      where: offeringWhere,
+      include: { subject: true },
+    });
+    if (offerings.length === 0) return [];
+
+    const offeringToSubject = new Map<string, string>(offerings.map((o) => [o.id, o.subjectId]));
+
     const markWhere: {
       academicYearId?: string;
       isAbsent: boolean;
       isWithheld: boolean;
-      subject?: {
-        isActive: boolean;
-        branchId?: string;
-        schemeId?: string;
-        semester?: number;
-      };
+      subjectOfferingId: { in: string[] };
     } = {
       isAbsent: false,
       isWithheld: false,
-      subject: { isActive: true },
+      subjectOfferingId: { in: offerings.map((o) => o.id) },
     };
     if (params.academicYearId) markWhere.academicYearId = params.academicYearId;
-    if (params.branchId) markWhere.subject!.branchId = params.branchId;
-    if (params.schemeId) markWhere.subject!.schemeId = params.schemeId;
-    if (params.semester !== undefined) {
-      markWhere.subject!.semester = params.semester;
-    }
 
     const marks = await this.prisma.mark.findMany({
       where: markWhere,
       include: {
         student: { select: { id: true, rollNo: true, name: true } },
-        subject: { select: { id: true, code: true, name: true, maxMarks: true } },
+        subjectOffering: {
+          select: {
+            id: true,
+            subject: { select: { id: true, code: true, name: true, maxMarks: true } },
+          },
+        },
       },
     });
 
@@ -198,17 +229,15 @@ export class ToppersRepository {
     };
     const buckets = new Map<string, SubjectBucket>();
     for (const m of marks) {
+      const subjectId = offeringToSubject.get(m.subjectOfferingId) ?? m.subjectOfferingId;
       const bucket =
-        buckets.get(m.subjectId) ??
+        buckets.get(subjectId) ??
         ({
-          subjectId: m.subject.id,
-          subjectCode: m.subject.code,
-          subjectName: m.subject.name,
-          maxMarks: m.subject.maxMarks,
-          perStudent: new Map<
-            string,
-            { rollNo: string; name: string; total: number }
-          >(),
+          subjectId: m.subjectOffering.subject.id,
+          subjectCode: m.subjectOffering.subject.code,
+          subjectName: m.subjectOffering.subject.name,
+          maxMarks: m.subjectOffering.subject.maxMarks,
+          perStudent: new Map<string, { rollNo: string; name: string; total: number }>(),
         } as SubjectBucket);
       const cur = bucket.perStudent.get(m.studentId) ?? {
         rollNo: m.student.rollNo,
@@ -217,7 +246,7 @@ export class ToppersRepository {
       };
       cur.total += m.marksObtained;
       bucket.perStudent.set(m.studentId, cur);
-      buckets.set(m.subjectId, bucket);
+      buckets.set(subjectId, bucket);
     }
 
     const result: SubjectTopper[] = [];
@@ -251,7 +280,7 @@ export class ToppersRepository {
   }
 
   async findClassToppers(params: {
-    branchId?: string;
+    branchId?: string | string[];
     schemeId?: string;
     semester?: number;
     academicYearId?: string;
@@ -263,7 +292,8 @@ export class ToppersRepository {
       isWithheld: boolean;
       student?: {
         isActive: boolean;
-        branchId?: string;
+        academicYearId?: string;
+        branchId?: string | { in: string[] };
         schemeId?: string;
         semester?: number;
       };
@@ -273,15 +303,51 @@ export class ToppersRepository {
       student: { isActive: true },
     };
     if (params.academicYearId) where.academicYearId = params.academicYearId;
-    if (params.branchId) where.student!.branchId = params.branchId;
+    if (params.branchId) {
+      where.student!.branchId = Array.isArray(params.branchId)
+        ? { in: params.branchId }
+        : params.branchId;
+    }
     if (params.schemeId) where.student!.schemeId = params.schemeId;
     if (params.semester !== undefined) where.student!.semester = params.semester;
 
+    const offeringWhere: {
+      isActive: boolean;
+      branchId?: string | { in: string[] };
+      schemeId?: string;
+      semester?: number;
+      academicYearId?: string;
+    } = { isActive: true };
+    if (params.branchId) {
+      offeringWhere.branchId = Array.isArray(params.branchId)
+        ? { in: params.branchId }
+        : params.branchId;
+    }
+    if (params.schemeId) offeringWhere.schemeId = params.schemeId;
+    if (params.semester !== undefined) offeringWhere.semester = params.semester;
+    if (params.academicYearId) offeringWhere.academicYearId = params.academicYearId;
+
+    const offerings = await this.prisma.subjectOffering.findMany({
+      where: offeringWhere,
+      include: { subject: true },
+    });
+    if (offerings.length === 0) return { ranking: [] };
+
+    const offeringToSubject = new Map<string, string>(offerings.map((o) => [o.id, o.subjectId]));
+    const creditsBySubjectId = new Map<string, number>(
+      offerings.map((o) => [o.subjectId, o.subject.credits])
+    );
+
     const marks = await this.prisma.mark.findMany({
-      where,
+      where: {
+        ...where,
+        subjectOfferingId: { in: offerings.map((o) => o.id) },
+      },
       include: {
         student: { select: { id: true, rollNo: true, name: true, semester: true } },
-        subject: { select: { id: true, credits: true, passingMarks: true, maxMarks: true } },
+        subjectOffering: {
+          select: { id: true, subject: { select: { id: true, credits: true } } },
+        },
       },
     });
 
@@ -306,7 +372,10 @@ export class ToppersRepository {
       cur.totalMarks += m.marksObtained;
       cur.maxTotalMarks += m.maxMarks;
       const pct = m.maxMarks > 0 ? (m.marksObtained / m.maxMarks) * 100 : 0;
-      if (pct >= 40) cur.creditsEarned += m.subject.credits;
+      const subjectId = offeringToSubject.get(m.subjectOfferingId) ?? m.subjectOfferingId;
+      if (pct >= 40) {
+        cur.creditsEarned += creditsBySubjectId.get(subjectId) ?? 0;
+      }
       perStudent.set(m.studentId, cur);
     }
 

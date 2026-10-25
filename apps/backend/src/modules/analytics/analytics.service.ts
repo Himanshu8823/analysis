@@ -5,7 +5,13 @@ import { resolveAcademicYear } from '@/common/utils/academic-year';
 
 export interface AnalyticsParams {
   academicYearId?: string;
-  branchId?: string;
+  /**
+   * The branch (or branches) the figures cover.
+   *
+   * A list is accepted because a user can hold a role in more than one
+   * branch, so their scope is a set rather than a single id.
+   */
+  branchId?: string | string[];
   schemeId?: string;
   semester?: number;
 }
@@ -71,37 +77,69 @@ export class AnalyticsService {
     return year?.id;
   }
 
+  /**
+   * Normalises the branch scope into a single Prisma-friendly filter.
+   *
+   * The scope may name one branch or a set of them — a user can hold a role
+   * in more than one branch, so their scope is a set rather than a single id.
+   * A single branch stays a plain string (which keeps the generated SQL the
+   * simple equality it was before) and a set becomes an `in` filter.
+   */
+  private branchFilter(
+    branchId: string | string[] | undefined
+  ): string | { in: string[] } | undefined {
+    if (!branchId) return undefined;
+    return Array.isArray(branchId) ? { in: branchId } : branchId;
+  }
+
+  /**
+   * Builds the filter for a marks query.
+   *
+   * A mark carries no branch or semester of its own — those live on the
+   * student and on the subject offering. So:
+   *  - "student" scope filters through the student relation (who the marks
+   *    belong to),
+   *  - "subject" scope filters through the offering relation (which subject
+   *    the marks are for, and therefore which class it ran in).
+   */
   private buildWhere(
-    params: { academicYearId?: string; branchId?: string; schemeId?: string; semester?: number },
-    target: 'student' | 'subject',
+    params: {
+      academicYearId?: string;
+      branchId?: string | string[];
+      schemeId?: string;
+      semester?: number;
+    },
+    target: 'student' | 'subject'
   ): Prisma.MarkWhereInput {
     const where: Prisma.MarkWhereInput = {};
     if (params.academicYearId) where.academicYearId = params.academicYearId;
     where.isAbsent = false;
     where.isWithheld = false;
 
+    const branchFilter = this.branchFilter(params.branchId);
+
     if (target === 'student') {
       const sw: {
         isActive?: boolean;
-        branchId?: string;
+        branchId?: string | { in: string[] };
         schemeId?: string;
         semester?: number;
       } = { isActive: true };
-      if (params.branchId) sw.branchId = params.branchId;
+      if (branchFilter) sw.branchId = branchFilter;
       if (params.schemeId) sw.schemeId = params.schemeId;
       if (params.semester !== undefined) sw.semester = params.semester;
       where.student = sw;
     } else {
-      const sub: {
+      const off: {
         isActive?: boolean;
-        branchId?: string;
+        branchId?: string | { in: string[] };
         schemeId?: string;
         semester?: number;
       } = { isActive: true };
-      if (params.branchId) sub.branchId = params.branchId;
-      if (params.schemeId) sub.schemeId = params.schemeId;
-      if (params.semester !== undefined) sub.semester = params.semester;
-      where.subject = sub;
+      if (branchFilter) off.branchId = branchFilter;
+      if (params.schemeId) off.schemeId = params.schemeId;
+      if (params.semester !== undefined) off.semester = params.semester;
+      where.subjectOffering = off;
     }
     return where;
   }
@@ -109,22 +147,28 @@ export class AnalyticsService {
   async getOverview(params: AnalyticsParams): Promise<OverviewStats> {
     const academicYearId = await this.resolveYearId(params);
 
+    const branchFilter = this.branchFilter(params.branchId);
+
     const students = await this.prisma.student.findMany({
       where: {
-        ...(params.branchId ? { branchId: params.branchId } : {}),
+        ...(branchFilter ? { branchId: branchFilter } : {}),
         ...(params.schemeId ? { schemeId: params.schemeId } : {}),
         ...(params.semester !== undefined ? { semester: params.semester } : {}),
         ...(academicYearId ? { academicYearId } : {}),
         isActive: true,
       },
     });
-    const subjects = await this.prisma.subject.findMany({
+    // The subjects that count for this class are the ones actually offered in
+    // it, so the count comes from the offerings rather than the catalogue.
+    const subjects = await this.prisma.subjectOffering.findMany({
       where: {
-        ...(params.branchId ? { branchId: params.branchId } : {}),
+        ...(branchFilter ? { branchId: branchFilter } : {}),
         ...(params.schemeId ? { schemeId: params.schemeId } : {}),
         ...(params.semester !== undefined ? { semester: params.semester } : {}),
+        ...(academicYearId ? { academicYearId } : {}),
         isActive: true,
       },
+      select: { id: true },
     });
     const marks = await this.prisma.mark.findMany({
       where: this.buildWhere({ ...params, academicYearId }, 'student'),
@@ -141,7 +185,7 @@ export class AnalyticsService {
     }
 
     const passed = marks.filter(
-      (m) => m.maxMarks > 0 && (m.marksObtained / m.maxMarks) * 100 >= 40,
+      (m) => m.maxMarks > 0 && (m.marksObtained / m.maxMarks) * 100 >= 40
     ).length;
     const average =
       marks.reduce((s, m) => s + (m.maxMarks > 0 ? (m.marksObtained / m.maxMarks) * 100 : 0), 0) /
@@ -185,10 +229,7 @@ export class AnalyticsService {
     }
 
     // Aggregate each student's marks into one percentage.
-    const perStudent = new Map<
-      string,
-      { obtained: number; max: number }
-    >();
+    const perStudent = new Map<string, { obtained: number; max: number }>();
     for (const m of marks) {
       if (m.maxMarks <= 0) continue;
       const cur = perStudent.get(m.studentId) ?? { obtained: 0, max: 0 };
@@ -240,7 +281,11 @@ export class AnalyticsService {
     const academicYearId = await this.resolveYearId(params);
     const marks = await this.prisma.mark.findMany({
       where: this.buildWhere({ ...params, academicYearId }, 'subject'),
-      include: { subject: { select: { id: true, code: true, name: true } } },
+      include: {
+        subjectOffering: {
+          select: { id: true, subject: { select: { id: true, code: true, name: true } } },
+        },
+      },
     });
 
     const buckets = new Map<
@@ -258,11 +303,12 @@ export class AnalyticsService {
     >();
 
     for (const m of marks) {
-      const cur = buckets.get(m.subjectId) ?? {
+      const subject = m.subjectOffering.subject;
+      const cur = buckets.get(subject.id) ?? {
         subject: {
-          subjectId: m.subject.id,
-          subjectCode: m.subject.code,
-          subjectName: m.subject.name,
+          subjectId: subject.id,
+          subjectCode: subject.code,
+          subjectName: subject.name,
           totalStudents: 0,
           averageMarks: 0,
           averagePercentage: 0,
@@ -289,7 +335,7 @@ export class AnalyticsService {
       cur.min = Math.min(cur.min, m.marksObtained);
       if (pct >= 40) cur.pass += 1;
       else cur.fail += 1;
-      buckets.set(m.subjectId, cur);
+      buckets.set(subject.id, cur);
     }
 
     return [...buckets.values()].map((b) => {
@@ -318,10 +364,12 @@ export class AnalyticsService {
   }
 
   async performanceTrends(params: {
-    branchId?: string;
+    branchId?: string | string[];
     schemeId?: string;
     semester?: number;
   }): Promise<PerformanceTrend[]> {
+    const branchFilter = this.branchFilter(params.branchId);
+
     // Every academic year is a point on the trend line — not just the active one.
     const years = await this.prisma.academicYear.findMany({
       orderBy: { startDate: 'asc' },
@@ -336,20 +384,19 @@ export class AnalyticsService {
       const averagePercentage =
         marks.length > 0
           ? marks.reduce(
-              (sum, m) =>
-                sum + (m.maxMarks > 0 ? (m.marksObtained / m.maxMarks) * 100 : 0),
-              0,
+              (sum, m) => sum + (m.maxMarks > 0 ? (m.marksObtained / m.maxMarks) * 100 : 0),
+              0
             ) / marks.length
           : 0;
 
       const passed = marks.filter(
-        (m) => m.maxMarks > 0 && (m.marksObtained / m.maxMarks) * 100 >= 40,
+        (m) => m.maxMarks > 0 && (m.marksObtained / m.maxMarks) * 100 >= 40
       ).length;
 
       const studentCount = await this.prisma.student.count({
         where: {
           academicYearId: year.id,
-          ...(params.branchId ? { branchId: params.branchId } : {}),
+          ...(branchFilter ? { branchId: branchFilter } : {}),
           ...(params.schemeId ? { schemeId: params.schemeId } : {}),
           ...(params.semester !== undefined ? { semester: params.semester } : {}),
           isActive: true,

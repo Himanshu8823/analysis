@@ -32,7 +32,11 @@ function formatExpiry(expiresAt: Date): string {
  * The invitee sets their own password when they accept — no temporary
  * password is ever generated or sent.
  */
-export function renderInviteEmail(options: InviteEmailOptions): { subject: string; html: string; text: string } {
+export function renderInviteEmail(options: InviteEmailOptions): {
+  subject: string;
+  html: string;
+  text: string;
+} {
   const institution = options.institutionName ?? 'your institution';
   const safeName = escapeHtml(options.name);
   const safeEmail = escapeHtml(options.email);

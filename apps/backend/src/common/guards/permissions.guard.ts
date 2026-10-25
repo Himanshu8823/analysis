@@ -1,4 +1,10 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException, Inject } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Inject,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 import { CACHE_SERVICE } from '../constants/injection-tokens';
@@ -22,7 +28,7 @@ export class PermissionsGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     @Inject(CACHE_SERVICE) private readonly cache: CacheService,
-    private readonly permissionsRepository: PermissionsCacheRepository,
+    private readonly permissionsRepository: PermissionsCacheRepository
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

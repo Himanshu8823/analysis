@@ -10,12 +10,25 @@ export const queryKeys = {
     list: (filters?: unknown) => ['members', 'list', filters ?? null] as const,
     detail: (id: string) => ['members', 'detail', id] as const,
     roles: () => ['members', 'roles'] as const,
+    /** The members holding the TEACHER role, narrowed to a branch. */
+    teachers: (branchId?: string) => ['members', 'teachers', branchId ?? null] as const,
   },
   invites: {
     all: () => ['invites'] as const,
     list: (filters?: unknown) => ['invites', 'list', filters ?? null] as const,
     counts: () => ['invites', 'counts'] as const,
     validate: (token: string) => ['invites', 'validate', token] as const,
+  },
+  roles: {
+    all: () => ['roles'] as const,
+    list: () => ['roles', 'list'] as const,
+    detail: (id: string) => ['roles', 'detail', id] as const,
+    permissions: (id: string) => ['roles', 'permissions', id] as const,
+  },
+  permissions: {
+    all: () => ['permissions'] as const,
+    list: () => ['permissions', 'list'] as const,
+    detail: (id: string) => ['permissions', 'detail', id] as const,
   },
   branches: {
     all: () => ['branches'] as const,
@@ -35,8 +48,39 @@ export const queryKeys = {
   subjects: {
     all: () => ['subjects'] as const,
     list: (filters?: unknown) => ['subjects', 'list', filters ?? null] as const,
+    detail: (id: string) => ['subjects', 'detail', id] as const,
     byBranchSchemeSem: (branchId: string, schemeId: string, sem: number) =>
       ['subjects', 'list', { branchId, schemeId, semester: sem }] as const,
+    /** The subject offerings — a subject as taught in one class context. */
+    offerings: (filters?: unknown) => ['subjects', 'offerings', filters ?? null] as const,
+  },
+  /**
+   * Subject-to-teacher allocations.
+   *
+   * The list key embeds the active filters (branch / semester / academic
+   * year), so invalidation has to target the `list` prefix rather than the
+   * bare `all` prefix.
+   */
+  teacherAllocations: {
+    all: () => ['teacher-allocations'] as const,
+    list: (filters?: unknown) => ['teacher-allocations', 'list', filters ?? null] as const,
+    /**
+     * The subject offerings as the allocation picker needs them.
+     *
+     * A separate key from `subjects.offerings`: this one holds the
+     * normalised, picker-shaped rows, and sharing a cache slot with the
+     * catalogue's offering view would let one hook read the other's rows.
+     */
+    offeringOptions: (filters?: unknown) =>
+      ['teacher-allocations', 'offering-options', filters ?? null] as const,
+  },
+  /**
+   * Class-teacher assignments — one class teacher per class context.
+   */
+  classTeacherAssignments: {
+    all: () => ['class-teacher-assignments'] as const,
+    list: (filters?: unknown) =>
+      ['class-teacher-assignments', 'list', filters ?? null] as const,
   },
   students: {
     all: () => ['students'] as const,

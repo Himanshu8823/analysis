@@ -109,15 +109,15 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
       role="status"
       className="pointer-events-auto flex items-start gap-3 rounded-lg border border-hairline bg-canvas p-base shadow-coinbase"
     >
-      <Icon className={`h-5 w-5 flex-shrink-0 ${accent}`} aria-hidden />
+      <Icon className={`h-4 w-4 flex-shrink-0 ${accent}`} aria-hidden />
       <p className="flex-1 text-body-sm text-ink">{message}</p>
       <button
         type="button"
         onClick={() => onDismiss(toast.id)}
         aria-label="Dismiss notification"
-        className="inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-strong hover:text-ink"
+        className="-mr-1 inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-strong hover:text-ink"
       >
-        <X className="h-4 w-4" aria-hidden />
+        <X className="h-3.5 w-3.5" aria-hidden />
       </button>
     </div>
   );

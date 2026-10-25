@@ -1,6 +1,4 @@
-import {
-  IsString, IsNotEmpty, IsNumber, IsBoolean, IsOptional, Min, IsIn,
-} from 'class-validator';
+import { IsString, IsNumber, IsBoolean, IsOptional, Min, IsIn } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEntityId } from '@/common/validators/is-entity-id.validator';
 
@@ -11,9 +9,17 @@ export class CreateMarkDto {
   @IsEntityId()
   studentId: string;
 
+  /**
+   * The subject offering the marks belong to — the subject as it runs in a
+   * particular branch, semester and scheme.
+   *
+   * A mark is recorded against the offering rather than the bare subject
+   * because the same subject is offered in several semesters, and each
+   * offering has its own class of students.
+   */
   @ApiProperty()
   @IsEntityId()
-  subjectId: string;
+  subjectOfferingId: string;
 
   @ApiProperty({ enum: EXAM_TYPES })
   @IsString()

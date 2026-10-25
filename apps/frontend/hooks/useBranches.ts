@@ -1,9 +1,15 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { branchesService, type Branch } from '@/lib/services/branches.service';
+import {
+  branchesService,
+  type Branch,
+  type CreateBranchPayload,
+} from '@/lib/services/branches.service';
 import { queryKeys } from '@/lib/query/queryKeys';
+import { invalidationRules } from '@/lib/query/invalidationRules';
 import { useToast } from '@/lib/utils/notifications';
+import { extractErrorMessage } from './useAuth';
 
 export function useBranches() {
   return useQuery<Branch[]>({
@@ -17,12 +23,12 @@ export function useCreateBranch() {
   const qc = useQueryClient();
   const toast = useToast();
   return useMutation({
-    mutationFn: (payload: { code: string; name: string }) => branchesService.create(payload),
+    mutationFn: (payload: CreateBranchPayload) => branchesService.create(payload),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.branches.all() });
+      invalidationRules.onBranchChanged(qc);
       toast.success('Branch created');
     },
-    onError: () => toast.error('Failed to create branch'),
+    onError: (error) => toast.error(extractErrorMessage(error)),
   });
 }
 
@@ -30,13 +36,13 @@ export function useUpdateBranch() {
   const qc = useQueryClient();
   const toast = useToast();
   return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: { code?: string; name?: string } }) =>
+    mutationFn: ({ id, payload }: { id: string; payload: Partial<CreateBranchPayload> }) =>
       branchesService.update(id, payload),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.branches.all() });
+      invalidationRules.onBranchChanged(qc);
       toast.success('Branch updated');
     },
-    onError: () => toast.error('Failed to update branch'),
+    onError: (error) => toast.error(extractErrorMessage(error)),
   });
 }
 
@@ -46,9 +52,9 @@ export function useDeleteBranch() {
   return useMutation({
     mutationFn: (id: string) => branchesService.delete(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.branches.all() });
+      invalidationRules.onBranchChanged(qc);
       toast.success('Branch removed');
     },
-    onError: () => toast.error('Failed to delete branch'),
+    onError: (error) => toast.error(extractErrorMessage(error)),
   });
 }

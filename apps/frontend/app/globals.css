@@ -85,24 +85,26 @@
     --input: 220 13% 88%;
     --ring: 222 100% 50%;
     /*
-     * The sidebar sits on `{colors.surface-soft}` (#f7f7f7) so it reads as a
-     * distinct plane from the white content canvas, and the header bar shares
-     * that tone — the two rails frame the page rather than floating in it.
+     * The sidebar is a dark rail (#16181c, the surface-dark-elevated token)
+     * so the white content canvas reads as the foreground plane. Labels and
+     * icons are the on-dark white token. The hover/active surface drops to
+     * the deeper #0a0b0d (surface-dark), and the selected item is filled with
+     * the primary blue.
      */
-    --sidebar: 0 0% 97%;
-    --sidebar-foreground: 240 6% 5%;
+    --sidebar: 220 12% 10%;
+    --sidebar-foreground: 0 0% 100%;
     --sidebar-primary: 222 100% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 14% 95%;
-    --sidebar-accent-foreground: 240 6% 5%;
+    --sidebar-accent: 240 6% 3%;
+    --sidebar-accent-foreground: 0 0% 100%;
     /*
-     * The active nav item sits on the canvas color so it reads as a raised
-     * white pill against the light-gray sidebar plane — the same layering the
-     * design system uses elsewhere (card-on-card, never decorative shadow).
+     * The active nav item is filled with the primary blue so the current page
+     * is unmistakable against the dark rail. The label and icon are white
+     * (`--sidebar-active-foreground`) for contrast.
      */
-    --sidebar-active: 0 0% 100%;
-    --sidebar-active-foreground: 240 6% 5%;
-    --sidebar-border: 220 13% 88%;
+    --sidebar-active: 222 100% 50%;
+    --sidebar-active-foreground: 0 0% 100%;
+    --sidebar-border: 220 9% 22%;
     --sidebar-ring: 222 100% 50%;
   }
 
@@ -220,9 +222,6 @@
     }
     .bg-sidebar-active {
       background-color: hsl(var(--sidebar-active));
-    }
-    .text-sidebar-active-foreground {
-      color: hsl(var(--sidebar-active-foreground));
     }
     .border-sidebar-border {
       border-color: hsl(var(--sidebar-border));
@@ -404,5 +403,18 @@
     border-radius: var(--radius-lg);
     padding: 24px;
     box-shadow: 0 6px 24px rgba(10, 11, 13, 0.08), 0 1px 3px rgba(10, 11, 13, 0.05);
+  }
+}
+/* Keeps a region scrollable while hiding the scrollbar chrome. */
+@layer utilities {
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
   }
 }

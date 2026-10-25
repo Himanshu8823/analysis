@@ -30,7 +30,7 @@ export class EmailTransport implements OnModuleInit {
     if (!host || !from) {
       this.logger.warn(
         'SMTP is not configured (SMTP_HOST / SMTP_FROM are empty). ' +
-          'Outgoing email is disabled — invitation links will have to be shared manually.',
+          'Outgoing email is disabled — invitation links will have to be shared manually.'
       );
       return;
     }
@@ -77,7 +77,7 @@ export class EmailTransport implements OnModuleInit {
     } catch (err) {
       this.logger.warn(
         `SMTP verification failed: ${err instanceof Error ? err.message : String(err)}. ` +
-          'Email sending will retry per job.',
+          'Email sending will retry per job.'
       );
       return false;
     }

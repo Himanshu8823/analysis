@@ -10,7 +10,7 @@ import { CacheKeys } from '../cache/cache.constants';
 export class RolesService {
   constructor(
     private readonly repository: RolesRepository,
-    @Inject(CACHE_SERVICE) private readonly cache: CacheService,
+    @Inject(CACHE_SERVICE) private readonly cache: CacheService
   ) {}
 
   async create(dto: CreateRoleDto): Promise<Role> {

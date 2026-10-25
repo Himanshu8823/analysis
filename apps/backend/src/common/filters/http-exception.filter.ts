@@ -1,4 +1,11 @@
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
 import type { Request, Response } from 'express';
 
 interface ExceptionResponseShape {
@@ -39,7 +46,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     this.logger.error(
       `${request.method} ${request.url} - ${status} - ${JSON.stringify(message)}`,
-      exception instanceof Error ? exception.stack : undefined,
+      exception instanceof Error ? exception.stack : undefined
     );
 
     // Tell the client exactly how long to wait before retrying.

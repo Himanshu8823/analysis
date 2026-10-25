@@ -47,13 +47,13 @@ export class TopperStrategyFactory {
     const key = normaliseRankingRule(rule);
     if (!key) {
       throw new BadRequestException(
-        `Unknown ranking rule: ${rule}. Use one of: ${[...this.registry.keys()].join(', ')}`,
+        `Unknown ranking rule: ${rule}. Use one of: ${[...this.registry.keys()].join(', ')}`
       );
     }
     const algo = this.registry.get(key);
     if (!algo) {
       throw new BadRequestException(
-        `Unknown ranking rule: ${rule}. Use one of: ${[...this.registry.keys()].join(', ')}`,
+        `Unknown ranking rule: ${rule}. Use one of: ${[...this.registry.keys()].join(', ')}`
       );
     }
     return algo;

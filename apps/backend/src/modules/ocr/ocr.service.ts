@@ -81,16 +81,14 @@ export class OcrService {
 
   constructor(
     private readonly config: ConfigService,
-    private readonly prisma: PrismaClient,
+    private readonly prisma: PrismaClient
   ) {
     const token =
       this.config.get<string>('HF_API_TOKEN') ??
       this.config.get<string>('hf.apiToken') ??
       process.env.HF_API_TOKEN;
     if (!token) {
-      this.logger.warn(
-        'HF_API_TOKEN not configured - OCR calls will fail with auth errors',
-      );
+      this.logger.warn('HF_API_TOKEN not configured - OCR calls will fail with auth errors');
       this.hf = null;
     } else {
       this.hf = new HfInference(token);
@@ -100,10 +98,7 @@ export class OcrService {
   /**
    * Choose the best HF model for the supplied content hints.
    */
-  async selectModel(
-    hasTableLikeContent: boolean,
-    hasHandwriting: boolean,
-  ): Promise<HfModelConfig> {
+  async selectModel(hasTableLikeContent: boolean, hasHandwriting: boolean): Promise<HfModelConfig> {
     if (hasTableLikeContent) return HF_MODELS.TABLE_TRANSFORMER;
     if (hasHandwriting) return HF_MODELS.TROCR_HANDWRITTEN;
     return HF_MODELS.PADDLE_OCR;
@@ -127,7 +122,7 @@ export class OcrService {
   async processImage(
     jobId: string | null,
     fileBuffer: Buffer,
-    modelConfig: HfModelConfig,
+    modelConfig: HfModelConfig
   ): Promise<OcrProcessResult> {
     if (!this.hf) {
       const message = 'HF_API_TOKEN not configured';
@@ -165,7 +160,7 @@ export class OcrService {
           tables = tableResult as unknown as Prisma.InputJsonValue;
         } catch (err) {
           this.logger.warn(
-            `Table detection failed: ${err instanceof Error ? err.message : String(err)}`,
+            `Table detection failed: ${err instanceof Error ? err.message : String(err)}`
           );
         }
       }
@@ -202,8 +197,7 @@ export class OcrService {
         modelUsed: modelConfig.modelId,
       };
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'unknown OCR failure';
+      const message = err instanceof Error ? err.message : 'unknown OCR failure';
       await this.markJobFailed(jobId, message);
       throw err;
     }
@@ -231,7 +225,7 @@ export class OcrService {
       });
     } catch (err) {
       this.logger.warn(
-        `Failed to update job ${jobId} as FAILED: ${err instanceof Error ? err.message : String(err)}`,
+        `Failed to update job ${jobId} as FAILED: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }

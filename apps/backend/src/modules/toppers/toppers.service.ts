@@ -56,7 +56,7 @@ export class ToppersService {
   constructor(
     private readonly repository: ToppersRepository,
     private readonly strategyFactory: TopperStrategyFactory,
-    private readonly prisma: PrismaClient,
+    private readonly prisma: PrismaClient
   ) {}
 
   /**
@@ -70,7 +70,7 @@ export class ToppersService {
   }
 
   async findSubjectToppers(params: {
-    branchId?: string;
+    branchId?: string | string[];
     schemeId?: string;
     semester?: number;
     academicYearId?: string;
@@ -82,7 +82,7 @@ export class ToppersService {
   }
 
   async findClassToppers(params: {
-    branchId?: string;
+    branchId?: string | string[];
     schemeId?: string;
     semester?: number;
     academicYearId?: string;
@@ -99,7 +99,7 @@ export class ToppersService {
    * using the rules from the subject's scheme.
    */
   async findSubjectWiseToppers(filters: {
-    branchId?: string;
+    branchId?: string | string[];
     schemeId?: string;
     semester?: number;
     academicYearId?: string;
@@ -108,29 +108,20 @@ export class ToppersService {
       ...filters,
       academicYearId: await this.resolveYearId(filters.academicYearId),
     });
-    const subjects = ctx.subjects.filter(
-      (s) =>
-        (filters.branchId === undefined || s.branchId === filters.branchId) &&
-        (filters.schemeId === undefined || s.schemeId === filters.schemeId) &&
-        (filters.semester === undefined || s.semester === filters.semester),
-    );
-    const summaries = this.repository.buildStudentSummaries(
-      ctx.students,
-      ctx.marks,
-      subjects,
-    );
+    // The context is already scoped to the requested class, so every subject
+    // it carries belongs to that class.
+    const subjects = ctx.subjects;
 
     const results: SubjectTopperResult[] = [];
     for (const subject of subjects) {
       const studentScores = ctx.students
         .map((stu) => {
           const stuMarks = ctx.marks.filter(
-            (m) => m.subjectId === subject.id && m.studentId === stu.id,
+            (m) =>
+              ctx.offeringToSubject.get(m.subjectOfferingId) === subject.id &&
+              m.studentId === stu.id
           );
-          const total = stuMarks.reduce(
-            (sum, m) => sum + (m.isAbsent ? 0 : m.marksObtained),
-            0,
-          );
+          const total = stuMarks.reduce((sum, m) => sum + (m.isAbsent ? 0 : m.marksObtained), 0);
           const max = stuMarks.reduce((sum, m) => sum + m.maxMarks, 0);
           return {
             studentId: stu.id,
@@ -146,20 +137,18 @@ export class ToppersService {
       if (studentScores.length === 0) continue;
 
       const topMark = Math.max(...studentScores.map((s) => s.marks));
+      const tied = studentScores.filter((s) => s.marks === topMark).length > 1;
       const winners = studentScores
         .filter((s) => s.marks === topMark)
-        .map((s, idx) => {
-          const tied = studentScores.filter((x) => x.marks === topMark).length > 1;
-          return {
-            rank: 1,
-            studentId: s.studentId,
-            rollNo: s.rollNo,
-            name: s.name,
-            score: s.marks,
-            percentage: Number(s.pct.toFixed(2)),
-            isTie: tied,
-          } as RankedTopper;
-        });
+        .map((s) => ({
+          rank: 1,
+          studentId: s.studentId,
+          rollNo: s.rollNo,
+          name: s.name,
+          score: s.marks,
+          percentage: Number(s.pct.toFixed(2)),
+          isTie: tied,
+        }));
       results.push({
         subjectId: subject.id,
         subjectCode: subject.code,
@@ -178,13 +167,13 @@ export class ToppersService {
    */
   async findClassToppersByRule(
     filters: {
-      branchId?: string;
+      branchId?: string | string[];
       schemeId?: string;
       semester?: number;
       academicYearId?: string;
     },
     rule: RankingRule,
-    limit?: number,
+    limit?: number
   ): Promise<{
     rule: string;
     totalStudents: number;
@@ -198,6 +187,7 @@ export class ToppersService {
       ctx.students,
       ctx.marks,
       ctx.subjects,
+      ctx.offeringToSubject
     );
 
     const strategy = this.strategyFactory.get(rule);

@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsObject, IsIn } from 'class-validator';
+import { IsString, IsObject, IsIn } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 const REPORT_TYPES = [

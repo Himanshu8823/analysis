@@ -32,7 +32,7 @@ export class StorageService {
   constructor(private readonly config: ConfigService) {
     this.root = resolve(
       process.cwd(),
-      this.config.get<string>('storage.local.directory') ?? 'uploads',
+      this.config.get<string>('storage.local.directory') ?? 'uploads'
     );
     /**
      * The configured base URL, or the local server URL when none is set.
@@ -40,8 +40,8 @@ export class StorageService {
      * `??` operator would let it through and produce relative file URLs.
      */
     this.publicBaseUrl = (
-      this.config.get<string>('storage.local.publicBaseUrl')
-      || `http://localhost:${this.config.get<number>('server.port') ?? 3001}`
+      this.config.get<string>('storage.local.publicBaseUrl') ||
+      `http://localhost:${this.config.get<number>('server.port') ?? 3001}`
     ).replace(/\/+$/, '');
   }
 
@@ -59,10 +59,7 @@ export class StorageService {
     }
 
     const extension = extname(originalName).toLowerCase().slice(0, 10);
-    const relativePath = join(
-      new Date().toISOString().slice(0, 10),
-      `${randomUUID()}${extension}`,
-    );
+    const relativePath = join(new Date().toISOString().slice(0, 10), `${randomUUID()}${extension}`);
 
     const absolutePath = this.resolveInsideRoot(relativePath);
     await mkdir(dirname(absolutePath), { recursive: true });

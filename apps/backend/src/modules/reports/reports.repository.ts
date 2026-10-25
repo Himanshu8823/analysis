@@ -24,6 +24,7 @@ export class ReportsRepository {
     status?: string;
     generatedBy?: string;
     type?: string;
+    branchId?: string | string[];
   }) {
     const page = Math.max(1, params.page ?? 1);
     const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 20));
@@ -33,6 +34,27 @@ export class ReportsRepository {
     if (params.status) where.status = params.status;
     if (params.generatedBy) where.generatedBy = params.generatedBy;
     if (params.type) where.type = params.type;
+    // A report carries no branch column of its own — the branch lives inside
+    // the `filters` JSON, so the scope filter has to go through that path.
+    // A JSON path filter compares one value, so a scope covering several
+    // branches becomes an OR of one path clause per branch.
+    const branchIds = params.branchId
+      ? Array.isArray(params.branchId)
+        ? params.branchId
+        : [params.branchId]
+      : [];
+    // The cast is needed because Prisma's generated `JsonFilter` type models
+    // the path form as a union that TypeScript cannot narrow from an object
+    // literal; the value itself is a plain string.
+    const byBranch = (branchId: string): Prisma.ReportWhereInput =>
+      ({
+        filters: { path: ['branchId'], equals: branchId },
+      }) as Prisma.ReportWhereInput;
+    if (branchIds.length === 1) {
+      Object.assign(where, byBranch(branchIds[0]));
+    } else if (branchIds.length > 1) {
+      where.OR = branchIds.map(byBranch);
+    }
 
     const [items, total] = await Promise.all([
       this.prisma.report.findMany({
@@ -62,9 +84,27 @@ export class ReportsRepository {
     return this.prisma.report.findUnique({ where: { id } });
   }
 
+  /**
+   * The branch a report was generated for.
+   *
+   * The branch is stored inside the `filters` JSON rather than in a column
+   * of its own, so it is read back out of that object. `null` means the
+   * report does not exist or carries no branch filter.
+   */
+  async findBranchIdOfReport(id: string): Promise<string | null> {
+    const report = await this.prisma.report.findUnique({
+      where: { id },
+      select: { filters: true },
+    });
+    const filters = report?.filters;
+    if (!filters || typeof filters !== 'object' || Array.isArray(filters)) return null;
+    const branchId = (filters as Record<string, unknown>).branchId;
+    return typeof branchId === 'string' && branchId.length > 0 ? branchId : null;
+  }
+
   async updateStatus(
     id: string,
-    update: { status?: string; fileUrl?: string; errorMessage?: string; completedAt?: Date },
+    update: { status?: string; fileUrl?: string; errorMessage?: string; completedAt?: Date }
   ): Promise<Report> {
     return this.prisma.report.update({
       where: { id },

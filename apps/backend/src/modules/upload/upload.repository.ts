@@ -16,9 +16,7 @@ export class UploadRepository {
         fileType: input.fileType,
         fileUrl: input.fileUrl,
         fileSize: input.fileSize,
-        metadata: input.metadata
-          ? (input.metadata as Prisma.InputJsonValue)
-          : Prisma.JsonNull,
+        metadata: input.metadata ? (input.metadata as Prisma.InputJsonValue) : Prisma.JsonNull,
       },
     });
   }
@@ -75,7 +73,7 @@ export class UploadRepository {
       startedAt?: Date;
       completedAt?: Date;
       fileType?: string;
-    },
+    }
   ): Promise<UploadJob> {
     return this.prisma.uploadJob.update({
       where: { id },

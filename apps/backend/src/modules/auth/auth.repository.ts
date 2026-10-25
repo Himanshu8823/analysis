@@ -83,7 +83,7 @@ export class AuthRepository {
   async saveRefreshToken(
     userId: string,
     tokenHash: string,
-    metadata?: { ip?: string; userAgent?: string },
+    metadata?: { ip?: string; userAgent?: string }
   ) {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days

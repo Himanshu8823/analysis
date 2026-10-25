@@ -1,6 +1,4 @@
-import {
-  Controller, Get, NotFoundException, Param, Res, UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, NotFoundException, Param, Res, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { StorageService } from './storage.service';
@@ -34,7 +32,7 @@ export class FilesController {
   async download(
     @Param('date') date: string,
     @Param('name') name: string,
-    @Res() response: Response,
+    @Res() response: Response
   ): Promise<void> {
     const relativePath = `${date}/${name}`;
 
@@ -46,10 +44,7 @@ export class FilesController {
     }
 
     const extension = name.slice(name.lastIndexOf('.')).toLowerCase();
-    response.setHeader(
-      'Content-Type',
-      CONTENT_TYPES[extension] ?? 'application/octet-stream',
-    );
+    response.setHeader('Content-Type', CONTENT_TYPES[extension] ?? 'application/octet-stream');
     response.setHeader('Content-Length', buffer.length);
     response.send(buffer);
   }

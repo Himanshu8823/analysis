@@ -38,11 +38,7 @@ export const INVITABLE_ROLES: readonly UserRole[] = [
 ] as const;
 
 /** Roles whose authority is scoped to a single branch. */
-export const BRANCH_SCOPED_ROLES: readonly UserRole[] = [
-  'HOD',
-  'PRINCIPAL',
-  'TEACHER',
-] as const;
+export const BRANCH_SCOPED_ROLES: readonly UserRole[] = ['HOD', 'PRINCIPAL', 'TEACHER'] as const;
 
 /** Narrows an arbitrary string from the database to a known role name. */
 export function isUserRole(value: string): value is UserRole {

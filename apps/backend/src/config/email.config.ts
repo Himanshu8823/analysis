@@ -19,9 +19,6 @@ export default () => ({
     /** Invitation lifetime in hours. 168 = 7 days. */
     inviteTtlHours: parseInt(process.env.INVITE_TOKEN_TTL_HOURS ?? '168', 10),
     /** Password-reset link lifetime in minutes. */
-    passwordResetTtlMinutes: parseInt(
-      process.env.PASSWORD_RESET_TTL_MINUTES ?? '30',
-      10,
-    ),
+    passwordResetTtlMinutes: parseInt(process.env.PASSWORD_RESET_TTL_MINUTES ?? '30', 10),
   },
 });

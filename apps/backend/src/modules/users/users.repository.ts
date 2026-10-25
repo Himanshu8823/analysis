@@ -52,7 +52,7 @@ export class UsersRepository {
   async create(
     data: Omit<CreateUserDto, 'password'>,
     passwordHash: string,
-    createdBy: string,
+    createdBy: string
   ): Promise<PublicUser> {
     return this.prisma.user.create({
       data: {
@@ -257,7 +257,7 @@ export class UsersRepository {
     id: string,
     data: Omit<UpdateUserDto, 'password'>,
     passwordHash: string | undefined,
-    updatedBy: string,
+    updatedBy: string
   ): Promise<UserWithRoles> {
     /**
      * The updated row is read back with the same column selection as

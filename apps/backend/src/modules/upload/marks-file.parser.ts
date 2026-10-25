@@ -39,7 +39,7 @@ const COLUMN_ALIASES: Record<string, keyof ExtractedMark> = {
   'enrollment number': 'rollNo',
   subjectcode: 'subjectCode',
   'subject code': 'subjectCode',
-  'subject': 'subjectCode',
+  subject: 'subjectCode',
   'subject name': 'subjectCode',
   examtype: 'examType',
   'exam type': 'examType',
@@ -136,7 +136,10 @@ function asBoolean(value: unknown): boolean {
 }
 
 class RowError extends Error {
-  constructor(public readonly rowNumber: number, message: string) {
+  constructor(
+    public readonly rowNumber: number,
+    message: string
+  ) {
     super(message);
     this.name = 'RowError';
   }
@@ -148,10 +151,7 @@ class RowError extends Error {
  * Rows that fail validation are collected instead of aborting the whole file,
  * so one bad line does not discard an otherwise valid import.
  */
-export function parseMarksSheet(
-  headerRow: unknown[],
-  dataRows: unknown[][],
-): ParsedMarksSheet {
+export function parseMarksSheet(headerRow: unknown[], dataRows: unknown[][]): ParsedMarksSheet {
   const columnMap = new Map<number, keyof ExtractedMark>();
   headerRow.forEach((cell, index) => {
     const column = resolveColumn(normaliseHeader(cell));
@@ -160,7 +160,7 @@ export function parseMarksSheet(
 
   if (!columnMap.size) {
     throw new BadRequestException(
-      'The file has no recognisable header row. Expected at least "Roll No", "Subject Code" and "Marks" columns.',
+      'The file has no recognisable header row. Expected at least "Roll No", "Subject Code" and "Marks" columns.'
     );
   }
 
@@ -234,10 +234,7 @@ export function parseMarksSheet(
         throw new RowError(rowNumber, 'Max Marks must be greater than zero');
       }
       if (marksObtained < 0 || marksObtained > maxMarks) {
-        throw new RowError(
-          rowNumber,
-          `Marks (${marksObtained}) must be between 0 and ${maxMarks}`,
-        );
+        throw new RowError(rowNumber, `Marks (${marksObtained}) must be between 0 and ${maxMarks}`);
       }
 
       parsed.marksObtained = marksObtained;
@@ -277,10 +274,7 @@ export function parseMarksSheet(
  * which is not part of the extraction pipeline, so it is rejected with a
  * message the user can act on.
  */
-export async function parseMarksFile(
-  buffer: Buffer,
-  filename: string,
-): Promise<ParsedMarksSheet> {
+export async function parseMarksFile(buffer: Buffer, filename: string): Promise<ParsedMarksSheet> {
   const lower = filename.toLowerCase();
   const isPdf = lower.endsWith('.pdf');
 
@@ -316,14 +310,14 @@ async function parsePdfText(buffer: Buffer): Promise<unknown[][]> {
     parsed = await pdfParse(buffer);
   } catch (err) {
     throw new BadRequestException(
-      `The PDF could not be read: ${err instanceof Error ? err.message : 'unknown error'}`,
+      `The PDF could not be read: ${err instanceof Error ? err.message : 'unknown error'}`
     );
   }
 
   const text = parsed.text ?? '';
   if (!text.trim()) {
     throw new BadRequestException(
-      'This PDF has no readable text. Scanned PDFs need to be converted to Excel or CSV first.',
+      'This PDF has no readable text. Scanned PDFs need to be converted to Excel or CSV first.'
     );
   }
 
@@ -345,7 +339,7 @@ async function parsePdfText(buffer: Buffer): Promise<unknown[][]> {
 
   if (headerIndex === -1) {
     throw new BadRequestException(
-      'The PDF has no recognisable header row. Expected a line naming "Roll No" and "Subject".',
+      'The PDF has no recognisable header row. Expected a line naming "Roll No" and "Subject".'
     );
   }
 

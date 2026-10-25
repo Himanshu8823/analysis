@@ -47,7 +47,7 @@ export class RedisCacheService implements CacheService, OnModuleInit, OnModuleDe
         this.warnedUnavailable = true;
         this.logger.warn(
           `Redis cache unavailable (${err.message}). Continuing without cache — ` +
-            'requests will be served directly from the database.',
+            'requests will be served directly from the database.'
         );
       }
     });

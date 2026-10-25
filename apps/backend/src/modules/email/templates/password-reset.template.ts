@@ -35,7 +35,7 @@ export function renderPasswordResetEmail(options: PasswordResetEmailOptions): {
   html: string;
   text: string;
 } {
-  const institution = options.institutionName ?? 'your institution';
+  const institution = escapeHtml(options.institutionName ?? 'your institution');
   const safeName = escapeHtml(options.name);
   const safeEmail = escapeHtml(options.email);
   const safeUrl = escapeUrl(options.resetUrl);
@@ -49,7 +49,7 @@ Hello ${safeName},
 </p>
 
 <p style="margin:0 0 24px; font-size:15px; line-height:24px; color:${EMAIL_COLORS.body};">
-We received a request to reset the password for your DBATU Result Analysis System account (${safeEmail}). Use the button below to choose a new one.
+We received a request to reset the password for your DBATU Result Analysis System account at ${institution} (${safeEmail}). Use the button below to choose a new one.
 </p>
 
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;">
@@ -72,7 +72,7 @@ If the button above does not work, copy this link into your browser:<br>
 
   const text = `Hello ${options.name},
 
-We received a request to reset the password for your DBATU Result Analysis System account (${options.email}).
+We received a request to reset the password for your DBATU Result Analysis System account at ${options.institutionName ?? 'your institution'} (${options.email}).
 
 Reset your password by opening this link:
 

@@ -1,6 +1,4 @@
-import {
-  Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
@@ -89,7 +87,7 @@ export class AuthController {
   async changePassword(
     @Body() dto: ChangePasswordDto,
     @CurrentUser() user: JwtPayload,
-    @Req() request: Request,
+    @Req() request: Request
   ): Promise<void> {
     await this.authService.changePassword(user.sub, dto, {
       ip: request.ip,

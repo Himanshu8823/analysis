@@ -10,7 +10,7 @@ import { CacheKeys } from '../cache/cache.constants';
 export class PermissionsService {
   constructor(
     private readonly repository: PermissionsRepository,
-    @Inject(CACHE_SERVICE) private readonly cache: CacheService,
+    @Inject(CACHE_SERVICE) private readonly cache: CacheService
   ) {}
 
   async create(dto: CreatePermissionDto): Promise<Permission> {

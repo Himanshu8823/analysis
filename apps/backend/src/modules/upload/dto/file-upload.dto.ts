@@ -1,6 +1,4 @@
-import {
-  IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Min,
-} from 'class-validator';
+import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export enum SupportedFileType {

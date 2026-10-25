@@ -35,26 +35,35 @@ export function AppShell({ children }: AppShellProps) {
    * Reading `localStorage` during the render is only possible in the browser,
    * so the first server render and the first client render would disagree on
    * whether a session exists — React then reports a hydration mismatch and
-   * re-renders the whole tree. Keeping the value in state, initialised to a
-   * fixed value, keeps the server and the client markup identical.
+   * re-renders the whole tree.
+   *
+   * `null` means "not checked yet". It is distinct from `false` ("checked,
+   * no session") because the redirect must not run before the check: on a
+   * hard reload the query cache is empty, so `user` is briefly `undefined`
+   * and treating that as "signed out" bounced every reload back to /login.
    */
-  const [hasSession, setHasSession] = useState(true);
+  const [hasSession, setHasSession] = useState<boolean | null>(null);
 
   useEffect(() => {
     setHasSession(!!getSession());
   }, []);
 
   useEffect(() => {
-    if (!hasSession) {
+    if (hasSession === false) {
       router.replace('/login');
     }
   }, [hasSession, router]);
 
+  /**
+   * `!user` is NOT a sign-out signal on its own: the `me` query has not run
+   * until the session check above enables it. Only a failed `me` request —
+   * an expired session, a deactivated account — sends the user to /login.
+   */
   useEffect(() => {
-    if (hasSession && !isLoading && (isError || !user)) {
+    if (hasSession === true && isError) {
       router.replace('/login');
     }
-  }, [hasSession, isError, isLoading, router, user]);
+  }, [hasSession, isError, router]);
 
   /**
    * Forced password change.
@@ -69,7 +78,10 @@ export function AppShell({ children }: AppShellProps) {
     router.replace('/change-password');
   }, [pathname, router, user?.mustChangePassword]);
 
-  if (isLoading) {
+  // Nothing to render until the session is known and the caller resolved:
+  // the sidebar and header need `user`, and rendering them with an undefined
+  // role would flash the wrong navigation.
+  if (hasSession === null || isLoading || (hasSession && !user)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-canvas">
         <Spinner size={32} label="Loading session" />

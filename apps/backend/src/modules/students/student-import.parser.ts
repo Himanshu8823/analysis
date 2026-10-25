@@ -94,7 +94,7 @@ function asUuid(value: unknown, column: string, rowNumber: number): string {
   if (!isUuid) {
     throw new RowError(
       rowNumber,
-      `"${column}" must be a UUID — resolve the name to an id before importing`,
+      `"${column}" must be a UUID — resolve the name to an id before importing`
     );
   }
   return text;
@@ -111,7 +111,10 @@ function asInt(value: unknown, column: string, rowNumber: number): number | unde
 }
 
 class RowError extends Error {
-  constructor(public readonly rowNumber: number, message: string) {
+  constructor(
+    public readonly rowNumber: number,
+    message: string
+  ) {
     super(message);
     this.name = 'RowError';
   }
@@ -122,10 +125,7 @@ class RowError extends Error {
  * Rows that fail validation are collected instead of aborting the whole file,
  * so one bad line does not discard an otherwise valid import.
  */
-export function parseStudentSheet(
-  headerRow: unknown[],
-  dataRows: unknown[][],
-): ParsedSheet {
+export function parseStudentSheet(headerRow: unknown[], dataRows: unknown[][]): ParsedSheet {
   const columnMap = new Map<number, keyof ParsedStudentRow>();
   headerRow.forEach((cell, index) => {
     const column = resolveColumn(normaliseHeader(cell));
@@ -134,7 +134,7 @@ export function parseStudentSheet(
 
   if (!columnMap.size) {
     throw new BadRequestException(
-      'The file has no recognisable header row. Expected at least "Roll No" and "Name" columns.',
+      'The file has no recognisable header row. Expected at least "Roll No" and "Name" columns.'
     );
   }
   if (!Array.from(columnMap.values()).includes('rollNo')) {
@@ -290,10 +290,7 @@ export async function parseExcel(buffer: Buffer): Promise<unknown[][]> {
 /**
  * Reads an uploaded student sheet (CSV or Excel) into student records.
  */
-export async function parseStudentFile(
-  buffer: Buffer,
-  filename: string,
-): Promise<ParsedSheet> {
+export async function parseStudentFile(buffer: Buffer, filename: string): Promise<ParsedSheet> {
   const lower = filename.toLowerCase();
   const isCsv = lower.endsWith('.csv') || lower.endsWith('.txt');
 

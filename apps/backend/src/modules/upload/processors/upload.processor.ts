@@ -25,7 +25,7 @@ export class UploadProcessor extends WorkerHost {
 
   constructor(
     private readonly uploadService: UploadService,
-    private readonly storage: StorageService,
+    private readonly storage: StorageService
   ) {
     super();
   }
@@ -59,7 +59,7 @@ export class UploadProcessor extends WorkerHost {
 
       this.logger.log(
         `Upload job ${jobId} extracted ${parsed.rows.length} rows` +
-          (parsed.errors.length ? ` with ${parsed.errors.length} row errors` : ''),
+          (parsed.errors.length ? ` with ${parsed.errors.length} row errors` : '')
       );
 
       return { status: 'EXTRACTED', rows: parsed.rows.length };

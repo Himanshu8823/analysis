@@ -35,7 +35,12 @@ export interface SubjectCalculationResult {
  */
 export interface StudentCalculationResult {
   subjectResults: Array<{
+    /** The subject offering these marks belong to. */
+    subjectOfferingId: string;
+    /** The subject behind the offering, for display. */
     subjectId: string;
+    subjectCode: string;
+    subjectName: string;
     breakdown: SubjectBreakdown[];
     totalObtained: number;
     totalMax: number;
@@ -54,6 +59,21 @@ export interface StudentCalculationResult {
 }
 
 /**
+ * One subject as it runs in a particular class context.
+ *
+ * A subject on its own is just a template — "CS301 is worth 100 marks". The
+ * offering is what makes it concrete: "CS301 runs for CSE in semester 5", and
+ * that is the unit marks hang off.
+ */
+export interface SubjectOfferingContext {
+  /** The offering id — marks reference this. */
+  id: string;
+  semester: number;
+  /** The subject behind the offering. */
+  subject: Subject;
+}
+
+/**
  * Contract every scheme-aware calculator must implement.
  * Concrete strategies live in scheme-{2019,2022,2024}.calculator.ts.
  */
@@ -66,20 +86,20 @@ export interface ISchemeCalculator {
    */
   validateComponents(
     components: Array<{ type: string; marksObtained: number; maxMarks: number }>,
-    subject: Subject,
+    subject: Subject
   ): ComponentValidation;
 
   /**
-   * Calculate the result for a single subject for a student.
+   * Calculate the result for a single subject offering for a student.
    */
   calculateSubjectResult(marks: Mark[], subject: Subject): SubjectCalculationResult;
 
   /**
-   * Calculate the aggregate result over the supplied subjects.
+   * Calculate the aggregate result over the supplied subject offerings.
    */
   calculateStudentResult(
     studentId: string,
     marks: Mark[],
-    subjects: Subject[],
+    offerings: SubjectOfferingContext[]
   ): StudentCalculationResult;
 }

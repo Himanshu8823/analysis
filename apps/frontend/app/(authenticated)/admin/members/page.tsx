@@ -10,6 +10,7 @@ import {
   UserCheck,
   UserX,
   ShieldCheck,
+  KeyRound,
   Users,
   MailCheck,
   Pencil,
@@ -490,6 +491,19 @@ export default function AdminMembersPage() {
 
       {tab === 'roles' ? (
         <>
+          <div className="flex flex-col gap-3 rounded-xl border border-hairline bg-card p-base md:flex-row md:items-center md:justify-between">
+            <p className="text-body-sm text-body">
+              This is a read-only summary. Create roles, rename them and decide what each one can
+              do in the roles editor.
+            </p>
+            <Link
+              href="/admin/roles"
+              className="cb-btn-primary inline-flex w-full items-center justify-center md:w-auto"
+            >
+              <KeyRound className="mr-1 h-4 w-4" aria-hidden /> Manage roles and permissions
+            </Link>
+          </div>
+
           {rolesQuery.isError ? (
             <ErrorBanner message="Could not load roles." retry={() => rolesQuery.refetch()} />
           ) : null}

@@ -8,7 +8,7 @@ import { CreateUserDto, ListMembersDto, UpdateUserDto } from './dto';
 export class UsersService {
   constructor(
     private readonly repository: UsersRepository,
-    private readonly config: ConfigService,
+    private readonly config: ConfigService
   ) {}
 
   private get bcryptRounds(): number {

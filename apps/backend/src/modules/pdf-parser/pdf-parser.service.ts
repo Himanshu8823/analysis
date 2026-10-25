@@ -21,7 +21,7 @@ export class PdfParserService {
 
   constructor(
     private readonly prisma: PrismaClient,
-    private readonly storage: StorageService,
+    private readonly storage: StorageService
   ) {}
 
   /**
@@ -36,9 +36,7 @@ export class PdfParserService {
    * Parse an already-downloaded PDF buffer. Useful for tests and the worker.
    */
   async parseBuffer(buffer: Buffer): Promise<PdfParseResult> {
-    const pdfParse = (await import('pdf-parse')).default as (
-      b: Buffer,
-    ) => Promise<{
+    const pdfParse = (await import('pdf-parse')).default as (b: Buffer) => Promise<{
       text: string;
       numpages: number;
       info: Record<string, unknown>;
@@ -83,10 +81,7 @@ export class PdfParserService {
    * Persist the parse payload onto an upload-job row. Marks it FAILED if the
    * document is empty (caller should reroute to OCR in that case).
    */
-  async persistForJob(
-    jobId: string,
-    result: PdfParseResult,
-  ): Promise<void> {
+  async persistForJob(jobId: string, result: PdfParseResult): Promise<void> {
     const text = result.pages
       .map((p) => p.text)
       .join('\n')
@@ -136,9 +131,7 @@ export class PdfParserService {
 
     const response = await fetch(fileUrl);
     if (!response.ok) {
-      throw new Error(
-        `Could not download ${fileUrl}: ${response.status} ${response.statusText}`,
-      );
+      throw new Error(`Could not download ${fileUrl}: ${response.status} ${response.statusText}`);
     }
     const arrayBuffer = await response.arrayBuffer();
     return Buffer.from(arrayBuffer);

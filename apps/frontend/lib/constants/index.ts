@@ -2,6 +2,18 @@ export const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: 'home' },
   { href: '/upload', label: 'Upload Results', icon: 'upload', roles: ['SUPER_ADMIN', 'ADMIN'] },
   { href: '/students', label: 'Students', icon: 'users' },
+  {
+    href: '/admin/subjects',
+    label: 'Subjects',
+    icon: 'book',
+    roles: ['SUPER_ADMIN', 'ADMIN', 'HOD'],
+  },
+  {
+    href: '/admin/assignments',
+    label: 'Assignments',
+    icon: 'assignments',
+    roles: ['SUPER_ADMIN', 'ADMIN', 'HOD'],
+  },
   { href: '/reports', label: 'Reports', icon: 'file' },
   { href: '/toppers', label: 'Toppers', icon: 'award' },
   { href: '/analytics', label: 'Analytics', icon: 'chart' },

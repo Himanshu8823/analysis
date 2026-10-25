@@ -1,6 +1,4 @@
-import {
-  Body, Controller, HttpCode, HttpStatus, Post, Req,
-} from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';

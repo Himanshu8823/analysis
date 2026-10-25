@@ -11,16 +11,26 @@ export const ROLES = {
   STUDENT: 'STUDENT',
 } as const;
 
+/**
+ * The permission catalogue.
+ *
+ * These mirror the `PERMISSIONS` list in `apps/backend/prisma/seed.ts`, which
+ * is the live source of truth — the seed writes these rows into the
+ * `permissions` table. Keep the two in step.
+ */
 export const PERMISSIONS = {
   STUDENTS_READ: 'students:read',
+  STUDENTS_READ_OWN: 'students:read_own',
   STUDENTS_WRITE: 'students:write',
   MARKS_READ: 'marks:read',
+  MARKS_READ_OWN: 'marks:read_own',
   MARKS_WRITE: 'marks:write',
-  MARKS_EDIT_OWN_SUBJECT: 'marks:edit_own_subject',
+  MARKS_ENTER_OWN_SUBJECT: 'marks:enter_own_subject',
   REPORTS_READ: 'reports:read',
   REPORTS_GENERATE: 'reports:generate',
   REPORTS_DOWNLOAD: 'reports:download',
   UPLOAD_CREATE: 'upload:create',
+  UPLOAD_READ: 'upload:read',
   UPLOAD_PROCESS: 'upload:process',
   ANALYTICS_READ: 'analytics:read',
   ANALYTICS_READ_OWN_DEPARTMENT: 'analytics:read_own_department',
@@ -28,45 +38,177 @@ export const PERMISSIONS = {
   USERS_WRITE: 'users:write',
   RBAC_READ: 'rbac:read',
   RBAC_WRITE: 'rbac:write',
+  AUDIT_READ: 'audit:read',
+  INVITES_READ: 'invites:read',
+  INVITES_WRITE: 'invites:write',
+  BRANCHES_READ: 'branches:read',
+  BRANCHES_WRITE: 'branches:write',
+  BRANCHES_DELETE: 'branches:delete',
+  SCHEMES_READ: 'schemes:read',
+  SCHEMES_WRITE: 'schemes:write',
+  SUBJECTS_READ: 'subjects:read',
+  SUBJECTS_WRITE: 'subjects:write',
+  SUBJECTS_DELETE: 'subjects:delete',
+  SUBJECT_OFFERINGS_READ: 'subject_offerings:read',
+  SUBJECT_OFFERINGS_WRITE: 'subject_offerings:write',
+  ACADEMIC_YEARS_READ: 'academic_years:read',
+  ACADEMIC_YEARS_WRITE: 'academic_years:write',
+  EXAMINATIONS_READ: 'examinations:read',
+  EXAMINATIONS_WRITE: 'examinations:write',
+  TEACHER_ALLOCATIONS_READ: 'teacher_allocations:read',
+  TEACHER_ALLOCATIONS_WRITE: 'teacher_allocations:write',
+  CLASS_TEACHER_ASSIGNMENTS_READ: 'class_teacher_assignments:read',
+  CLASS_TEACHER_ASSIGNMENTS_WRITE: 'class_teacher_assignments:write',
+  NOTIFICATIONS_WRITE: 'notifications:write',
+  TOPPERS_READ: 'toppers:read',
+  TOPPERS_READ_OWN_CLASS: 'toppers:read_own_class',
+  DASHBOARD_READ: 'dashboard:read',
 } as const;
 
+/**
+ * The permissions each role holds.
+ *
+ * These mirror the `ROLE_PERMISSIONS` map in
+ * `apps/backend/prisma/seed.ts`, which is the live source of truth. Keep the
+ * two in step.
+ *
+ * The model is permission-first: a route is guarded by the permission it
+ * needs, never by a role name. A role is a named bundle of permissions, and
+ * a user may hold several roles at once — the union of their permissions is
+ * what the guard sees.
+ */
 export const ROLE_PERMISSIONS = {
-  SUPER_ADMIN: Object.values(PERMISSIONS),
+  /**
+   * Configuration and read-only access to the academic data. Entering marks
+   * and creating students belong to the exam cell; teaching belongs to the
+   * allocated teacher.
+   */
+  SUPER_ADMIN: [
+    PERMISSIONS.USERS_READ,
+    PERMISSIONS.USERS_WRITE,
+    PERMISSIONS.RBAC_READ,
+    PERMISSIONS.RBAC_WRITE,
+    PERMISSIONS.INVITES_READ,
+    PERMISSIONS.INVITES_WRITE,
+    PERMISSIONS.BRANCHES_READ,
+    PERMISSIONS.BRANCHES_WRITE,
+    PERMISSIONS.BRANCHES_DELETE,
+    PERMISSIONS.ACADEMIC_YEARS_READ,
+    PERMISSIONS.ACADEMIC_YEARS_WRITE,
+    PERMISSIONS.SCHEMES_READ,
+    PERMISSIONS.SCHEMES_WRITE,
+    PERMISSIONS.SUBJECTS_READ,
+    PERMISSIONS.SUBJECT_OFFERINGS_READ,
+    PERMISSIONS.STUDENTS_READ,
+    PERMISSIONS.MARKS_READ,
+    PERMISSIONS.REPORTS_READ,
+    PERMISSIONS.ANALYTICS_READ,
+    PERMISSIONS.TOPPERS_READ,
+    PERMISSIONS.DASHBOARD_READ,
+    PERMISSIONS.AUDIT_READ,
+  ],
+  /** The exam cell: students, marks, reports and results publication. */
   ADMIN: [
     PERMISSIONS.STUDENTS_READ,
     PERMISSIONS.STUDENTS_WRITE,
+    PERMISSIONS.SUBJECTS_READ,
+    PERMISSIONS.SUBJECTS_WRITE,
+    PERMISSIONS.SUBJECTS_DELETE,
+    PERMISSIONS.SUBJECT_OFFERINGS_READ,
+    PERMISSIONS.SUBJECT_OFFERINGS_WRITE,
     PERMISSIONS.MARKS_READ,
     PERMISSIONS.MARKS_WRITE,
+    PERMISSIONS.MARKS_ENTER_OWN_SUBJECT,
+    PERMISSIONS.UPLOAD_CREATE,
+    PERMISSIONS.UPLOAD_READ,
+    PERMISSIONS.UPLOAD_PROCESS,
     PERMISSIONS.REPORTS_READ,
     PERMISSIONS.REPORTS_GENERATE,
     PERMISSIONS.REPORTS_DOWNLOAD,
-    PERMISSIONS.UPLOAD_CREATE,
-    PERMISSIONS.UPLOAD_PROCESS,
     PERMISSIONS.ANALYTICS_READ,
-    PERMISSIONS.USERS_READ,
+    PERMISSIONS.TOPPERS_READ,
+    PERMISSIONS.DASHBOARD_READ,
+    PERMISSIONS.BRANCHES_READ,
+    PERMISSIONS.SCHEMES_READ,
+    PERMISSIONS.ACADEMIC_YEARS_READ,
+    PERMISSIONS.EXAMINATIONS_READ,
+    PERMISSIONS.EXAMINATIONS_WRITE,
+    PERMISSIONS.NOTIFICATIONS_WRITE,
   ],
+  /** The branch-scoped department head who allocates the teaching. */
   HOD: [
     PERMISSIONS.STUDENTS_READ,
     PERMISSIONS.MARKS_READ,
     PERMISSIONS.REPORTS_READ,
+    PERMISSIONS.REPORTS_GENERATE,
     PERMISSIONS.REPORTS_DOWNLOAD,
+    PERMISSIONS.UPLOAD_READ,
+    PERMISSIONS.UPLOAD_PROCESS,
     PERMISSIONS.ANALYTICS_READ,
     PERMISSIONS.ANALYTICS_READ_OWN_DEPARTMENT,
+    PERMISSIONS.DASHBOARD_READ,
+    PERMISSIONS.BRANCHES_READ,
+    PERMISSIONS.SCHEMES_READ,
+    PERMISSIONS.SUBJECTS_READ,
+    PERMISSIONS.SUBJECT_OFFERINGS_READ,
+    PERMISSIONS.SUBJECTS_WRITE,
+    PERMISSIONS.SUBJECT_OFFERINGS_WRITE,
+    PERMISSIONS.TOPPERS_READ,
+    PERMISSIONS.TEACHER_ALLOCATIONS_READ,
+    PERMISSIONS.TEACHER_ALLOCATIONS_WRITE,
+    PERMISSIONS.CLASS_TEACHER_ASSIGNMENTS_READ,
+    PERMISSIONS.CLASS_TEACHER_ASSIGNMENTS_WRITE,
   ],
-  TEACHER: [
-    PERMISSIONS.STUDENTS_READ,
-    PERMISSIONS.MARKS_READ,
-    PERMISSIONS.MARKS_EDIT_OWN_SUBJECT,
-    PERMISSIONS.REPORTS_READ,
-  ],
+  /** Strictly read-only — not a single write permission. */
   PRINCIPAL: [
     PERMISSIONS.STUDENTS_READ,
     PERMISSIONS.MARKS_READ,
     PERMISSIONS.REPORTS_READ,
     PERMISSIONS.REPORTS_DOWNLOAD,
     PERMISSIONS.ANALYTICS_READ,
+    PERMISSIONS.DASHBOARD_READ,
+    PERMISSIONS.BRANCHES_READ,
+    PERMISSIONS.SCHEMES_READ,
+    PERMISSIONS.SUBJECTS_READ,
+    PERMISSIONS.SUBJECT_OFFERINGS_READ,
+    PERMISSIONS.TOPPERS_READ,
   ],
-  STUDENT: [PERMISSIONS.STUDENTS_READ, PERMISSIONS.MARKS_READ, PERMISSIONS.REPORTS_READ],
+  /**
+   * The subject teacher. Marks are entered under `marks:enter_own_subject`
+   * rather than `marks:write` — the allocation check restricts the teacher
+   * to the subjects the HOD has allocated to them.
+   */
+  TEACHER: [
+    PERMISSIONS.STUDENTS_READ,
+    PERMISSIONS.MARKS_READ,
+    PERMISSIONS.MARKS_ENTER_OWN_SUBJECT,
+    PERMISSIONS.REPORTS_READ,
+    PERMISSIONS.UPLOAD_READ,
+    PERMISSIONS.UPLOAD_PROCESS,
+    PERMISSIONS.DASHBOARD_READ,
+    PERMISSIONS.BRANCHES_READ,
+    PERMISSIONS.SCHEMES_READ,
+    PERMISSIONS.SUBJECTS_READ,
+    PERMISSIONS.SUBJECT_OFFERINGS_READ,
+    PERMISSIONS.TOPPERS_READ,
+    PERMISSIONS.ANALYTICS_READ,
+    PERMISSIONS.TEACHER_ALLOCATIONS_READ,
+    PERMISSIONS.CLASS_TEACHER_ASSIGNMENTS_READ,
+  ],
+  /**
+   * A student sees exactly four things: the dashboard shell, their own
+   * result, their own marks and their own class's toppers.
+   *
+   * `students:read`, `marks:read` and `reports:read` are deliberately
+   * absent — they would expose the whole roster, every student's marks and
+   * every report.
+   */
+  STUDENT: [
+    PERMISSIONS.DASHBOARD_READ,
+    PERMISSIONS.STUDENTS_READ_OWN,
+    PERMISSIONS.MARKS_READ_OWN,
+    PERMISSIONS.TOPPERS_READ_OWN_CLASS,
+  ],
 } as const;
 
 export const EXAM_TYPES = {

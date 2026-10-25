@@ -22,8 +22,7 @@ export const CacheKeys = {
    * Deliberately *not* versioned by the RBAC counter — that counter tracks
    * permission changes, and password state has its own lifecycle.
    */
-  userMustChangePassword: (userId: string): string =>
-    `cache:user:must-change-password:${userId}`,
+  userMustChangePassword: (userId: string): string => `cache:user:must-change-password:${userId}`,
 } as const;
 
 /** Default TTL for cached values, in seconds. */

@@ -13,10 +13,14 @@ export { useBranches, useCreateBranch, useUpdateBranch, useDeleteBranch } from '
 export { useSchemes, useScheme, useCreateScheme, useUpdateScheme } from './useSchemes';
 export {
   useSubjects,
+  useSubject,
   useSubjectsByBranchSchemeSem,
+  useSubjectCatalogueOfferings,
   useCreateSubject,
   useUpdateSubject,
   useDeleteSubject,
+  useCreateSubjectOffering,
+  useDeleteSubjectOffering,
 } from './useSubjects';
 export {
   useStudents,
@@ -63,3 +67,25 @@ export {
   useDeleteMember,
 } from './useMembers';
 export { useDashboard } from './useDashboard';
+export {
+  useTeacherAllocations,
+  useClassTeacherAssignments,
+  useCreateTeacherAllocation,
+  useDeleteTeacherAllocation,
+  useCreateClassTeacherAssignment,
+  useDeleteClassTeacherAssignment,
+  useSubjectOfferings,
+  useAssignableTeachers,
+} from './useAllocations';
+export {
+  useRoleList,
+  useRole,
+  useRolePermissions,
+  usePermissionCatalogue,
+  useCreateRole,
+  useUpdateRole,
+  useDeactivateRole,
+  useAssignRolePermissions,
+  useCreatePermission,
+  useDeletePermission,
+} from './useRolePermissions';

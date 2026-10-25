@@ -25,6 +25,20 @@ export const ENDPOINTS = {
     REVOKE: (id: string) => `/invites/${id}/revoke`,
     RESEND: (id: string) => `/invites/${id}/resend`,
   },
+  ROLES: {
+    LIST: '/roles',
+    CREATE: '/roles',
+    GET: (id: string) => `/roles/${id}`,
+    UPDATE: (id: string) => `/roles/${id}`,
+    DELETE: (id: string) => `/roles/${id}`,
+    PERMISSIONS: (id: string) => `/roles/${id}/permissions`,
+    ASSIGN_PERMISSIONS: (id: string) => `/roles/${id}/permissions`,
+  },
+  PERMISSIONS: {
+    LIST: '/permissions',
+    CREATE: '/permissions',
+    DELETE: (id: string) => `/permissions/${id}`,
+  },
   BRANCHES: {
     LIST: '/branches',
     CREATE: '/branches',
@@ -44,8 +58,40 @@ export const ENDPOINTS = {
   SUBJECTS: {
     LIST: '/subjects',
     CREATE: '/subjects',
+    GET: (id: string) => `/subjects/${id}`,
     UPDATE: (id: string) => `/subjects/${id}`,
     DELETE: (id: string) => `/subjects/${id}`,
+  },
+  /**
+   * Subject offerings — the per-semester assignment of a subject to a
+   * branch under a scheme. A subject is a catalogue entry; an offering is
+   * the statement "this subject is taught to this branch in this semester".
+   */
+  SUBJECT_OFFERINGS: {
+    LIST: '/subject-offerings',
+    CREATE: '/subject-offerings',
+    GET: (id: string) => `/subject-offerings/${id}`,
+    DELETE: (id: string) => `/subject-offerings/${id}`,
+  },
+  /**
+   * Subject-to-teacher allocations.
+   *
+   * The backend exposes `DELETE /teacher-allocations/:id`, so the id is
+   * interpolated rather than passed as a query parameter.
+   */
+  TEACHER_ALLOCATIONS: {
+    LIST: '/teacher-allocations',
+    CREATE: '/teacher-allocations',
+    DELETE: (id: string) => `/teacher-allocations/${id}`,
+  },
+  /**
+   * Class-teacher assignments — exactly one class teacher per class
+   * (branch + semester + scheme + academic year).
+   */
+  CLASS_TEACHER_ASSIGNMENTS: {
+    LIST: '/class-teacher-assignments',
+    CREATE: '/class-teacher-assignments',
+    DELETE: (id: string) => `/class-teacher-assignments/${id}`,
   },
   STUDENTS: {
     LIST: '/students',

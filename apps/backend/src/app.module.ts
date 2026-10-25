@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { BullModule } from '@nestjs/bullmq';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard } from '@nestjs/throttler';
 
 import databaseConfig from './config/database.config';
@@ -16,6 +16,7 @@ import { PrismaModule } from './database/prisma.module';
 import { CacheModule } from './modules/cache/cache.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { EmailModule } from './modules/email/email.module';
+import { ScopeModule } from './common/services/scope.module';
 import { InvitesModule } from './modules/invites/invites.module';
 import { PasswordResetModule } from './modules/password-reset/password-reset.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -25,6 +26,7 @@ import { BranchesModule } from './modules/branches/branches.module';
 import { AcademicModule } from './modules/academic/academic.module';
 import { SchemesModule } from './modules/schemes/schemes.module';
 import { SubjectsModule } from './modules/subjects/subjects.module';
+import { AllocationsModule } from './modules/allocations/allocations.module';
 import { StudentsModule } from './modules/students/students.module';
 import { MarksModule } from './modules/marks/marks.module';
 import { UploadModule } from './modules/upload/upload.module';
@@ -39,9 +41,9 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { HealthModule } from './modules/health/health.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
-import { RolesGuard } from './common/guards/roles.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { ForcePasswordChangeGuard } from './common/guards/force-password-change.guard';
+import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 
 @Module({
   imports: [
@@ -83,6 +85,9 @@ import { ForcePasswordChangeGuard } from './common/guards/force-password-change.
     // Storage (global — consumed by the upload module)
     StorageModule,
 
+    // Branch scope (global — consumed by every module that serves a read)
+    ScopeModule,
+
     // Feature modules (sorted by dependency order)
     EmailModule,
     InvitesModule,
@@ -94,6 +99,7 @@ import { ForcePasswordChangeGuard } from './common/guards/force-password-change.
     AcademicModule,
     SchemesModule,
     SubjectsModule,
+    AllocationsModule,
     StudentsModule,
     MarksModule,
     UploadModule,
@@ -114,9 +120,16 @@ import { ForcePasswordChangeGuard } from './common/guards/force-password-change.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     // Blocks every route while a password change is still pending
     { provide: APP_GUARD, useClass: ForcePasswordChangeGuard },
-    // RBAC guards
-    { provide: APP_GUARD, useClass: RolesGuard },
+    // Authorisation: permissions are the only mechanism (§3.1). There is no
+    // role guard — role names are bundles of permissions, never gates.
     { provide: APP_GUARD, useClass: PermissionsGuard },
+    // Records an audit row for every route decorated with `@Audited(...)`.
+    // Registered through the container (rather than `useGlobalInterceptors`)
+    // so the interceptor can inject the audit service. Nest applies
+    // container-bound interceptors during `NestFactory.create()`, so this one
+    // ends up outermost — outside the `TransformInterceptor` and the request
+    // timeout — and the audit write is awaited before the response is sent.
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
 })
 export class AppModule {}

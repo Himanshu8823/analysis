@@ -32,7 +32,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly auditLogsService: AuditLogsService,
     private readonly invitesService: InvitesService,
-    @Inject(CACHE_SERVICE) private readonly cache: CacheService,
+    @Inject(CACHE_SERVICE) private readonly cache: CacheService
   ) {}
 
   private get bcryptRounds(): number {
@@ -67,7 +67,7 @@ export class AuthService {
       {
         secret: this.config.get<string>('auth.refreshSecret'),
         expiresIn: this.config.get<string>('auth.refreshExpiresIn'),
-      },
+      }
     );
 
     const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
@@ -79,7 +79,7 @@ export class AuthService {
     await this.cache.set(
       CacheKeys.userPermissions(user.id, await this.currentRbacVersion()),
       JSON.stringify(permissions),
-      CACHE_TTL_SECONDS,
+      CACHE_TTL_SECONDS
     );
 
     // The accept-invite flow logs `INVITE_ACCEPTED` itself, so the login it
@@ -182,11 +182,7 @@ export class AuthService {
 
     // Reuse the login path so the token issuing, the refresh-token record and
     // the permission cache stay in one place.
-    return this.login(
-      { email: user.email, password: dto.password },
-      metadata,
-      { skipAudit: true },
-    );
+    return this.login({ email: user.email, password: dto.password }, metadata, { skipAudit: true });
   }
 
   /**
@@ -197,7 +193,7 @@ export class AuthService {
   async changePassword(
     userId: string,
     dto: ChangePasswordDto,
-    metadata?: RequestMetadata,
+    metadata?: RequestMetadata
   ): Promise<void> {
     const user = await this.repository.findById(userId);
     if (!user) {
@@ -281,7 +277,7 @@ export class AuthService {
         {
           secret: this.config.get<string>('auth.refreshSecret'),
           expiresIn: this.config.get<string>('auth.refreshExpiresIn'),
-        },
+        }
       );
 
       // Revoke the presented token and store the replacement's hash, so the
@@ -290,7 +286,7 @@ export class AuthService {
       await this.repository.saveRefreshToken(
         userId,
         await bcrypt.hash(newRefreshToken, 10),
-        metadata,
+        metadata
       );
 
       return { accessToken, refreshToken: newRefreshToken };

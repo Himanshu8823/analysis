@@ -1,6 +1,4 @@
-import {
-  IsString, IsNotEmpty, IsInt, IsIn, IsObject, IsOptional, Min,
-} from 'class-validator';
+import { IsString, IsNotEmpty, IsInt, IsIn, IsObject, IsOptional, Min } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 const FILE_TYPES = ['EXCEL', 'PDF_TEXT', 'PDF_IMAGE', 'CSV'] as const;

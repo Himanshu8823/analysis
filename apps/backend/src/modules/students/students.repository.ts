@@ -2,7 +2,6 @@ import { ConflictException, Injectable } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 import type { Student } from '@prisma/client';
 import { CreateStudentDto, UpdateStudentDto } from './dto';
-import type { ParsedStudentRow } from './student-import.parser';
 
 @Injectable()
 export class StudentsRepository {
@@ -30,7 +29,7 @@ export class StudentsRepository {
        */
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new ConflictException(
-          `Roll No "${data.rollNo}" already exists for this academic year`,
+          `Roll No "${data.rollNo}" already exists for this academic year`
         );
       }
       throw err;
@@ -40,7 +39,7 @@ export class StudentsRepository {
   async findAll(params: {
     page?: number;
     pageSize?: number;
-    branchId?: string;
+    branchId?: string | string[];
     schemeId?: string;
     currentYear?: number;
     semester?: number;
@@ -56,7 +55,11 @@ export class StudentsRepository {
       // must not appear in the roster.
       isActive: true,
     };
-    if (params.branchId) where.branchId = params.branchId;
+    // The scope may name one branch or a set of them (a user can hold a role
+    // in more than one branch), so the filter accepts either.
+    if (params.branchId) {
+      where.branchId = Array.isArray(params.branchId) ? { in: params.branchId } : params.branchId;
+    }
     if (params.schemeId) where.schemeId = params.schemeId;
     if (params.currentYear !== undefined) where.currentYear = params.currentYear;
     if (params.semester !== undefined) where.semester = params.semester;
@@ -130,7 +133,7 @@ export class StudentsRepository {
    * of a single rolled-back transaction.
    */
   async bulkCreate(
-    rows: CreateStudentDto[],
+    rows: CreateStudentDto[]
   ): Promise<{ inserted: number; errors: Array<{ row: number; error: string }> }> {
     if (!rows.length) return { inserted: 0, errors: [] };
 

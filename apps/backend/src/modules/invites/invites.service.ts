@@ -35,7 +35,7 @@ export class InvitesService {
     private readonly prisma: PrismaClient,
     private readonly emailService: EmailService,
     private readonly auditLogsService: AuditLogsService,
-    private readonly config: ConfigService,
+    private readonly config: ConfigService
   ) {}
 
   private get frontendUrl(): string {
@@ -53,7 +53,11 @@ export class InvitesService {
    * can share the link manually if the email does not arrive. That is a
    * convenience for an already-privileged user, not a security hole.
    */
-  async create(dto: InviteUserDto, invitedById: string, metadata?: { ip?: string; userAgent?: string }) {
+  async create(
+    dto: InviteUserDto,
+    invitedById: string,
+    metadata?: { ip?: string; userAgent?: string }
+  ) {
     const email = dto.email.toLowerCase().trim();
 
     if (email === invitedById) {
@@ -291,7 +295,7 @@ export class InvitesService {
     if (!this.emailService.isConfigured()) {
       this.logger.warn(
         `SMTP is not configured — the invitation email for ${invite.email} was not sent. ` +
-          'Share the invitation link manually.',
+          'Share the invitation link manually.'
       );
       return;
     }
@@ -309,17 +313,17 @@ export class InvitesService {
     } catch (err) {
       this.logger.error(
         `Failed to queue the invitation email for ${invite.email}: ` +
-          `${err instanceof Error ? err.message : String(err)}`,
+          `${err instanceof Error ? err.message : String(err)}`
       );
       throw new ServiceUnavailableException(
-        'The invitation could not be emailed. Please try again or contact your administrator.',
+        'The invitation could not be emailed. Please try again or contact your administrator.'
       );
     }
   }
 
   /** Maps an invite row to the API response shape. */
   private toResponse(
-    invite: Invite & { branch?: { id: string; code: string; name: string } | null },
+    invite: Invite & { branch?: { id: string; code: string; name: string } | null }
   ) {
     return {
       id: invite.id,

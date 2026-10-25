@@ -11,6 +11,11 @@ import {
   BarChart3,
   ShieldCheck,
   FolderCog,
+  Building2,
+  CalendarRange,
+  KeyRound,
+  BookOpen,
+  ClipboardCheck,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -44,19 +49,30 @@ const ICONS: Record<string, LucideIcon> = {
   chart: BarChart3,
   shield: ShieldCheck,
   folder: FolderCog,
+  book: BookOpen,
+  assignments: ClipboardCheck,
 };
 
 /**
- * Role gate for the main nav entries.
+ * Navigation gate for the main nav entries.
  *
- * The server enforces the same rule on every endpoint (`@Roles(...)` +
- * `@Permissions(...)`); this only avoids advertising links the signed-in user
- * cannot actually use.
+ * The server is the authority and authorises purely by permission
+ * (`@Permissions(...)`); this map only avoids advertising links the signed-in
+ * user is unlikely to use, and may be more conservative than the server.
+ *
+ * The map overrides the `roles` field on `NAV_ITEMS` where an entry appears
+ * in both. Entries absent from this map are shown to everyone.
  */
 const ROLE_ALLOW: Record<string, readonly UserRole[]> = {
   '/upload': ['SUPER_ADMIN', 'ADMIN'] as readonly UserRole[],
   '/admin/schemes': ['SUPER_ADMIN', 'ADMIN'] as readonly UserRole[],
   '/admin/members': ['SUPER_ADMIN'] as readonly UserRole[],
+  // The exam cell (Admin) defines subjects; a HOD manages their own
+  // branch's subjects; the Super Admin reads the whole catalogue.
+  '/admin/subjects': ['SUPER_ADMIN', 'ADMIN', 'HOD'] as readonly UserRole[],
+  // Allocating the teaching staff is the HOD's job within their own branch;
+  // an Admin or the Super Admin can do it college-wide.
+  '/admin/assignments': ['SUPER_ADMIN', 'ADMIN', 'HOD'] as readonly UserRole[],
 };
 
 /**
@@ -64,6 +80,21 @@ const ROLE_ALLOW: Record<string, readonly UserRole[]> = {
  * managing roles is a Super-Admin-only capability.
  */
 const ADMIN_SECTION_ROLES: readonly UserRole[] = ['SUPER_ADMIN'];
+
+/**
+ * The Administration section.
+ *
+ * These are Super-Admin-only pages (branches, academic years, members,
+ * schemes), so they live in their own section below the workspace rather than
+ * in `NAV_ITEMS`. The whole section is gated by `ADMIN_SECTION_ROLES`.
+ */
+const ADMIN_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
+  { href: '/admin/members', label: 'Members', icon: ShieldCheck },
+  { href: '/admin/roles', label: 'Roles & Permissions', icon: KeyRound },
+  { href: '/admin/schemes', label: 'Schemes', icon: FolderCog },
+  { href: '/admin/branches', label: 'Branches', icon: Building2 },
+  { href: '/admin/academic-years', label: 'Academic Years', icon: CalendarRange },
+];
 
 export function AppSidebar({ role, footer }: AppSidebarProps) {
   const pathname = usePathname();
@@ -83,7 +114,6 @@ export function AppSidebar({ role, footer }: AppSidebarProps) {
 
       <SidebarContent className="py-5">
         <SidebarGroup className="p-0">
-          <SidebarGroupLabel className="px-4">Workspace</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {items.map((item) => {
@@ -114,38 +144,25 @@ export function AppSidebar({ role, footer }: AppSidebarProps) {
             <SidebarGroupLabel className="px-4">Administration</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActivePath(pathname, '/admin/members')}
-                    tooltip="Members"
-                    className="h-11"
-                  >
-                    <Link
-                      href="/admin/members"
-                      aria-current={isActivePath(pathname, '/admin/members') ? 'page' : undefined}
-                    >
-                      <ShieldCheck aria-hidden />
-                      <span>Members</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActivePath(pathname, '/admin/schemes')}
-                    tooltip="Schemes"
-                    className="h-11"
-                  >
-                    <Link
-                      href="/admin/schemes"
-                      aria-current={isActivePath(pathname, '/admin/schemes') ? 'page' : undefined}
-                    >
-                      <FolderCog aria-hidden />
-                      <span>Schemes</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                {ADMIN_ITEMS.map((item) => {
+                  const Icon = item.icon;
+                  const active = isActivePath(pathname, item.href);
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={active}
+                        tooltip={item.label}
+                        className="h-11"
+                      >
+                        <Link href={item.href} aria-current={active ? 'page' : undefined}>
+                          <Icon aria-hidden />
+                          <span>{item.label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

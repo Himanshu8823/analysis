@@ -9,7 +9,7 @@ import type { JwtPayload } from '@/common/types';
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     config: ConfigService,
-    private readonly prisma: PrismaClient,
+    private readonly prisma: PrismaClient
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),

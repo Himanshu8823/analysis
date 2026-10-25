@@ -29,7 +29,7 @@ SheetOverlay.displayName = SheetPrimitive.Overlay.displayName;
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content> & {
-    side?: 'top' | 'right' | 'bottom' | 'left';
+    side?: 'top' | 'right' | 'bottom' | 'left' | 'dialog';
   }
 >(({ side = 'right', className, children, ...props }, ref) => (
   <SheetPortal>
@@ -42,6 +42,11 @@ const SheetContent = React.forwardRef<
         side === 'left' && 'inset-y-0 left-0 h-full w-3/4 border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left md:max-w-sm',
         side === 'top' && 'inset-x-0 top-0 border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top',
         side === 'bottom' && 'inset-x-0 bottom-0 border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom',
+        // Dialog — full-screen sheet on mobile, centered dialog on tablet and
+        // up. A form with several fields needs the whole viewport on a phone
+        // and a bounded, centred card once there is room for one.
+        side === 'dialog' &&
+          'inset-0 h-full w-full overflow-y-auto border-hairline data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom md:inset-auto md:left-1/2 md:top-1/2 md:h-auto md:max-h-[90vh] md:w-full md:max-w-lg md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-xl md:border',
         className,
       )}
       {...props}

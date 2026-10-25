@@ -12,9 +12,9 @@ import * as bcrypt from 'bcrypt';
 const prisma = new PrismaClient();
 
 const ROLES = [
-  { name: 'SUPER_ADMIN', description: 'Full system access' },
+  { name: 'SUPER_ADMIN', description: 'Configuration and view-only access to academic data' },
   { name: 'ADMIN', description: 'Exam cell operations' },
-  { name: 'HOD', description: 'Department head' },
+  { name: 'HOD', description: 'Department head (branch-scoped)' },
   { name: 'TEACHER', description: 'Subject teacher' },
   { name: 'PRINCIPAL', description: 'Read-only analytics' },
   { name: 'STUDENT', description: 'Own result only' },
@@ -22,10 +22,12 @@ const ROLES = [
 
 const PERMISSIONS = [
   { name: 'students:read', resource: 'students', action: 'read' },
+  { name: 'students:read_own', resource: 'students', action: 'read_own' },
   { name: 'students:write', resource: 'students', action: 'write' },
   { name: 'marks:read', resource: 'marks', action: 'read' },
+  { name: 'marks:read_own', resource: 'marks', action: 'read_own' },
   { name: 'marks:write', resource: 'marks', action: 'write' },
-  { name: 'marks:edit_own_subject', resource: 'marks', action: 'edit_own_subject' },
+  { name: 'marks:enter_own_subject', resource: 'marks', action: 'enter_own_subject' },
   { name: 'reports:read', resource: 'reports', action: 'read' },
   { name: 'reports:generate', resource: 'reports', action: 'generate' },
   { name: 'reports:download', resource: 'reports', action: 'download' },
@@ -38,6 +40,7 @@ const PERMISSIONS = [
   { name: 'users:write', resource: 'users', action: 'write' },
   { name: 'rbac:read', resource: 'rbac', action: 'read' },
   { name: 'rbac:write', resource: 'rbac', action: 'write' },
+  { name: 'audit:read', resource: 'audit', action: 'read' },
   { name: 'invites:read', resource: 'invites', action: 'read' },
   { name: 'invites:write', resource: 'invites', action: 'write' },
   { name: 'dashboard:read', resource: 'dashboard', action: 'read' },
@@ -50,41 +53,110 @@ const PERMISSIONS = [
   { name: 'subjects:write', resource: 'subjects', action: 'write' },
   { name: 'subjects:delete', resource: 'subjects', action: 'delete' },
   { name: 'toppers:read', resource: 'toppers', action: 'read' },
+  { name: 'toppers:read_own_class', resource: 'toppers', action: 'read_own_class' },
+  { name: 'subject_offerings:read', resource: 'subject_offerings', action: 'read' },
+  { name: 'subject_offerings:write', resource: 'subject_offerings', action: 'write' },
+  { name: 'academic_years:read', resource: 'academic_years', action: 'read' },
+  { name: 'academic_years:write', resource: 'academic_years', action: 'write' },
+  { name: 'examinations:read', resource: 'examinations', action: 'read' },
+  { name: 'examinations:write', resource: 'examinations', action: 'write' },
+  { name: 'teacher_allocations:read', resource: 'teacher_allocations', action: 'read' },
+  { name: 'teacher_allocations:write', resource: 'teacher_allocations', action: 'write' },
+  { name: 'class_teacher_assignments:read', resource: 'class_teacher_assignments', action: 'read' },
+  { name: 'class_teacher_assignments:write', resource: 'class_teacher_assignments', action: 'write' },
+  { name: 'notifications:write', resource: 'notifications', action: 'write' },
 ] as const;
 
+/**
+ * The permissions each role holds.
+ *
+ * The model is permission-first: a route is guarded by the permission it
+ * needs, never by a role name. A role is nothing more than a named bundle
+ * of permissions, and a user may hold several roles at once — the union of
+ * their permissions is what the guard sees.
+ *
+ * That is why Super Admin is deliberately *not* "everything". It is the
+ * configuration role: it manages users, RBAC, branches, schemes and the
+ * academic calendar, but it is view-only on academic data. Entering marks
+ * and creating students belong to the exam cell (ADMIN), and teaching
+ * belongs to the teacher who has been allocated the subject.
+ */
 const ROLE_PERMISSIONS: Record<string, string[]> = {
-  SUPER_ADMIN: PERMISSIONS.map((p) => p.name),
-  ADMIN: [
-    'students:read',
-    'students:write',
-    'marks:read',
-    'marks:write',
-    'reports:read',
-    'reports:generate',
-    'reports:download',
-    'upload:create',
-    'upload:read',
-    'upload:process',
-    'analytics:read',
+  /**
+   * Configuration and read-only access to the academic data.
+   *
+   * No `students:write`, no `marks:write`, no `upload:create` — those are
+   * the exam cell's. The academic data is visible so the Super Admin can
+   * audit it, but it cannot be altered from here.
+   */
+  SUPER_ADMIN: [
     'users:read',
-    'dashboard:read',
+    'users:write',
+    'rbac:read',
+    'rbac:write',
+    'invites:read',
+    'invites:write',
     'branches:read',
     'branches:write',
     'branches:delete',
+    'academic_years:read',
+    'academic_years:write',
     'schemes:read',
     'schemes:write',
     'subjects:read',
+    'subject_offerings:read',
+    'students:read',
+    'marks:read',
+    'reports:read',
+    'analytics:read',
+    'toppers:read',
+    'dashboard:read',
+    'audit:read',
+  ],
+  /**
+   * The exam cell: creates students and subject templates, enters marks,
+   * generates reports and publishes results.
+   */
+  ADMIN: [
+    'students:read',
+    'students:write',
+    'subjects:read',
     'subjects:write',
     'subjects:delete',
+    'subject_offerings:read',
+    'subject_offerings:write',
+    'marks:read',
+    'marks:write',
+    // The mark-entry routes are guarded by `marks:enter_own_subject` (the
+    // exam cell enters for every subject, not only an allocated one), so
+    // ADMIN needs it to do its job.
+    'marks:enter_own_subject',
+    'upload:create',
+    'upload:read',
+    'upload:process',
+    'reports:read',
+    'reports:generate',
+    'reports:download',
+    'analytics:read',
     'toppers:read',
+    'dashboard:read',
+    'branches:read',
+    'schemes:read',
+    'academic_years:read',
+    'examinations:read',
+    'examinations:write',
+    'notifications:write',
   ],
+  /**
+   * The department head: a branch-scoped reader who also allocates the
+   * teaching and the class teachers of their branch.
+   */
   HOD: [
     'students:read',
     'marks:read',
     'reports:read',
     'reports:generate',
     'reports:download',
-    'upload:create',
     'upload:read',
     'upload:process',
     'analytics:read',
@@ -93,21 +165,19 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'branches:read',
     'schemes:read',
     'subjects:read',
+    'subject_offerings:read',
     'subjects:write',
+    'subject_offerings:write',
     'toppers:read',
+    'teacher_allocations:read',
+    'teacher_allocations:write',
+    'class_teacher_assignments:read',
+    'class_teacher_assignments:write',
   ],
-  TEACHER: [
-    'students:read',
-    'marks:read',
-    'marks:edit_own_subject',
-    'reports:read',
-    'upload:read',
-    'dashboard:read',
-    'branches:read',
-    'schemes:read',
-    'subjects:read',
-    'toppers:read',
-  ],
+  /**
+   * Strictly read-only. The Principal sees the results and nothing else —
+   * not a single write permission.
+   */
   PRINCIPAL: [
     'students:read',
     'marks:read',
@@ -118,9 +188,43 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'branches:read',
     'schemes:read',
     'subjects:read',
+    'subject_offerings:read',
     'toppers:read',
   ],
-  STUDENT: ['dashboard:read'],
+  /**
+   * The subject teacher. Marks are entered under `marks:enter_own_subject`
+   * rather than `marks:write` — the allocation check restricts the teacher
+   * to the subjects the HOD has allocated to them.
+   */
+  TEACHER: [
+    'students:read',
+    'marks:read',
+    'marks:enter_own_subject',
+    'reports:read',
+    'upload:read',
+    'upload:process',
+    'dashboard:read',
+    'branches:read',
+    'schemes:read',
+    'subjects:read',
+    'subject_offerings:read',
+    'toppers:read',
+    'analytics:read',
+    'teacher_allocations:read',
+    'class_teacher_assignments:read',
+  ],
+  /**
+   * The student sees exactly four things: the dashboard shell, their own
+   * result, their own marks and their own class's toppers. `students:read`
+   * and `marks:read` are deliberately absent — they would expose the whole
+   * roster and the whole mark sheet.
+   */
+  STUDENT: [
+    'dashboard:read',
+    'students:read_own',
+    'marks:read_own',
+    'toppers:read_own_class',
+  ],
 };
 
 const BRANCHES = [
@@ -193,9 +297,32 @@ async function main(): Promise<void> {
   for (const [roleName, perms] of Object.entries(ROLE_PERMISSIONS)) {
     const role = await prisma.role.findUnique({ where: { name: roleName } });
     if (!role) continue;
-    for (const permName of perms) {
-      const perm = await prisma.permission.findUnique({ where: { name: permName } });
-      if (!perm) continue;
+
+    const wanted = await prisma.permission.findMany({
+      where: { name: { in: perms } },
+      select: { id: true },
+    });
+    const wantedIds = new Set(wanted.map((p) => p.id));
+
+    /**
+     * The mapping is declared, not accumulated: a permission that is no
+     * longer listed for a role is removed. Otherwise a re-seed would leave
+     * the old grant in place — Super Admin would keep `marks:write` from a
+     * previous run of the seed even though the role is now view-only, and
+     * the drift would be invisible.
+     */
+    const existing = await prisma.rolePermission.findMany({
+      where: { roleId: role.id },
+      select: { id: true, permissionId: true },
+    });
+    const stale = existing.filter((rp) => !wantedIds.has(rp.permissionId));
+    if (stale.length > 0) {
+      await prisma.rolePermission.deleteMany({
+        where: { id: { in: stale.map((rp) => rp.id) } },
+      });
+    }
+
+    for (const perm of wanted) {
       await prisma.rolePermission.upsert({
         where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } },
         create: { roleId: role.id, permissionId: perm.id },

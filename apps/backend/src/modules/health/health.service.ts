@@ -7,7 +7,7 @@ import type { CacheService } from '@/common/interfaces/cache.service';
 export class HealthService {
   constructor(
     private readonly prisma: PrismaClient,
-    @Inject(CACHE_SERVICE) private readonly cache: CacheService,
+    @Inject(CACHE_SERVICE) private readonly cache: CacheService
   ) {}
 
   async check() {

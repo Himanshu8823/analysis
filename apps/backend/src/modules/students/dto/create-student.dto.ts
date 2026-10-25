@@ -1,6 +1,4 @@
-import {
-  IsString, IsNotEmpty, IsInt, IsBoolean, IsOptional, Min,
-} from 'class-validator';
+import { IsString, IsNotEmpty, IsInt, IsBoolean, IsOptional, IsEmail, Min } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEntityId } from '@/common/validators/is-entity-id.validator';
 
@@ -14,6 +12,16 @@ export class CreateStudentDto {
   @IsString()
   @IsNotEmpty()
   name: string;
+
+  @ApiProperty({
+    required: false,
+    example: 'aarav.sharma@example.com',
+    description:
+      "The student's email address. Optional — but without it the student cannot be given a login, because the account is created against this address.",
+  })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
 
   @ApiProperty()
   @IsEntityId()

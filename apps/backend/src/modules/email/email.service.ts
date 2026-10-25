@@ -30,7 +30,7 @@ export class EmailService {
 
   constructor(
     private readonly transport: EmailTransport,
-    @InjectQueue(EMAIL_QUEUE_NAME) private readonly emailQueue: Queue<EmailJobData>,
+    @InjectQueue(EMAIL_QUEUE_NAME) private readonly emailQueue: Queue<EmailJobData>
   ) {}
 
   isConfigured(): boolean {
@@ -82,7 +82,7 @@ export class EmailService {
     } catch (err) {
       this.logger.warn(
         `Email queue unavailable (${err instanceof Error ? err.message : String(err)}). ` +
-          'Falling back to inline delivery.',
+          'Falling back to inline delivery.'
       );
       await this.send(data);
       return { queued: false, sentInline: true };

@@ -20,9 +20,7 @@ export class CalculatorFactory {
       new Scheme2024Calculator(),
     ];
 
-    this.calculators = new Map(
-      calculators.map((c) => [c.schemeName.toUpperCase(), c]),
-    );
+    this.calculators = new Map(calculators.map((c) => [c.schemeName.toUpperCase(), c]));
   }
 
   /**
@@ -32,9 +30,7 @@ export class CalculatorFactory {
   get(schemeName: string): ISchemeCalculator {
     const calc = this.calculators.get(schemeName.toUpperCase());
     if (!calc) {
-      throw new BadRequestException(
-        `Calculator not available for scheme: ${schemeName}`,
-      );
+      throw new BadRequestException(`Calculator not available for scheme: ${schemeName}`);
     }
     return calc;
   }

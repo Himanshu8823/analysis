@@ -355,7 +355,7 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.ComponentProps<'di
       ref={ref}
       data-sidebar="content"
       className={cn(
-        'flex min-h-0 flex-1 flex-col gap-2 overflow-auto',
+        'flex min-h-0 flex-1 flex-col gap-2 overflow-auto scrollbar-none',
         className,
       )}
       {...props}
@@ -491,11 +491,11 @@ const SidebarMenuButton = React.forwardRef<
 SidebarMenuButton.displayName = 'SidebarMenuButton';
 
 const sidebarMenuButtonVariants = cva(
-  'peer/menu-button flex w-full items-center gap-3 overflow-hidden rounded-full px-4 py-2 text-left text-body-sm outline-none transition-[color,background-color,box-shadow] transition-[width,height,padding] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring disabled:pointer-events-none disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0',
+  'peer/menu-button flex w-full items-center gap-3 overflow-hidden rounded-none px-4 py-2 text-left text-body-sm text-sidebar-foreground outline-none transition-[color,background-color,box-shadow] transition-[width,height,padding] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring disabled:pointer-events-none disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0',
   {
     variants: {
       variant: {
-        default: 'text-body',
+        default: '',
         outline: 'bg-transparent shadow-none hover:bg-sidebar-accent',
       },
       size: {

@@ -1,6 +1,4 @@
-import {
-  BadRequestException, Injectable, Logger, NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ReportsRepository } from './reports.repository';
@@ -26,7 +24,7 @@ export class ReportsService {
     private readonly repository: ReportsRepository,
     private readonly excelGenerator: ExcelReportGenerator,
     private readonly prisma: PrismaClient,
-    @InjectQueue(REPORT_QUEUE_NAME) private readonly reportQueue: Queue,
+    @InjectQueue(REPORT_QUEUE_NAME) private readonly reportQueue: Queue
   ) {}
 
   /**
@@ -39,11 +37,11 @@ export class ReportsService {
       await this.reportQueue.add(
         'generate',
         { reportId: report.id, dto, generatedBy },
-        { removeOnComplete: 50, removeOnFail: 100 },
+        { removeOnComplete: 50, removeOnFail: 100 }
       );
     } catch (err) {
       this.logger.warn(
-        `BullMQ dispatch failed for report ${report.id}; running inline: ${err instanceof Error ? err.message : String(err)}`,
+        `BullMQ dispatch failed for report ${report.id}; running inline: ${err instanceof Error ? err.message : String(err)}`
       );
       await this.runReportGeneration(report.id, dto).catch(() => {
         /* error already recorded in DB */
@@ -58,6 +56,7 @@ export class ReportsService {
     status?: string;
     generatedBy?: string;
     type?: string;
+    branchId?: string;
   }) {
     return this.repository.findAll(params);
   }
@@ -68,9 +67,18 @@ export class ReportsService {
     return report;
   }
 
+  /**
+   * The branch a report was generated for.
+   *
+   * `null` when the report does not exist or carries no branch filter.
+   */
+  async findBranchIdOfReport(id: string): Promise<string | null> {
+    return this.repository.findBranchIdOfReport(id);
+  }
+
   async updateStatus(
     id: string,
-    update: { status?: string; fileUrl?: string; errorMessage?: string; completedAt?: Date },
+    update: { status?: string; fileUrl?: string; errorMessage?: string; completedAt?: Date }
   ): Promise<Report> {
     return this.repository.updateStatus(id, update);
   }
@@ -112,13 +120,9 @@ export class ReportsService {
   async download(reportId: string): Promise<{ buffer: Buffer; filename: string }> {
     const report = await this.findById(reportId);
     if (report.status !== 'COMPLETED') {
-      throw new BadRequestException(
-        `Report is not ready for download (status=${report.status})`,
-      );
+      throw new BadRequestException(`Report is not ready for download (status=${report.status})`);
     }
-    const filters = this.validateFilters(
-      report.filters as Record<string, unknown>,
-    );
+    const filters = this.validateFilters(report.filters as Record<string, unknown>);
     const buffer = await this.excelGenerator.generateCompleteReport({
       branchId: filters.branchId,
       schemeId: filters.schemeId,
@@ -149,7 +153,7 @@ export class ReportsService {
       typeof semester !== 'number'
     ) {
       throw new BadRequestException(
-        'branchId, schemeId, semester (number), academicYearId are required',
+        'branchId, schemeId, semester (number), academicYearId are required'
       );
     }
     return { branchId, schemeId, semester, academicYearId };

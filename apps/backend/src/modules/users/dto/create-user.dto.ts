@@ -1,4 +1,12 @@
-import { IsEmail, IsString, IsBoolean, IsOptional, MinLength, MaxLength, Matches } from 'class-validator';
+import {
+  IsEmail,
+  IsString,
+  IsBoolean,
+  IsOptional,
+  MinLength,
+  MaxLength,
+  Matches,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 /**
@@ -10,7 +18,10 @@ import { ApiProperty } from '@nestjs/swagger';
  */
 export const PASSWORD_VALIDATORS = [
   { minLength: 8, maxLength: 72 },
-  { regex: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/, message: 'Password must contain uppercase, lowercase, number, and special character' },
+  {
+    regex: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/,
+    message: 'Password must contain uppercase, lowercase, number, and special character',
+  },
 ] as const;
 
 export const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/;

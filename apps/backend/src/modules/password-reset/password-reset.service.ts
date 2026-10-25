@@ -1,6 +1,4 @@
-import {
-  BadRequestException, Injectable, Logger,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
@@ -23,7 +21,7 @@ export class PasswordResetService {
     private readonly prisma: PrismaClient,
     private readonly config: ConfigService,
     private readonly emailService: EmailService,
-    private readonly auditLogsService: AuditLogsService,
+    private readonly auditLogsService: AuditLogsService
   ) {}
 
   private get bcryptRounds(): number {
@@ -78,7 +76,7 @@ export class PasswordResetService {
 
     if (!this.emailService.isConfigured()) {
       this.logger.warn(
-        `SMTP is not configured — the password reset email for ${user.email} was not sent.`,
+        `SMTP is not configured — the password reset email for ${user.email} was not sent.`
       );
       return { message: GENERIC_RESPONSE };
     }
@@ -96,7 +94,7 @@ export class PasswordResetService {
       this.logger.error(
         `Could not queue the password reset email for ${user.email}: ${
           err instanceof Error ? err.message : String(err)
-        }`,
+        }`
       );
     }
 
@@ -109,11 +107,7 @@ export class PasswordResetService {
    * The token is consumed and the password is written in one transaction, so
    * a link can never be replayed to change the password twice.
    */
-  async resetPassword(
-    token: string,
-    password: string,
-    metadata?: RequestMetadata,
-  ): Promise<void> {
+  async resetPassword(token: string, password: string, metadata?: RequestMetadata): Promise<void> {
     const reset = await this.repository.findByTokenHash(this.hashToken(token));
 
     if (!reset || reset.usedAt) {

@@ -70,6 +70,7 @@ mobile. Modals are full-width sheets on mobile and centered dialogs at `md:`.
 | `/analytics` | KPI cards + 3 chart types | `useOverview` / `usePassFail` / `useSubjectDifficulty` / `usePerformanceTrends` |
 | `/admin/members` | Members, pending invites, roles | `useMembers` / `useInvites` / `useInviteUser` |
 | `/admin/schemes` | View + edit scheme rules JSON | `useSchemes` / `useUpdateScheme` |
+| `/admin/assignments` | HOD allocations — subject-to-teacher and class teacher | `useTeacherAllocations` / `useClassTeacherAssignments` / `useSubjectOfferings` / `useAssignableTeachers` |
 
 ## Caching & Invalidation
 

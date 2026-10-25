@@ -16,7 +16,7 @@ export interface ResolvedAcademicYear {
  * defaults to the same year instead of each one inventing its own rule.
  */
 export async function resolveAcademicYear(
-  prisma: PrismaClient,
+  prisma: PrismaClient
 ): Promise<ResolvedAcademicYear | null> {
   const active = await prisma.academicYear.findFirst({
     where: { isActive: true },
@@ -37,9 +37,7 @@ export async function resolveAcademicYear(
  * for endpoints where a year is mandatory and a zero-result response would be
  * misleading.
  */
-export async function requireAcademicYear(
-  prisma: PrismaClient,
-): Promise<ResolvedAcademicYear> {
+export async function requireAcademicYear(prisma: PrismaClient): Promise<ResolvedAcademicYear> {
   const year = await resolveAcademicYear(prisma);
   if (!year) {
     throw new Error('No academic year has been configured yet.');
