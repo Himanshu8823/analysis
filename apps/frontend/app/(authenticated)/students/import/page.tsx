@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Select } from '@/components/forms/Select';
@@ -55,14 +54,7 @@ export default function ImportStudentsPage() {
       <PageHeader
         title="Import students"
         description="Upload a CSV or Excel sheet to add many students at once."
-        actions={
-          <Button variant="secondary" asChild className="w-full md:w-auto">
-            <a href="/students">
-              <ArrowLeft aria-hidden />
-              Back to students
-            </a>
-          </Button>
-        }
+        backLink={{ href: '/students', label: 'Back to students' }}
       />
 
       <div className="rounded-xl border border-hairline bg-card p-4 md:p-6">

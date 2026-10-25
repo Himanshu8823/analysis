@@ -2,6 +2,8 @@
 
 import { type ReactNode } from 'react';
 
+import { TableSkeleton } from './TableSkeleton';
+
 export interface DataTableColumn<T> {
   key: string;
   header: string;
@@ -48,20 +50,14 @@ export function DataTable<T>({
   footer,
 }: DataTableProps<T>) {
   if (loading) {
-    return (
-      <div className="space-y-3" aria-busy>
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="h-24 animate-pulse rounded-xl bg-surface-soft" aria-hidden />
-        ))}
-      </div>
-    );
+    return <TableSkeleton columns={columns.length} />;
   }
 
   if (rows.length === 0 && emptyState) {
     // The empty state keeps the table's frame so the toolbar above still
     // reads as connected to a results area.
     return (
-      <div className="overflow-hidden rounded-xl border border-hairline bg-card">
+      <div className="overflow-hidden rounded-md border border-hairline bg-card">
         {emptyState}
       </div>
     );
@@ -70,7 +66,7 @@ export function DataTable<T>({
   return (
     <>
       {/* Desktop / Tablet table */}
-      <div className="hidden overflow-hidden rounded-xl border border-hairline bg-card md:block">
+      <div className="hidden overflow-hidden rounded-md border border-hairline bg-card md:block">
         <div className="overflow-x-auto">
           <table className="w-full text-body-sm">
             <thead className="bg-surface-soft">
@@ -115,7 +111,7 @@ export function DataTable<T>({
         {rows.map((row) => (
           <div
             key={keyExtractor(row)}
-            className="rounded-xl border border-hairline bg-card p-4"
+            className="rounded-md border border-hairline bg-card p-4"
           >
             {cardRender
               ? cardRender(row)
@@ -138,6 +134,8 @@ export function DataTable<T>({
           </div>
         ))}
       </div>
+
+      {footer ? <div className="mt-3 md:hidden">{footer}</div> : null}
     </>
   );
 }

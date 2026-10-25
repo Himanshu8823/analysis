@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   invitesService,
   type InviteCounts,
@@ -17,6 +17,7 @@ export function useInvites(filters?: InviteListFilters) {
     queryKey: queryKeys.invites.list(filters),
     queryFn: () => invitesService.list(filters),
     staleTime: 30 * 1000,
+    placeholderData: keepPreviousData,
     /**
      * An invitation's state changes on the server (accepted, revoked,
      * superseded) and the tab counters have to agree with the list. The

@@ -3,11 +3,12 @@
 import { CalendarRange } from 'lucide-react';
 
 import { DataTable, type DataTableColumn } from '@/components/forms/DataTable';
+import { Pagination } from '@/components/forms/Pagination';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
-import { Spinner } from '@/components/feedback/Spinner';
 import { useAcademicYears } from '@/hooks/useAcademic';
+import { useTablePagination } from '@/hooks/useTablePagination';
 import type { AcademicYear } from '@/lib/services/academic.service';
 import { formatters } from '@/lib/utils/formatters';
 
@@ -15,6 +16,7 @@ export default function AdminAcademicYearsPage() {
   const { data, isLoading, isError, refetch } = useAcademicYears();
 
   const years = data ?? [];
+  const { page, setPage, pageSize, setPageSize, total, pageItems } = useTablePagination(years);
 
   const columns: DataTableColumn<AcademicYear>[] = [
     {
@@ -58,16 +60,12 @@ export default function AdminAcademicYearsPage() {
         <ErrorBanner message="Could not load academic years." retry={() => refetch()} />
       ) : null}
 
-      {isLoading ? (
-        <div className="flex items-center gap-sm text-body-sm text-body">
-          <Spinner size={16} /> Loading academic years…
-        </div>
-      ) : (
-        <DataTable
-          columns={columns}
-          rows={years}
-          keyExtractor={(row) => row.id}
-          emptyState={
+      <DataTable
+        columns={columns}
+        rows={pageItems}
+        keyExtractor={(row) => row.id}
+        loading={isLoading}
+        emptyState={
             // The backend exposes no create endpoint for academic years, so
             // there is deliberately no "Add academic year" action here — a
             // button that cannot save would ship a broken feature. The state
@@ -79,8 +77,18 @@ export default function AdminAcademicYearsPage() {
               icon={<CalendarRange aria-hidden />}
             />
           }
-        />
-      )}
+          footer={
+            !isLoading && total > 0 ? (
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+              />
+            ) : undefined
+          }
+      />
     </section>
   );
 }

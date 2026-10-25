@@ -3,11 +3,14 @@
 import { useState } from 'react';
 import { Award, Trophy } from 'lucide-react';
 import { Select } from '@/components/forms/Select';
+import { Pagination } from '@/components/forms/Pagination';
+import { TableSkeleton } from '@/components/forms/TableSkeleton';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
-import { Spinner } from '@/components/feedback/Spinner';
+
 import { useSubjectToppers, useClassToppers } from '@/hooks/useToppers';
+import { useTablePagination } from '@/hooks/useTablePagination';
 import { useBranches } from '@/hooks/useBranches';
 import { useSchemes } from '@/hooks/useSchemes';
 import { formatters } from '@/lib/utils/formatters';
@@ -30,18 +33,21 @@ export default function ToppersPage() {
   const { data: branchesData } = useBranches();
   const { data: schemesData } = useSchemes();
 
+  /**
+   * The filters narrow the cohort; they never decide whether the screen
+   * works. The server applies the caller's branch scope on its own
+   * (`ScopeService.resolveBranchFilter`), so an empty branch means "every
+   * branch I am allowed to see" and an empty scheme means "every scheme".
+   * The charts are therefore there on arrival, without a selection step.
+   */
   const filters: ClassTopperFilters = {
     branchId: branchId || undefined,
     schemeId: schemeId || undefined,
     semester,
   };
-  const enabled = !!branchId && !!schemeId;
 
-  const subjectQuery = useSubjectToppers(filters, enabled && tab === 'subject');
-  const classQuery = useClassToppers(
-    { ...filters, rankingRule },
-    enabled && tab === 'class',
-  );
+  const subjectQuery = useSubjectToppers(filters, tab === 'subject');
+  const classQuery = useClassToppers({ ...filters, rankingRule }, tab === 'class');
 
   const branches = branchesData ?? [];
   const schemes = schemesData ?? [];
@@ -52,17 +58,17 @@ export default function ToppersPage() {
     <section className="flex flex-col gap-6 md:gap-8">
       <PageHeader
         title="Toppers"
-        description="Identify the highest achievers per subject and across the class."
+        description="The highest achievers per subject and across the class, for the scope you are entitled to see."
       />
 
       <article className="cb-surface-card" aria-label="Filters">
         <div className="grid grid-cols-1 gap-base md:grid-cols-2 lg:grid-cols-4">
           <Select
-            label="Branch"
+            label="Branch (optional)"
             value={branchId}
             onChange={(e) => setBranchId(e.target.value)}
           >
-            <option value="">Select branch</option>
+            <option value="">All branches in my scope</option>
             {branches.map((branch) => (
               <option key={branch.id} value={branch.id}>
                 {branch.code} · {branch.name}
@@ -70,11 +76,11 @@ export default function ToppersPage() {
             ))}
           </Select>
           <Select
-            label="Scheme"
+            label="Scheme (optional)"
             value={schemeId}
             onChange={(e) => setSchemeId(e.target.value)}
           >
-            <option value="">Select scheme</option>
+            <option value="">All schemes</option>
             {schemes.map((scheme) => (
               <option key={scheme.id} value={scheme.id}>
                 {scheme.name}
@@ -117,20 +123,13 @@ export default function ToppersPage() {
         </TabButton>
       </div>
 
-      {!enabled ? (
-        <EmptyState
-          title="Pick a branch + scheme"
-          description="Choose filters above to see the toppers for that cohort."
-        />
-      ) : activeQuery.isError ? (
+      {activeQuery.isError ? (
         <ErrorBanner
           message="Could not load toppers."
           retry={() => activeQuery.refetch()}
         />
       ) : activeQuery.isLoading ? (
-        <div className="flex items-center gap-sm text-body-sm text-body">
-          <Spinner size={16} /> Loading…
-        </div>
+        <TableSkeleton columns={tab === 'class' ? 6 : 4} rows={6} />
       ) : tab === 'subject' ? (
         <SubjectToppersList data={subjectQuery.data ?? []} />
       ) : (
@@ -268,12 +267,16 @@ function ClassToppersList({
         }))
       : [];
 
+  const { page, setPage, pageSize, setPageSize, total, pageItems } = useTablePagination(rows, {
+    resetKey: data,
+  });
+
   if (rows.length === 0) {
     return <EmptyState title="No class toppers found" description="Try a different filter." />;
   }
 
   return (
-    <div className="cb-surface-card overflow-hidden">
+    <div className="cb-surface-card overflow-hidden rounded-md">
       <div className="overflow-x-auto">
         <table className="w-full text-body-sm">
           <thead className="bg-surface-soft">
@@ -287,7 +290,7 @@ function ClassToppersList({
             </tr>
           </thead>
           <tbody>
-            {rows.map((t) => (
+            {pageItems.map((t) => (
               <tr key={t.studentId} className="border-t border-hairline first:border-t-0">
                 <td className="num px-base py-sm text-ink">{t.rank}</td>
                 <td className="num px-base py-sm text-ink">{t.rollNo}</td>
@@ -308,6 +311,17 @@ function ClassToppersList({
           </tbody>
         </table>
       </div>
+
+      {total > 0 ? (
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          className="border-t border-hairline px-4 py-sm"
+        />
+      ) : null}
     </div>
   );
 }

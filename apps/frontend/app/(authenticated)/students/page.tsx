@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Plus, Upload, Trash2, Pencil, Users, SearchX, X } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/forms/DataTable';
 import { FilterBar } from '@/components/forms/FilterBar';
+import { Pagination } from '@/components/forms/Pagination';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,7 +17,6 @@ import {
 } from '@/components/ui/select';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
-import { Spinner } from '@/components/feedback/Spinner';
 import { useStudents, useDeleteStudent } from '@/hooks/useStudents';
 import { useBranches } from '@/hooks/useBranches';
 import { useSchemes } from '@/hooks/useSchemes';
@@ -29,6 +29,12 @@ export default function StudentsPage() {
   // `undefined` before the request goes out.
   const [branchFilter, setBranchFilter] = useState('all');
   const [schemeFilter, setSchemeFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, branchFilter, schemeFilter]);
 
   const { data: branchesData } = useBranches();
   const { data: schemesData } = useSchemes();
@@ -38,8 +44,10 @@ export default function StudentsPage() {
       search: search || undefined,
       branchId: branchFilter === 'all' ? undefined : branchFilter,
       schemeId: schemeFilter === 'all' ? undefined : schemeFilter,
+      page,
+      pageSize,
     }),
-    [search, branchFilter, schemeFilter],
+    [search, branchFilter, schemeFilter, page, pageSize],
   );
 
   const { data, isLoading, isError, refetch } = useStudents(filters);
@@ -48,6 +56,7 @@ export default function StudentsPage() {
   const branches = branchesData ?? [];
   const schemes = schemesData ?? [];
   const rows = data?.items ?? [];
+  const meta = data?.meta;
 
   // A filter is "active" whenever it narrows the list in any way. This drives
   // both the "Clear filters" control and which of the two empty states shows.
@@ -189,16 +198,12 @@ export default function StudentsPage() {
         <ErrorBanner message="Could not load students." retry={() => refetch()} />
       ) : null}
 
-      {isLoading ? (
-        <div className="flex items-center gap-sm text-body-sm text-body">
-          <Spinner size={16} /> Loading students…
-        </div>
-      ) : (
-        <DataTable
-          columns={columns}
-          rows={rows}
-          keyExtractor={(row) => row.id}
-          emptyState={
+      <DataTable
+        columns={columns}
+        rows={rows}
+        keyExtractor={(row) => row.id}
+        loading={isLoading}
+        emptyState={
             hasActiveFilters ? (
               // Filtered-empty: the records exist but are hidden by the
               // filters, so the state explains the cause and offers a reset
@@ -242,8 +247,21 @@ export default function StudentsPage() {
               />
             )
           }
-        />
-      )}
+          footer={
+            !isLoading && meta && meta.total > 0 ? (
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={meta.total}
+                onPageChange={setPage}
+                onPageSizeChange={(size) => {
+                  setPageSize(size);
+                  setPage(1);
+                }}
+              />
+            ) : undefined
+          }
+      />
     </section>
   );
 }

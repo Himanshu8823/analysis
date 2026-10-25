@@ -5,6 +5,7 @@ import { BookUser, GraduationCap, Plus, Trash2, UserCheck } from 'lucide-react';
 
 import { DataTable, type DataTableColumn } from '@/components/forms/DataTable';
 import { FilterBar } from '@/components/forms/FilterBar';
+import { Pagination } from '@/components/forms/Pagination';
 import { Select } from '@/components/forms/Select';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -39,6 +40,7 @@ import { useAcademicYears } from '@/hooks/useAcademic';
 import { useBranches } from '@/hooks/useBranches';
 import { useCurrentUser } from '@/hooks/useAuth';
 import { useSchemes } from '@/hooks/useSchemes';
+import { useTablePagination } from '@/hooks/useTablePagination';
 import type {
   ClassTeacherAssignment,
   TeacherAllocation,
@@ -320,6 +322,9 @@ function SubjectAllocationsTab({
   const [assignOpen, setAssignOpen] = useState(false);
 
   const allocations = query.data ?? [];
+  const { page, setPage, pageSize, setPageSize, total, pageItems } = useTablePagination(allocations, {
+    resetKey: `${branchId}|${semester ?? ''}|${schemeId ?? ''}|${academicYearId}`,
+  });
 
   const deleteAllocation = useDeleteTeacherAllocation();
 
@@ -413,7 +418,7 @@ function SubjectAllocationsTab({
 
       <DataTable
         columns={columns}
-        rows={allocations}
+        rows={pageItems}
         keyExtractor={(row) => row.id}
         loading={query.isLoading}
         emptyState={
@@ -438,6 +443,17 @@ function SubjectAllocationsTab({
               icon={<BookUser aria-hidden />}
             />
           )
+        }
+        footer={
+          !query.isLoading && total > 0 ? (
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+          ) : undefined
         }
       />
 
@@ -481,6 +497,9 @@ function ClassTeachersTab({
   const [editing, setEditing] = useState<ClassTeacherAssignment | null>(null);
 
   const assignments = query.data ?? [];
+  const { page, setPage, pageSize, setPageSize, total, pageItems } = useTablePagination(assignments, {
+    resetKey: `${branchId}|${semester ?? ''}|${schemeId ?? ''}|${academicYearId}`,
+  });
 
   const deleteAssignment = useDeleteClassTeacherAssignment();
 
@@ -590,7 +609,7 @@ function ClassTeachersTab({
 
       <DataTable
         columns={columns}
-        rows={assignments}
+        rows={pageItems}
         keyExtractor={(row) => row.id}
         loading={query.isLoading}
         emptyState={
@@ -621,6 +640,17 @@ function ClassTeachersTab({
               icon={<GraduationCap aria-hidden />}
             />
           )
+        }
+        footer={
+          !query.isLoading && total > 0 ? (
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+          ) : undefined
         }
       />
 

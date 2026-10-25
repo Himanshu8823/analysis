@@ -12,6 +12,15 @@ interface AuthUser {
   name: string;
   role: string;
   roles?: string[];
+  /**
+   * The member's effective permissions — the union of every role they hold.
+   *
+   * This is the authority the navigation gates on (§3.1): a feature is
+   * reachable when the member holds the permission behind it, never because
+   * of the name of a role. A member holding several roles gets the union,
+   * so the list reflects every capability they actually have.
+   */
+  permissions?: string[];
   branchId?: string | null;
   mustChangePassword: boolean;
 }
@@ -48,6 +57,7 @@ function toAuthUser(me: AuthMeResponse): AuthUser {
     name: me.name,
     role: me.role ?? roles[0] ?? '',
     roles,
+    permissions: me.permissions ?? [],
     branchId: me.branchId ?? null,
     mustChangePassword: me.mustChangePassword,
   };

@@ -5,6 +5,7 @@ import { marksService, type Mark, type MarkListFilters, type BulkMarkInput } fro
 import { queryKeys } from '@/lib/query/queryKeys';
 import { invalidationRules } from '@/lib/query/invalidationRules';
 import { useToast } from '@/lib/utils/notifications';
+import { extractErrorMessage } from './useAuth';
 
 export function useMarks(filters?: MarkListFilters) {
   return useQuery<Mark[]>({
@@ -33,9 +34,12 @@ export function useCreateBulkMarks() {
       studentIds.forEach((studentId) => {
         invalidationRules.onMarksUpdated(qc, studentId);
       });
+      // The offering's own list is stale too — the grid it was read from
+      // has just changed.
+      qc.invalidateQueries({ queryKey: queryKeys.marks.all() });
       toast.success(`${variables.length} marks entries saved`);
     },
-    onError: () => toast.error('Failed to save marks'),
+    onError: (error: unknown) => toast.error(extractErrorMessage(error)),
   });
 }
 
@@ -43,13 +47,20 @@ export function useUpdateMark() {
   const qc = useQueryClient();
   const toast = useToast();
   return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: Partial<BulkMarkInput> }) =>
-      marksService.update(id, payload),
-    onSuccess: (_data, vars) => {
-      invalidationRules.onMarksUpdated(qc, vars.payload.studentId ?? '');
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: Partial<
+        Omit<BulkMarkInput, 'studentId' | 'subjectOfferingId' | 'examType' | 'academicYearId'>
+      >;
+    }) => marksService.update(id, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.marks.all() });
       toast.success('Mark updated');
     },
-    onError: () => toast.error('Failed to update mark'),
+    onError: (error: unknown) => toast.error(extractErrorMessage(error)),
   });
 }
 

@@ -1,7 +1,6 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { SchemeFormFields } from '@/components/forms/SchemeFormFields';
@@ -23,14 +22,7 @@ export default function NewSchemePage() {
       <PageHeader
         title="New scheme"
         description="Define an evaluation scheme, its rules and calculator strategy."
-        actions={
-          <Button variant="secondary" asChild className="w-full md:w-auto">
-            <a href="/admin/schemes">
-              <ArrowLeft aria-hidden />
-              Back to schemes
-            </a>
-          </Button>
-        }
+        backLink={{ href: '/admin/schemes', label: 'Back to schemes' }}
       />
 
       <div className="rounded-xl border border-hairline bg-card p-4 md:p-6">

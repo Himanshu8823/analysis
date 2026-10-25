@@ -42,11 +42,75 @@ export class DashboardController {
     @Query('semester') semester?: string
   ) {
     const viewer = await this.scopeRepository.loadViewer(user.sub);
+    return this.service.getDashboard(viewer, this.parseScope(branchId, schemeId, semester));
+  }
 
-    return this.service.getDashboard(viewer, {
+  /**
+   * The scope block — the fastest part of the dashboard.
+   *
+   * The web app requests this first so the page title and scope banner can
+   * render while the KPIs and charts are still being computed.
+   */
+  @Get('header')
+  @Permissions('dashboard:read')
+  @Throttle({ default: { limit: 120, ttl: 60 * 1000 } })
+  @ApiOperation({ summary: 'Dashboard scope block' })
+  async header(@CurrentUser() user: JwtPayload) {
+    const viewer = await this.scopeRepository.loadViewer(user.sub);
+    return this.service.getHeader(viewer);
+  }
+
+  /**
+   * The KPI cards. Independent of the chart sections so the metric row can
+   * paint as soon as its own figures are ready.
+   */
+  @Get('metrics')
+  @Permissions('dashboard:read')
+  @Throttle({ default: { limit: 120, ttl: 60 * 1000 } })
+  @ApiOperation({ summary: 'Dashboard KPI cards' })
+  async metrics(
+    @CurrentUser() user: JwtPayload,
+    @Query('branchId') branchId?: string,
+    @Query('schemeId') schemeId?: string,
+    @Query('semester') semester?: string
+  ) {
+    const viewer = await this.scopeRepository.loadViewer(user.sub);
+    return this.service.getMetrics(viewer, this.parseScope(branchId, schemeId, semester));
+  }
+
+  /**
+   * The chart blocks. The heaviest block, isolated so it never holds the
+   * metric cards or the upload feed hostage.
+   */
+  @Get('sections')
+  @Permissions('dashboard:read')
+  @Throttle({ default: { limit: 120, ttl: 60 * 1000 } })
+  @ApiOperation({ summary: 'Dashboard chart sections' })
+  async sections(
+    @CurrentUser() user: JwtPayload,
+    @Query('branchId') branchId?: string,
+    @Query('schemeId') schemeId?: string,
+    @Query('semester') semester?: string
+  ) {
+    const viewer = await this.scopeRepository.loadViewer(user.sub);
+    return this.service.getSections(viewer, this.parseScope(branchId, schemeId, semester));
+  }
+
+  /** The latest upload jobs — a single small read. */
+  @Get('recent-uploads')
+  @Permissions('dashboard:read')
+  @Throttle({ default: { limit: 120, ttl: 60 * 1000 } })
+  @ApiOperation({ summary: 'Dashboard recent uploads' })
+  async recentUploads(@CurrentUser() user: JwtPayload) {
+    const viewer = await this.scopeRepository.loadViewer(user.sub);
+    return this.service.getRecentUploads(viewer);
+  }
+
+  private parseScope(branchId?: string, schemeId?: string, semester?: string) {
+    return {
       branchId: parseOptionalString(branchId),
       schemeId: parseOptionalString(schemeId),
       semester: parseOptionalInt(semester),
-    });
+    };
   }
 }

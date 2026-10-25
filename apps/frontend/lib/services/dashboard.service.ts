@@ -83,9 +83,59 @@ export interface DashboardData {
   degraded?: string[];
 }
 
+/**
+ * The scope block — returned by `/dashboard/header`.
+ *
+ * Deliberately small: the page title, description and upload action depend on
+ * it, but no figures do, so it resolves first.
+ */
+export interface DashboardHeader {
+  scope: DashboardScope;
+  scopeLabel: string;
+  roleLabel: string;
+  academicYear: { id: string; year: string } | null;
+}
+
+/** The KPI row — returned by `/dashboard/metrics`. */
+export interface DashboardMetricsResponse {
+  metrics: DashboardMetric[];
+  kpis: DashboardData['kpis'];
+}
+
+/** The chart blocks — returned by `/dashboard/sections`. */
+export interface DashboardSectionsResponse {
+  sections: DashboardSection[];
+  degraded: string[];
+}
+
+/** The upload feed — returned by `/dashboard/recent-uploads`. */
+export interface DashboardUploadsResponse {
+  recentUploads: RecentUpload[];
+}
+
 export const dashboardService = {
   getDashboard: async (): Promise<DashboardData> => {
     const res = await apiClient.get(ENDPOINTS.DASHBOARD.GET);
+    return res.data.data;
+  },
+
+  getHeader: async (): Promise<DashboardHeader> => {
+    const res = await apiClient.get(ENDPOINTS.DASHBOARD.HEADER);
+    return res.data.data;
+  },
+
+  getMetrics: async (): Promise<DashboardMetricsResponse> => {
+    const res = await apiClient.get(ENDPOINTS.DASHBOARD.METRICS);
+    return res.data.data;
+  },
+
+  getSections: async (): Promise<DashboardSectionsResponse> => {
+    const res = await apiClient.get(ENDPOINTS.DASHBOARD.SECTIONS);
+    return res.data.data;
+  },
+
+  getRecentUploads: async (): Promise<DashboardUploadsResponse> => {
+    const res = await apiClient.get(ENDPOINTS.DASHBOARD.RECENT_UPLOADS);
     return res.data.data;
   },
 };

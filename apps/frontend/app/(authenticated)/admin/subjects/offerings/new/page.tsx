@@ -1,7 +1,6 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { SubjectOfferingFields } from '@/components/forms/SubjectOfferingFields';
@@ -46,7 +45,7 @@ export default function NewSubjectOfferingPage() {
   if (isError) {
     return (
       <section className="flex flex-col gap-6 md:gap-8">
-        <PageHeader title="Offer a subject" />
+        <PageHeader title="Offer a subject" backLink={{ href: '/admin/subjects', label: 'Back to subjects' }} />
         <ErrorBanner message="Could not load the subject catalogue." retry={() => refetch()} />
       </section>
     );
@@ -57,14 +56,7 @@ export default function NewSubjectOfferingPage() {
       <PageHeader
         title="Offer a subject"
         description="Assign a subject to a branch and semester — the class structure the teacher fills in."
-        actions={
-          <Button variant="secondary" asChild className="w-full md:w-auto">
-            <a href="/admin/subjects">
-              <ArrowLeft aria-hidden />
-              Back to subjects
-            </a>
-          </Button>
-        }
+        backLink={{ href: '/admin/subjects', label: 'Back to subjects' }}
       />
 
       <div className="rounded-xl border border-hairline bg-card p-4 md:p-6">

@@ -1,7 +1,6 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { StudentFormFields } from '@/components/forms/StudentFormFields';
@@ -47,7 +46,7 @@ export default function EditStudentPage() {
   if (isError || !student) {
     return (
       <section className="flex flex-col gap-6 md:gap-8">
-        <PageHeader title="Edit student" />
+        <PageHeader title="Edit student" backLink={{ href: '/students', label: 'Back to students' }} />
         <ErrorBanner message="Could not load this student." retry={() => refetch()} />
       </section>
     );
@@ -58,14 +57,7 @@ export default function EditStudentPage() {
       <PageHeader
         title={`Edit ${student.name}`}
         description="Update the student's details, then save your changes."
-        actions={
-          <Button variant="secondary" asChild className="w-full md:w-auto">
-            <a href="/students">
-              <ArrowLeft aria-hidden />
-              Back to students
-            </a>
-          </Button>
-        }
+        backLink={{ href: '/students', label: 'Back to students' }}
       />
 
       <div className="rounded-xl border border-hairline bg-card p-4 md:p-6">

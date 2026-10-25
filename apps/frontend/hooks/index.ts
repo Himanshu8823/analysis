@@ -66,7 +66,12 @@ export {
   useUpdateMember,
   useDeleteMember,
 } from './useMembers';
-export { useDashboard } from './useDashboard';
+export {
+  useDashboardHeader,
+  useDashboardMetrics,
+  useDashboardSections,
+  useDashboardRecentUploads,
+} from './useDashboard';
 export {
   useTeacherAllocations,
   useClassTeacherAssignments,

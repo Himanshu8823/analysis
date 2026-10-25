@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   Plus,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/forms/DataTable';
 import { FilterBar } from '@/components/forms/FilterBar';
+import { Pagination } from '@/components/forms/Pagination';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
   Select as FilterSelect,
@@ -63,18 +64,33 @@ export default function AdminMembersPage() {
   // `undefined` before the request goes out.
   const [roleFilter, setRoleFilter] = useState('all');
   const [inviteStatusFilter, setInviteStatusFilter] = useState('all');
+  const [memberPage, setMemberPage] = useState(1);
+  const [invitePage, setInvitePage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setMemberPage(1);
+  }, [search, roleFilter]);
+
+  useEffect(() => {
+    setInvitePage(1);
+  }, [search, inviteStatusFilter]);
 
   const toast = useToast();
 
   const memberFilters = {
     search: search || undefined,
     role: roleFilter === 'all' ? undefined : roleFilter,
+    page: memberPage,
+    pageSize,
   };
   const inviteFilters = {
     search: search || undefined,
     status: (inviteStatusFilter === 'all'
       ? undefined
       : inviteStatusFilter) as InviteStatus | undefined,
+    page: invitePage,
+    pageSize,
   };
 
   const membersQuery = useMembers(memberFilters);
@@ -103,6 +119,20 @@ export default function AdminMembersPage() {
   const members = membersQuery.data?.items ?? [];
   const invites = invitesQuery.data?.items ?? [];
   const roles = rolesQuery.data ?? [];
+  const memberMeta = membersQuery.data?.meta;
+  const inviteMeta = invitesQuery.data?.meta;
+
+  useEffect(() => {
+    if (memberMeta && memberMeta.totalPages > 0 && memberPage > memberMeta.totalPages) {
+      setMemberPage(memberMeta.totalPages);
+    }
+  }, [memberMeta, memberPage]);
+
+  useEffect(() => {
+    if (inviteMeta && inviteMeta.totalPages > 0 && invitePage > inviteMeta.totalPages) {
+      setInvitePage(inviteMeta.totalPages);
+    }
+  }, [inviteMeta, invitePage]);
 
   const copyInviteLink = async (url: string) => {
     try {
@@ -428,6 +458,21 @@ export default function AdminMembersPage() {
                 }
               />
             }
+            footer={
+              memberMeta && memberMeta.total > 0 ? (
+                <Pagination
+                  page={memberPage}
+                  pageSize={pageSize}
+                  total={memberMeta.total}
+                  onPageChange={setMemberPage}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size);
+                    setMemberPage(1);
+                    setInvitePage(1);
+                  }}
+                />
+              ) : undefined
+            }
           />
         </>
       ) : null}
@@ -484,6 +529,21 @@ export default function AdminMembersPage() {
                   ) : null
                 }
               />
+            }
+            footer={
+              inviteMeta && inviteMeta.total > 0 ? (
+                <Pagination
+                  page={invitePage}
+                  pageSize={pageSize}
+                  total={inviteMeta.total}
+                  onPageChange={setInvitePage}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size);
+                    setMemberPage(1);
+                    setInvitePage(1);
+                  }}
+                />
+              ) : undefined
             }
           />
         </>

@@ -5,12 +5,16 @@ import { resolveAcademicYear } from '@/common/utils/academic-year';
 import { ScopeService } from '@/common/services/scope.service';
 import { DashboardScopeRepository } from './dashboard-scope.repository';
 import type {
+  DashboardHeader,
   DashboardMetric,
+  DashboardMetricsResponse,
   DashboardResponse,
   DashboardScopeKind,
   DashboardSection,
   DashboardSectionItem,
+  DashboardSectionsResponse,
   DashboardUpload,
+  DashboardUploadsResponse,
   DashboardViewer,
 } from './dashboard.types';
 
@@ -84,6 +88,32 @@ interface ClassScope {
   classCount: number;
 }
 
+/**
+ * Everything the scoped endpoints share about one request.
+ *
+ * `buildContext` produces this once, so the metrics and sections endpoints
+ * apply the *same* scope rules and the same Prisma filters.
+ */
+interface ScopedContext {
+  academicYear: { id: string; year: string } | null;
+  yearId: string | undefined;
+  plan: { scope: DashboardScopeKind };
+  classScope?: ClassScope;
+  scopeBranchIds?: string[];
+  studentWhere: Prisma.StudentWhereInput;
+  scopedStudentWhere: Prisma.StudentWhereInput;
+  offeringWhere: Prisma.SubjectOfferingWhereInput;
+  scopedOfferingWhere: Prisma.SubjectOfferingWhereInput;
+}
+
+/** A mark row with just enough of its student for the breakdowns. */
+interface MarkWithStudent {
+  studentId: string;
+  marksObtained: number;
+  maxMarks: number;
+  student: { branchId: string; rollNo: string; name: string };
+}
+
 @Injectable()
 export class DashboardService {
   private readonly logger = new Logger(DashboardService.name);
@@ -97,26 +127,259 @@ export class DashboardService {
   /**
    * Builds the dashboard for the signed-in member.
    *
+   * This composite response is kept for API clients that want the whole page
+   * in one round trip. The web app does not use it: it calls the four partial
+   * endpoints in parallel so each block can paint as soon as *its* data is
+   * ready instead of waiting for the slowest query.
+   *
    * The response is assembled from the caller's *effective permissions*, not
    * from their role: the scope is decided first, and the metrics that follow
    * are the ones that scope makes meaningful. A member holding several roles
    * gets the union of what those roles allow.
    */
   async getDashboard(viewer: DashboardViewer, scope: DashboardScope): Promise<DashboardResponse> {
+    const [header, metrics, sections, uploads] = await Promise.all([
+      this.getHeader(viewer),
+      this.getMetrics(viewer, scope),
+      this.getSections(viewer, scope),
+      this.getRecentUploads(viewer),
+    ]);
+
+    return { ...header, ...metrics, ...sections, ...uploads };
+  }
+
+  /**
+   * The page chrome: which scope the member is looking at and for which year.
+   *
+   * Deliberately cheap — one academic-year read and (for a student) one
+   * student read. No marks are touched, so the header can render immediately.
+   */
+  async getHeader(viewer: DashboardViewer): Promise<DashboardHeader> {
     const academicYear = await resolveAcademicYear(this.prisma);
+    const plan = this.planFor(viewer);
+
+    if (plan.scope === 'own') {
+      return {
+        scope: 'own',
+        scopeLabel: await this.ownScopeLabel(viewer.studentId!),
+        roleLabel: this.roleLabel(viewer),
+        academicYear,
+      };
+    }
+
+    const yearId = academicYear?.id;
+    const classScope =
+      plan.scope === 'class' ? await this.resolveClassScope(viewer, yearId) : undefined;
+    const scopeBranchIds = await this.resolveScopeBranchIds(viewer, plan.scope, {}, classScope);
+    const scopeLabel = await this.buildScopeLabel(plan.scope, scopeBranchIds);
+
+    return {
+      scope: plan.scope,
+      scopeLabel,
+      roleLabel: this.roleLabel(viewer),
+      academicYear,
+    };
+  }
+
+  /**
+   * The KPI cards.
+   *
+   * Only the counts and the mark aggregates the cards themselves show are
+   * computed here — the chart breakdowns belong to `getSections`, so this
+   * endpoint stays as fast as the metrics allow.
+   */
+  async getMetrics(
+    viewer: DashboardViewer,
+    query: DashboardScope
+  ): Promise<DashboardMetricsResponse> {
+    const plan = this.planFor(viewer);
+
+    if (plan.scope === 'own') {
+      const own = await this.buildOwnDashboard(viewer, await resolveAcademicYear(this.prisma), []);
+      return { metrics: own.metrics, kpis: own.kpis };
+    }
+
+    const context = await this.buildContext(viewer, query, plan);
+
+    const [totalStudents, totalOfferings, marks, uploadStatus] = await Promise.all([
+      this.prisma.student.count({ where: context.scopedStudentWhere }),
+      this.prisma.subjectOffering.count({ where: context.scopedOfferingWhere }),
+      this.prisma.mark.findMany({
+        where: this.buildMarkWhere(context.yearId, context.scopedStudentWhere),
+        select: { studentId: true, marksObtained: true, maxMarks: true },
+      }),
+      this.computeUploadStatus(context.scopedOfferingWhere, context.yearId),
+    ]);
+
+    const { passPercentage, averagePercentage } = aggregateStudentMarks(marks);
+
+    const metrics = this.buildMetrics({
+      plan,
+      viewer,
+      totalStudents,
+      totalOfferings,
+      passPercentage,
+      averagePercentage,
+      uploadStatus,
+      classScope: context.classScope,
+    });
+
+    return {
+      metrics,
+      kpis: {
+        totalStudents,
+        passPercentage: round1(passPercentage),
+        totalSubjects: totalOfferings,
+        averagePercentage: round1(averagePercentage),
+      },
+    };
+  }
+
+  /**
+   * The chart blocks.
+   *
+   * Every current-year breakdown is derived from a single mark read, and the
+   * three optional lookups (trend, missing data, publication status) run in
+   * parallel. That keeps this — the slowest block — from serialising five
+   * separate queries.
+   */
+  async getSections(
+    viewer: DashboardViewer,
+    query: DashboardScope
+  ): Promise<DashboardSectionsResponse> {
+    const plan = this.planFor(viewer);
+
+    if (plan.scope === 'own') {
+      const own = await this.buildOwnDashboard(viewer, await resolveAcademicYear(this.prisma), []);
+      return { sections: own.sections, degraded: own.degraded };
+    }
+
     const degraded: string[] = [];
+    const context = await this.buildContext(viewer, query, plan);
+
+    const [
+      studentsByBranch,
+      studentsBySemester,
+      offeringsBySemester,
+      marks,
+      uploadStatus,
+      branchNames,
+    ] = await Promise.all([
+      this.prisma.student.groupBy({
+        by: ['branchId'],
+        where: context.scopedStudentWhere,
+        _count: { _all: true },
+      }),
+      this.prisma.student.groupBy({
+        by: ['semester'],
+        where: context.scopedStudentWhere,
+        _count: { _all: true },
+      }),
+      this.prisma.subjectOffering.groupBy({
+        by: ['semester'],
+        where: context.scopedOfferingWhere,
+        _count: { _all: true },
+      }),
+      this.prisma.mark.findMany({
+        where: this.buildMarkWhere(context.yearId, context.scopedStudentWhere),
+        select: {
+          studentId: true,
+          marksObtained: true,
+          maxMarks: true,
+          student: { select: { branchId: true, rollNo: true, name: true } },
+        },
+      }),
+      this.computeUploadStatus(context.scopedOfferingWhere, context.yearId),
+      this.branchNames(context.scopeBranchIds),
+    ]);
+
+    const perBranch = perBranchBreakdown(marks);
+    const toppers = toppersFromMarks(marks, branchNames);
+
+    const sections = await this.buildSections({
+      plan,
+      viewer,
+      studentsByBranch,
+      studentsBySemester,
+      offeringsBySemester,
+      branchNames,
+      perBranch,
+      toppers,
+      uploadStatus,
+      yearId: context.yearId,
+      scopeBranchIds: context.scopeBranchIds,
+      degraded,
+    });
+
+    return { sections, degraded };
+  }
+
+  /** The latest upload jobs. Cheap enough to run on its own. */
+  async getRecentUploads(viewer: DashboardViewer): Promise<DashboardUploadsResponse> {
+    const plan = this.planFor(viewer);
+    return { recentUploads: await this.recentUploads(plan.scope, viewer) };
+  }
+
+  /**
+   * Resolves everything the scoped dashboard needs to know before it can
+   * query: the active year, the caller's plan, their class allocations and
+   * the resulting Prisma filters.
+   *
+   * Kept in one place so the metrics and sections endpoints apply exactly the
+   * same scope rules. A caller must never see a wider set of figures from one
+   * endpoint than from the other.
+   */
+  private async buildContext(
+    viewer: DashboardViewer,
+    query: DashboardScope,
+    plan: { scope: DashboardScopeKind } = this.planFor(viewer)
+  ): Promise<ScopedContext> {
+    const academicYear = await resolveAcademicYear(this.prisma);
+    const yearId = academicYear?.id;
 
     if (!academicYear) {
       this.logger.warn('No academic year exists yet — the dashboard will report zeroes.');
     }
 
-    const plan = this.planFor(viewer);
+    // In the class scope the caller's world is narrowed to the subjects they
+    // are allocated and the classes they are class teacher for. This is
+    // resolved first because it also determines which branches are in scope.
+    const classScope =
+      plan.scope === 'class' ? await this.resolveClassScope(viewer, yearId) : undefined;
 
-    if (plan.scope === 'own') {
-      return this.buildOwnDashboard(viewer, academicYear, degraded);
-    }
+    // The branches the figures cover. For the college scope that is every
+    // branch; for the branch scope it is the caller's own branches.
+    const scopeBranchIds = await this.resolveScopeBranchIds(viewer, plan.scope, query, classScope);
 
-    return this.buildScopedDashboard(viewer, plan, scope, academicYear, degraded);
+    const studentWhere = this.buildStudentWhere(yearId, scopeBranchIds, query);
+    const offeringWhere = this.buildOfferingWhere(yearId, scopeBranchIds, query);
+
+    return {
+      academicYear,
+      yearId,
+      plan,
+      classScope,
+      scopeBranchIds,
+      studentWhere,
+      // A teacher only sees the students of their own subjects and classes.
+      scopedStudentWhere: classScope
+        ? { ...studentWhere, id: { in: classScope.studentIds } }
+        : studentWhere,
+      offeringWhere,
+      // A teacher only sees the offerings they are allocated.
+      scopedOfferingWhere: classScope
+        ? { ...offeringWhere, id: { in: classScope.offeringIds } }
+        : offeringWhere,
+    };
+  }
+
+  /** The student's branch and semester, used as the scope label for `own`. */
+  private async ownScopeLabel(studentId: string): Promise<string> {
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      select: { semester: true, branch: { select: { name: true } } },
+    });
+    return student ? `${student.branch.name} · Semester ${student.semester}` : 'Your result';
   }
 
   // ---------------------------------------------------------------------------
@@ -333,156 +596,6 @@ export class DashboardService {
         averagePercentage: Math.round(percentage * 10) / 10,
       },
       recentUploads: await this.recentUploads('own', viewer),
-      degraded,
-    };
-  }
-
-  // ---------------------------------------------------------------------------
-  // College / Branch / Class dashboards
-  // ---------------------------------------------------------------------------
-
-  private async buildScopedDashboard(
-    viewer: DashboardViewer,
-    plan: { scope: DashboardScopeKind },
-    query: DashboardScope,
-    academicYear: { id: string; year: string } | null,
-    degraded: string[]
-  ): Promise<DashboardResponse> {
-    const yearId = academicYear?.id;
-
-    // In the class scope the caller's world is narrowed to the subjects they
-    // are allocated and the classes they are class teacher for. This is
-    // resolved first because it also determines which branches are in scope.
-    const classScope =
-      plan.scope === 'class' ? await this.resolveClassScope(viewer, yearId) : undefined;
-
-    // The branches the figures cover. For the college scope that is every
-    // branch; for the branch scope it is the caller's own branches.
-    const scopeBranchIds = await this.resolveScopeBranchIds(viewer, plan.scope, query, classScope);
-
-    const studentWhere = this.buildStudentWhere(yearId, scopeBranchIds, query);
-    const offeringWhere = this.buildOfferingWhere(yearId, scopeBranchIds, query);
-
-    // A teacher only sees the students of their own subjects and classes.
-    const scopedStudentWhere = classScope
-      ? { ...studentWhere, id: { in: classScope.studentIds } }
-      : studentWhere;
-
-    // A teacher only sees the offerings they are allocated.
-    const scopedOfferingWhere = classScope
-      ? { ...offeringWhere, id: { in: classScope.offeringIds } }
-      : offeringWhere;
-
-    const [
-      totalStudents,
-      studentsByBranch,
-      studentsBySemester,
-      totalOfferings,
-      offeringsBySemester,
-      marks,
-    ] = await Promise.all([
-      this.prisma.student.count({ where: scopedStudentWhere }),
-      this.prisma.student.groupBy({
-        by: ['branchId'],
-        where: scopedStudentWhere,
-        _count: { _all: true },
-      }),
-      this.prisma.student.groupBy({
-        by: ['semester'],
-        where: scopedStudentWhere,
-        _count: { _all: true },
-      }),
-      this.prisma.subjectOffering.count({ where: scopedOfferingWhere }),
-      this.prisma.subjectOffering.groupBy({
-        by: ['semester'],
-        where: scopedOfferingWhere,
-        _count: { _all: true },
-      }),
-      this.prisma.mark.findMany({
-        where: this.buildMarkWhere(yearId, scopedStudentWhere),
-        select: {
-          studentId: true,
-          marksObtained: true,
-          maxMarks: true,
-          student: { select: { branchId: true } },
-        },
-      }),
-    ]);
-
-    // Pass percentage is computed per student, not per mark: a student has
-    // many marks, and counting mark rows would report one "student" per
-    // subject.
-    const perStudent = new Map<string, { obtained: number; max: number }>();
-    for (const mark of marks) {
-      if (!Number.isFinite(mark.maxMarks) || mark.maxMarks <= 0) continue;
-      const cur = perStudent.get(mark.studentId) ?? { obtained: 0, max: 0 };
-      cur.obtained += mark.marksObtained;
-      cur.max += mark.maxMarks;
-      perStudent.set(mark.studentId, cur);
-    }
-
-    let passed = 0;
-    let sumPct = 0;
-    let graded = 0;
-    for (const agg of perStudent.values()) {
-      if (agg.max <= 0) continue;
-      const pct = (agg.obtained / agg.max) * 100;
-      sumPct += pct;
-      graded += 1;
-      if (pct >= PASS_PERCENTAGE) passed += 1;
-    }
-    const passPercentage = graded > 0 ? (passed / graded) * 100 : 0;
-    const averagePercentage = graded > 0 ? sumPct / graded : 0;
-
-    // Marks uploaded vs pending, at the level of a subject offering.
-    const uploadStatus = await this.computeUploadStatus(scopedOfferingWhere, yearId);
-
-    const branchNames = await this.branchNames(scopeBranchIds);
-    const perBranch = await this.perBranchBreakdown(scopedStudentWhere, yearId);
-    const toppers = await this.toppersPerBranch(scopedStudentWhere, yearId);
-
-    const metrics = this.buildMetrics({
-      plan,
-      viewer,
-      totalStudents,
-      totalOfferings,
-      passPercentage,
-      averagePercentage,
-      uploadStatus,
-      classScope,
-    });
-
-    const sections = await this.buildSections({
-      plan,
-      viewer,
-      studentsByBranch,
-      studentsBySemester,
-      offeringsBySemester,
-      branchNames,
-      perBranch,
-      toppers,
-      uploadStatus,
-      yearId,
-      scopeBranchIds,
-      degraded,
-    });
-
-    const scopeLabel = await this.buildScopeLabel(plan.scope, scopeBranchIds);
-
-    return {
-      scope: plan.scope,
-      scopeLabel,
-      roleLabel: this.roleLabel(viewer),
-      academicYear,
-      metrics,
-      sections,
-      kpis: {
-        totalStudents,
-        passPercentage: round1(passPercentage),
-        totalSubjects: totalOfferings,
-        averagePercentage: round1(averagePercentage),
-      },
-      recentUploads: await this.recentUploads(plan.scope, viewer),
       degraded,
     };
   }
@@ -714,109 +827,14 @@ export class DashboardService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Per-branch pass percentage, used for the "pass percentage per branch"
-   * section.
-   */
-  private async perBranchBreakdown(
-    studentWhere: Prisma.StudentWhereInput,
-    yearId: string | undefined
-  ): Promise<Map<string, { students: number; passed: number; graded: number }>> {
-    const marks = await this.prisma.mark.findMany({
-      where: this.buildMarkWhere(yearId, studentWhere),
-      select: {
-        studentId: true,
-        marksObtained: true,
-        maxMarks: true,
-        student: { select: { branchId: true } },
-      },
-    });
-
-    const perStudent = new Map<string, { branchId: string; obtained: number; max: number }>();
-    for (const mark of marks) {
-      if (!Number.isFinite(mark.maxMarks) || mark.maxMarks <= 0) continue;
-      const cur = perStudent.get(mark.studentId) ?? {
-        branchId: mark.student.branchId,
-        obtained: 0,
-        max: 0,
-      };
-      cur.obtained += mark.marksObtained;
-      cur.max += mark.maxMarks;
-      perStudent.set(mark.studentId, cur);
-    }
-
-    const result = new Map<string, { students: number; passed: number; graded: number }>();
-    for (const agg of perStudent.values()) {
-      const entry = result.get(agg.branchId) ?? { students: 0, passed: 0, graded: 0 };
-      entry.students += 1;
-      entry.graded += 1;
-      if (agg.max > 0 && (agg.obtained / agg.max) * 100 >= PASS_PERCENTAGE) entry.passed += 1;
-      result.set(agg.branchId, entry);
-    }
-
-    return result;
-  }
-
-  /**
-   * The top student of each branch, by aggregate percentage.
-   */
-  private async toppersPerBranch(
-    studentWhere: Prisma.StudentWhereInput,
-    yearId: string | undefined
-  ): Promise<DashboardSectionItem[]> {
-    const marks = await this.prisma.mark.findMany({
-      where: this.buildMarkWhere(yearId, studentWhere),
-      select: {
-        studentId: true,
-        marksObtained: true,
-        maxMarks: true,
-        student: { select: { branchId: true, rollNo: true, name: true } },
-      },
-    });
-
-    const perStudent = new Map<
-      string,
-      { branchId: string; rollNo: string; name: string; obtained: number; max: number }
-    >();
-    for (const mark of marks) {
-      if (!Number.isFinite(mark.maxMarks) || mark.maxMarks <= 0) continue;
-      const cur = perStudent.get(mark.studentId) ?? {
-        branchId: mark.student.branchId,
-        rollNo: mark.student.rollNo,
-        name: mark.student.name,
-        obtained: 0,
-        max: 0,
-      };
-      cur.obtained += mark.marksObtained;
-      cur.max += mark.maxMarks;
-      perStudent.set(mark.studentId, cur);
-    }
-
-    const bestPerBranch = new Map<string, { name: string; rollNo: string; pct: number }>();
-    for (const agg of perStudent.values()) {
-      if (agg.max <= 0) continue;
-      const pct = (agg.obtained / agg.max) * 100;
-      const current = bestPerBranch.get(agg.branchId);
-      if (!current || pct > current.pct) {
-        bestPerBranch.set(agg.branchId, { name: agg.name, rollNo: agg.rollNo, pct });
-      }
-    }
-
-    const branchNames = await this.branchNames([...bestPerBranch.keys()]);
-    const items = [...bestPerBranch.entries()].map(([branchId, topper]) => ({
-      label: topper.name,
-      value: Math.round(topper.pct * 10) / 10,
-      secondary: `${branchNames.get(branchId) ?? 'Branch'} · ${topper.rollNo}`,
-    }));
-
-    items.sort((a, b) => b.value - a.value);
-    return items.slice(0, TOPPERS_PER_BRANCH);
-  }
-
-  /**
    * The average student percentage for each academic year, oldest first.
    *
    * This is the trend line: it says whether the college is improving or
    * slipping, which is what a Principal reads the dashboard for (§3.5).
+   *
+   * All years are read in one query and grouped in memory. The previous
+   * implementation issued one `mark.findMany` per academic year, which made
+   * the slowest dashboard block slower with every year of history.
    */
   private async performanceTrends(
     branchIds: string[] | undefined
@@ -828,42 +846,61 @@ export class DashboardService {
 
     if (years.length === 0) return [];
 
-    const items: DashboardSectionItem[] = [];
+    const marks = await this.prisma.mark.findMany({
+      where: {
+        isAbsent: false,
+        isWithheld: false,
+        student: {
+          isActive: true,
+          ...(branchIds && branchIds.length > 0 ? { branchId: { in: branchIds } } : {}),
+        },
+      },
+      select: {
+        academicYearId: true,
+        studentId: true,
+        marksObtained: true,
+        maxMarks: true,
+        // The student's own academic year is what the previous per-year query
+        // filtered on, so it has to be checked here too.
+        student: { select: { academicYearId: true } },
+      },
+    });
 
-    for (const year of years) {
-      const marks = await this.prisma.mark.findMany({
-        where: this.buildMarkWhere(year.id, this.buildStudentWhere(year.id, branchIds, {})),
-        select: { studentId: true, marksObtained: true, maxMarks: true },
-      });
+    // Aggregate per student first: a student has many mark rows (one per
+    // subject component), so averaging the rows would weight a student with
+    // more components more heavily and report the wrong trend.
+    const perYear = new Map<string, Map<string, { obtained: number; max: number }>>();
+    for (const mark of marks) {
+      if (!Number.isFinite(mark.maxMarks) || mark.maxMarks <= 0) continue;
+      if (mark.student.academicYearId !== mark.academicYearId) continue;
 
-      // Aggregate per student first: a student has many mark rows (one per
-      // subject component), so averaging the rows would weight a student with
-      // more components more heavily and report the wrong trend.
-      const perStudent = new Map<string, { obtained: number; max: number }>();
-      for (const mark of marks) {
-        if (!Number.isFinite(mark.maxMarks) || mark.maxMarks <= 0) continue;
-        const cur = perStudent.get(mark.studentId) ?? { obtained: 0, max: 0 };
-        cur.obtained += mark.marksObtained;
-        cur.max += mark.maxMarks;
-        perStudent.set(mark.studentId, cur);
-      }
+      const students =
+        perYear.get(mark.academicYearId) ?? new Map<string, { obtained: number; max: number }>();
+      const cur = students.get(mark.studentId) ?? { obtained: 0, max: 0 };
+      cur.obtained += mark.marksObtained;
+      cur.max += mark.maxMarks;
+      students.set(mark.studentId, cur);
+      perYear.set(mark.academicYearId, students);
+    }
 
+    return years.map((year) => {
+      const students = perYear.get(year.id);
       let sum = 0;
       let graded = 0;
-      for (const agg of perStudent.values()) {
-        if (agg.max <= 0) continue;
-        sum += (agg.obtained / agg.max) * 100;
-        graded += 1;
+      if (students) {
+        for (const agg of students.values()) {
+          if (agg.max <= 0) continue;
+          sum += (agg.obtained / agg.max) * 100;
+          graded += 1;
+        }
       }
 
-      items.push({
+      return {
         label: year.year,
         value: graded > 0 ? round1(sum / graded) : 0,
         secondary: graded > 0 ? `${graded} students graded` : 'No marks entered',
-      });
-    }
-
-    return items;
+      };
+    });
   }
 
   /**
@@ -1130,6 +1167,23 @@ export class DashboardService {
 
     const canReadAnalytics = viewer.permissions.includes(PERM.ANALYTICS_READ);
     const canReadOwnDepartment = viewer.permissions.includes(PERM.ANALYTICS_READ_OWN_DEPARTMENT);
+    const canReadTrends = canReadAnalytics || canReadOwnDepartment;
+    const canGovernance = plan.scope === 'college' && canReadAnalytics;
+
+    // The three optional lookups are independent, so they run together rather
+    // than one after another. The results are only *rendered* in the original
+    // order below, which keeps the section order stable.
+    const [trends, missing, publications] = await Promise.all([
+      canReadTrends
+        ? this.performanceTrends(input.scopeBranchIds)
+        : Promise.resolve<DashboardSectionItem[]>([]),
+      canGovernance
+        ? this.branchesWithMissingData(input.scopeBranchIds, input.yearId)
+        : Promise.resolve<DashboardSectionItem[]>([]),
+      canReadTrends
+        ? this.resultPublicationStatus(input.yearId, input.scopeBranchIds)
+        : Promise.resolve<PublicationResult>({ available: true, items: [] }),
+    ]);
 
     // Students per branch — the college-wide breakdown.
     if (plan.scope === 'college') {
@@ -1209,16 +1263,13 @@ export class DashboardService {
 
     // Performance trend across academic years — the Principal's headline
     // read: progress and status, nothing operational.
-    if (canReadAnalytics || canReadOwnDepartment) {
-      const trends = await this.performanceTrends(input.scopeBranchIds);
-      if (trends.length > 1) {
-        sections.push({
-          key: 'performance-trend',
-          title: 'Average performance by academic year',
-          kind: 'bar',
-          items: trends,
-        });
-      }
+    if (canReadTrends && trends.length > 1) {
+      sections.push({
+        key: 'performance-trend',
+        title: 'Average performance by academic year',
+        kind: 'bar',
+        items: trends,
+      });
     }
 
     // Toppers per branch.
@@ -1233,16 +1284,13 @@ export class DashboardService {
 
     // Departments with missing data — a governance concern, so it belongs to
     // the college-wide view.
-    if (plan.scope === 'college' && canReadAnalytics) {
-      const missing = await this.branchesWithMissingData(input.scopeBranchIds, input.yearId);
-      if (missing.length > 0) {
-        sections.push({
-          key: 'branches-with-missing-data',
-          title: 'Branches with missing data',
-          kind: 'list',
-          items: missing,
-        });
-      }
+    if (canGovernance && missing.length > 0) {
+      sections.push({
+        key: 'branches-with-missing-data',
+        title: 'Branches with missing data',
+        kind: 'list',
+        items: missing,
+      });
     }
 
     // Pending marks — the operational to-do list. Only a member who can act on
@@ -1257,8 +1305,7 @@ export class DashboardService {
     }
 
     // Result publication status per semester.
-    if (canReadAnalytics || canReadOwnDepartment) {
-      const publications = await this.resultPublicationStatus(input.yearId, input.scopeBranchIds);
+    if (canReadTrends) {
       if (!publications.available) {
         input.degraded.push('result-publication-status');
       } else if (publications.items.length > 0) {
@@ -1386,6 +1433,124 @@ export class DashboardService {
       degraded,
     };
   }
+}
+
+/**
+ * Pass rate and average percentage across a set of mark rows.
+ *
+ * The aggregate is computed per student, not per mark: a student has many
+ * marks, and counting mark rows would report one "student" per subject.
+ */
+function aggregateStudentMarks(
+  marks: Array<{ studentId: string; marksObtained: number; maxMarks: number }>
+): { passed: number; graded: number; passPercentage: number; averagePercentage: number } {
+  const perStudent = new Map<string, { obtained: number; max: number }>();
+  for (const mark of marks) {
+    if (!Number.isFinite(mark.maxMarks) || mark.maxMarks <= 0) continue;
+    const cur = perStudent.get(mark.studentId) ?? { obtained: 0, max: 0 };
+    cur.obtained += mark.marksObtained;
+    cur.max += mark.maxMarks;
+    perStudent.set(mark.studentId, cur);
+  }
+
+  let passed = 0;
+  let sumPct = 0;
+  let graded = 0;
+  for (const agg of perStudent.values()) {
+    if (agg.max <= 0) continue;
+    const pct = (agg.obtained / agg.max) * 100;
+    sumPct += pct;
+    graded += 1;
+    if (pct >= PASS_PERCENTAGE) passed += 1;
+  }
+
+  return {
+    passed,
+    graded,
+    passPercentage: graded > 0 ? (passed / graded) * 100 : 0,
+    averagePercentage: graded > 0 ? sumPct / graded : 0,
+  };
+}
+
+/**
+ * Per-branch pass figures.
+ *
+ * Derived from the mark rows the caller already read for the sections block,
+ * so it costs no extra query.
+ */
+function perBranchBreakdown(
+  marks: MarkWithStudent[]
+): Map<string, { students: number; passed: number; graded: number }> {
+  const perStudent = new Map<string, { branchId: string; obtained: number; max: number }>();
+  for (const mark of marks) {
+    if (!Number.isFinite(mark.maxMarks) || mark.maxMarks <= 0) continue;
+    const cur = perStudent.get(mark.studentId) ?? {
+      branchId: mark.student.branchId,
+      obtained: 0,
+      max: 0,
+    };
+    cur.obtained += mark.marksObtained;
+    cur.max += mark.maxMarks;
+    perStudent.set(mark.studentId, cur);
+  }
+
+  const result = new Map<string, { students: number; passed: number; graded: number }>();
+  for (const agg of perStudent.values()) {
+    const entry = result.get(agg.branchId) ?? { students: 0, passed: 0, graded: 0 };
+    entry.students += 1;
+    entry.graded += 1;
+    if (agg.max > 0 && (agg.obtained / agg.max) * 100 >= PASS_PERCENTAGE) entry.passed += 1;
+    result.set(agg.branchId, entry);
+  }
+
+  return result;
+}
+
+/**
+ * The top student of each branch, by aggregate percentage.
+ *
+ * Derived from the same mark rows as the rest of the sections block.
+ */
+function toppersFromMarks(
+  marks: MarkWithStudent[],
+  branchNames: Map<string, string>
+): DashboardSectionItem[] {
+  const perStudent = new Map<
+    string,
+    { branchId: string; rollNo: string; name: string; obtained: number; max: number }
+  >();
+  for (const mark of marks) {
+    if (!Number.isFinite(mark.maxMarks) || mark.maxMarks <= 0) continue;
+    const cur = perStudent.get(mark.studentId) ?? {
+      branchId: mark.student.branchId,
+      rollNo: mark.student.rollNo,
+      name: mark.student.name,
+      obtained: 0,
+      max: 0,
+    };
+    cur.obtained += mark.marksObtained;
+    cur.max += mark.maxMarks;
+    perStudent.set(mark.studentId, cur);
+  }
+
+  const bestPerBranch = new Map<string, { name: string; rollNo: string; pct: number }>();
+  for (const agg of perStudent.values()) {
+    if (agg.max <= 0) continue;
+    const pct = (agg.obtained / agg.max) * 100;
+    const current = bestPerBranch.get(agg.branchId);
+    if (!current || pct > current.pct) {
+      bestPerBranch.set(agg.branchId, { name: agg.name, rollNo: agg.rollNo, pct });
+    }
+  }
+
+  const items = [...bestPerBranch.entries()].map(([branchId, topper]) => ({
+    label: topper.name,
+    value: Math.round(topper.pct * 10) / 10,
+    secondary: `${branchNames.get(branchId) ?? 'Branch'} · ${topper.rollNo}`,
+  }));
+
+  items.sort((a, b) => b.value - a.value);
+  return items.slice(0, TOPPERS_PER_BRANCH);
 }
 
 /** Rounds to one decimal place. */

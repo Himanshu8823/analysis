@@ -101,6 +101,19 @@ export const ENDPOINTS = {
     GET: (id: string) => `/students/${id}`,
     UPDATE: (id: string) => `/students/${id}`,
     DELETE: (id: string) => `/students/${id}`,
+    /**
+     * The signed-in student's own record, result and class leaderboard.
+     *
+     * These resolve the student from the session, so there is no id in the
+     * path and no way to widen the window from the client (§3.7).
+     */
+    MY_RESULT: '/students/my-result',
+    MY_TOPPERS: '/students/my-toppers',
+    MY_STUDENT: '/students/my/student',
+    /**
+     * Provisions a login for a student the exam cell has just created.
+     */
+    PROVISION_LOGIN: (id: string) => `/students/${id}/provision-login`,
   },
   MARKS: {
     LIST: '/marks',
@@ -133,5 +146,13 @@ export const ENDPOINTS = {
   },
   DASHBOARD: {
     GET: '/dashboard',
+    /**
+     * The dashboard is fetched in independent parts so one slow block — the
+     * chart sections — never delays the page chrome or the KPI cards.
+     */
+    HEADER: '/dashboard/header',
+    METRICS: '/dashboard/metrics',
+    SECTIONS: '/dashboard/sections',
+    RECENT_UPLOADS: '/dashboard/recent-uploads',
   },
 } as const;

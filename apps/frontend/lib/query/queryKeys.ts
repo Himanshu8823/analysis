@@ -86,6 +86,15 @@ export const queryKeys = {
     all: () => ['students'] as const,
     list: (filters?: unknown) => ['students', 'list', filters ?? null] as const,
     detail: (id: string) => ['students', 'detail', id] as const,
+    /**
+     * The signed-in student's own result and class leaderboard.
+     *
+     * These are separate keys from the roster ones because they are scoped to
+     * the session, not to a filter — invalidating the roster must not throw
+     * away the student's own marksheet, and vice versa.
+     */
+    myResult: () => ['students', 'my-result'] as const,
+    myToppers: (limit?: number) => ['students', 'my-toppers', limit ?? null] as const,
   },
   marks: {
     all: () => ['marks'] as const,
@@ -99,7 +108,7 @@ export const queryKeys = {
   },
   reports: {
     all: () => ['reports'] as const,
-    list: () => ['reports', 'list'] as const,
+    list: (filters?: unknown) => ['reports', 'list', filters ?? null] as const,
     detail: (id: string) => ['reports', 'detail', id] as const,
   },
   toppers: {
@@ -117,5 +126,13 @@ export const queryKeys = {
   dashboard: {
     all: () => ['dashboard'] as const,
     get: () => ['dashboard', 'get'] as const,
+    /**
+     * One key per block. Each block is fetched and cached independently, so a
+     * slow chart query cannot invalidate or delay the KPI row.
+     */
+    header: () => ['dashboard', 'header'] as const,
+    metrics: () => ['dashboard', 'metrics'] as const,
+    sections: () => ['dashboard', 'sections'] as const,
+    recentUploads: () => ['dashboard', 'recent-uploads'] as const,
   },
 } as const;

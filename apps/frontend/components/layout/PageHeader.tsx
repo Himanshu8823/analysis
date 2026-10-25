@@ -1,10 +1,21 @@
 'use client';
 
+import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 import { type ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
 
 interface PageHeaderProps {
+  /**
+   * The "return to the list" link for a create/edit page.
+   *
+   * Rendered as plain link text above the heading, with an arrow beside it.
+   * It is deliberately *not* a button: going back is navigation, not an
+   * action on the page, and a pill here competes with the real primary
+   * action in the form below.
+   */
+  backLink?: { href: string; label: string };
   /**
    * Optional small uppercase label above the title. Rendered as a plain
    * inline text label (not a filled badge) so it stays subordinate to the
@@ -34,6 +45,7 @@ interface PageHeaderProps {
  *   padding is kept tight so the header does not eat the fold.
  */
 export function PageHeader({
+  backLink,
   eyebrow,
   title,
   description,
@@ -48,6 +60,18 @@ export function PageHeader({
       )}
     >
       <div className="flex min-w-0 flex-col gap-1">
+        {backLink ? (
+          <Link
+            href={backLink.href}
+            className="group mb-base inline-flex w-fit items-center gap-1.5 rounded-sm text-body-sm font-medium text-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          >
+            <ArrowLeft
+              className="size-4 shrink-0 transition-transform group-hover:-translate-x-0.5"
+              aria-hidden
+            />
+            {backLink.label}
+          </Link>
+        ) : null}
         {eyebrow ? (
           <span className="text-caption-strong uppercase tracking-wide text-muted">
             {eyebrow}

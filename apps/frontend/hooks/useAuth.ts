@@ -12,10 +12,15 @@ export interface SessionUser {
   id: string;
   email: string;
   name: string;
-  /** The primary role — what the sidebar and header badge gate on. */
+  /** The primary role — what the header badge shows. */
   role: string;
   /** Every role the member holds. */
   roles?: string[];
+  /**
+   * The member's effective permissions — the union of every role they hold.
+   * The navigation gates on these, never on a role name (§3.1).
+   */
+  permissions?: string[];
   branchId?: string | null;
   mustChangePassword: boolean;
 }

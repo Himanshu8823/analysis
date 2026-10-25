@@ -20,6 +20,7 @@ export interface StudentListFilters {
   branchId?: string;
   schemeId?: string;
   semester?: number;
+  academicYearId?: string;
   search?: string;
   page?: number;
   pageSize?: number;

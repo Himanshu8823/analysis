@@ -91,7 +91,9 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <SidebarProvider>
-      <AppSidebar role={user?.role} />
+      {/* The navigation gates on the member's effective permissions — the
+          union of every role they hold — not on a role name (§3.1). */}
+      <AppSidebar permissions={user?.permissions} />
       <SidebarInset className="min-w-0">
         <AppHeader />
         <div className="flex-1 px-4 py-6 md:px-6 md:py-8 lg:px-8">

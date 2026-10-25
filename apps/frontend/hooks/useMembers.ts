@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usersService, type MemberListFilters, type RoleSummary } from '@/lib/services/users.service';
 import { queryKeys } from '@/lib/query/queryKeys';
 import { invalidationRules } from '@/lib/query/invalidationRules';
@@ -12,6 +12,7 @@ export function useMembers(filters?: MemberListFilters) {
     queryKey: queryKeys.members.list(filters),
     queryFn: () => usersService.listMembers(filters),
     staleTime: 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 }
 

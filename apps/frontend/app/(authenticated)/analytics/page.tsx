@@ -30,6 +30,21 @@ export default function AnalyticsPage() {
   const { data: branchesData } = useBranches();
   const { data: schemesData } = useSchemes();
 
+  /**
+   * The filters are an *override*, not a precondition.
+   *
+   * The server resolves the caller's branch scope on its own
+   * (`ScopeService.resolveBranchFilter`): a college-scoped member such as
+   * the Principal or the Super Admin gets every branch, and a branch-scoped
+   * member such as the HOD gets their own branch — whether or not a
+   * `branchId` is sent. Leaving the filters empty therefore shows the
+   * caller exactly the cohort they are entitled to see, with no manual
+   * selection step.
+   *
+   * The same goes for the scheme and the semester: omitting them widens the
+   * cohort rather than blocking the screen, because §5 asks for the charts
+   * to be there on arrival.
+   */
   const filters: AnalyticsFilters = {
     branchId: branchId || undefined,
     schemeId: schemeId || undefined,
@@ -81,17 +96,17 @@ export default function AnalyticsPage() {
     <section className="flex flex-col gap-6 md:gap-8">
       <PageHeader
         title="Analytics"
-        description="Cohort-wide metrics and charts based on the selected branch, scheme, and semester."
+        description="Cohort-wide metrics and charts for the scope you are entitled to see. Narrow them with the filters below if you want a specific cohort."
       />
 
       <article className="cb-surface-card" aria-label="Filters">
         <div className="grid grid-cols-1 gap-base md:grid-cols-3">
           <Select
-            label="Branch"
+            label="Branch (optional)"
             value={branchId}
             onChange={(e) => setBranchId(e.target.value)}
           >
-            <option value="">Select branch</option>
+            <option value="">All branches in my scope</option>
             {branches.map((branch) => (
               <option key={branch.id} value={branch.id}>
                 {branch.code} · {branch.name}
@@ -99,11 +114,11 @@ export default function AnalyticsPage() {
             ))}
           </Select>
           <Select
-            label="Scheme"
+            label="Scheme (optional)"
             value={schemeId}
             onChange={(e) => setSchemeId(e.target.value)}
           >
-            <option value="">Select scheme</option>
+            <option value="">All schemes</option>
             {schemes.map((scheme) => (
               <option key={scheme.id} value={scheme.id}>
                 {scheme.name}
@@ -124,11 +139,7 @@ export default function AnalyticsPage() {
         </div>
       </article>
 
-      {!branchId || !schemeId ? (
-        <div className="rounded-lg border border-hairline bg-surface-soft p-base text-body-sm text-body">
-          Pick a branch and scheme to view analytics.
-        </div>
-      ) : isLoadingAny ? (
+      {isLoadingAny ? (
         <div className="flex items-center gap-sm text-body-sm text-body">
           <Spinner size={16} /> Loading analytics…
         </div>

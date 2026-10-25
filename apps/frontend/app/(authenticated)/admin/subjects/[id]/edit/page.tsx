@@ -1,7 +1,6 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { SubjectFormFields } from '@/components/forms/SubjectFormFields';
@@ -38,7 +37,7 @@ export default function EditSubjectPage() {
   if (isError || !subject) {
     return (
       <section className="flex flex-col gap-6 md:gap-8">
-        <PageHeader title="Edit subject" />
+        <PageHeader title="Edit subject" backLink={{ href: '/admin/subjects', label: 'Back to subjects' }} />
         <ErrorBanner message="Could not load this subject." retry={() => refetch()} />
       </section>
     );
@@ -49,14 +48,7 @@ export default function EditSubjectPage() {
       <PageHeader
         title={`Edit ${subject.code}`}
         description="Update the subject's details and assessment breakdown, then save."
-        actions={
-          <Button variant="secondary" asChild className="w-full md:w-auto">
-            <a href="/admin/subjects">
-              <ArrowLeft aria-hidden />
-              Back to subjects
-            </a>
-          </Button>
-        }
+        backLink={{ href: '/admin/subjects', label: 'Back to subjects' }}
       />
 
       <div className="rounded-xl border border-hairline bg-card p-4 md:p-6">

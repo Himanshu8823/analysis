@@ -41,13 +41,18 @@ export interface GenerateReportPayload {
   };
 }
 
+export interface ReportListFilters {
+  page?: number;
+  pageSize?: number;
+}
+
 export const reportsService = {
   generate: async (payload: GenerateReportPayload): Promise<Report> => {
     const res = await apiClient.post(ENDPOINTS.REPORTS.GENERATE, payload);
     return res.data.data;
   },
-  list: async (): Promise<ListResponse<Report>> => {
-    const res = await apiClient.get(ENDPOINTS.REPORTS.LIST);
+  list: async (filters?: ReportListFilters): Promise<ListResponse<Report>> => {
+    const res = await apiClient.get(ENDPOINTS.REPORTS.LIST, { params: filters });
     return res.data.data;
   },
   get: async (id: string): Promise<Report> => {

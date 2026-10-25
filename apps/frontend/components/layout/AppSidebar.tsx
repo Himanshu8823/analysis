@@ -16,6 +16,7 @@ import {
   KeyRound,
   BookOpen,
   ClipboardCheck,
+  ScrollText,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -32,10 +33,15 @@ import {
   SidebarRail,
 } from '@/components/ui/sidebar';
 import { NAV_ITEMS } from '@/lib/constants';
-import type { UserRole } from '@result-analysis/shared-types';
 
 interface AppSidebarProps {
-  role?: string;
+  /**
+   * The member's effective permissions — the union of every role they hold.
+   *
+   * The navigation gates on these, never on a role name (§3.1): a feature is
+   * reachable because the member holds the permission behind it.
+   */
+  permissions?: string[];
   /** Rendered in the footer — used for the signed-in user block. */
   footer?: React.ReactNode;
 }
@@ -51,62 +57,78 @@ const ICONS: Record<string, LucideIcon> = {
   folder: FolderCog,
   book: BookOpen,
   assignments: ClipboardCheck,
+  audit: ScrollText,
 };
-
-/**
- * Navigation gate for the main nav entries.
- *
- * The server is the authority and authorises purely by permission
- * (`@Permissions(...)`); this map only avoids advertising links the signed-in
- * user is unlikely to use, and may be more conservative than the server.
- *
- * The map overrides the `roles` field on `NAV_ITEMS` where an entry appears
- * in both. Entries absent from this map are shown to everyone.
- */
-const ROLE_ALLOW: Record<string, readonly UserRole[]> = {
-  '/upload': ['SUPER_ADMIN', 'ADMIN'] as readonly UserRole[],
-  '/admin/schemes': ['SUPER_ADMIN', 'ADMIN'] as readonly UserRole[],
-  '/admin/members': ['SUPER_ADMIN'] as readonly UserRole[],
-  // The exam cell (Admin) defines subjects; a HOD manages their own
-  // branch's subjects; the Super Admin reads the whole catalogue.
-  '/admin/subjects': ['SUPER_ADMIN', 'ADMIN', 'HOD'] as readonly UserRole[],
-  // Allocating the teaching staff is the HOD's job within their own branch;
-  // an Admin or the Super Admin can do it college-wide.
-  '/admin/assignments': ['SUPER_ADMIN', 'ADMIN', 'HOD'] as readonly UserRole[],
-};
-
-/**
- * The Admin section as a whole is Super-Admin territory — inviting members and
- * managing roles is a Super-Admin-only capability.
- */
-const ADMIN_SECTION_ROLES: readonly UserRole[] = ['SUPER_ADMIN'];
 
 /**
  * The Administration section.
  *
- * These are Super-Admin-only pages (branches, academic years, members,
- * schemes), so they live in their own section below the workspace rather than
- * in `NAV_ITEMS`. The whole section is gated by `ADMIN_SECTION_ROLES`.
+ * These are the governance screens — the ones that manage who may do what.
+ * They are listed separately because they are a distinct concern from the
+ * day-to-day workspace, and each still gates on its own permission.
  */
-const ADMIN_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
-  { href: '/admin/members', label: 'Members', icon: ShieldCheck },
-  { href: '/admin/roles', label: 'Roles & Permissions', icon: KeyRound },
-  { href: '/admin/schemes', label: 'Schemes', icon: FolderCog },
-  { href: '/admin/branches', label: 'Branches', icon: Building2 },
-  { href: '/admin/academic-years', label: 'Academic Years', icon: CalendarRange },
+const ADMIN_ITEMS: {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  permissions: string[];
+}[] = [
+  {
+    href: '/admin/members',
+    label: 'Members',
+    icon: ShieldCheck,
+    permissions: ['users:read'],
+  },
+  {
+    href: '/admin/roles',
+    label: 'Roles & Permissions',
+    icon: KeyRound,
+    permissions: ['rbac:read'],
+  },
+  {
+    href: '/admin/schemes',
+    label: 'Schemes',
+    icon: FolderCog,
+    permissions: ['schemes:read'],
+  },
+  {
+    href: '/admin/branches',
+    label: 'Branches',
+    icon: Building2,
+    permissions: ['branches:read'],
+  },
+  {
+    href: '/admin/academic-years',
+    label: 'Academic Years',
+    icon: CalendarRange,
+    permissions: ['academic_years:read'],
+  },
+  {
+    href: '/admin/audit-log',
+    label: 'Audit Log',
+    icon: ScrollText,
+    permissions: ['audit:read'],
+  },
 ];
 
-export function AppSidebar({ role, footer }: AppSidebarProps) {
+export function AppSidebar({ permissions, footer }: AppSidebarProps) {
   const pathname = usePathname();
 
-  const items = NAV_ITEMS.filter((item) => {
-    const allow = ROLE_ALLOW[item.href];
-    if (!allow) return true;
-    if (!role) return false;
-    return allow.includes(role as UserRole);
-  });
+  /**
+   * A screen is shown when the member holds *any* of its permissions.
+   *
+   * A member with no permissions at all — or a session that has not resolved
+   * yet — sees no workspace entries, because showing a link that the server
+   * will reject is worse than showing nothing.
+   */
+  const held = new Set(permissions ?? []);
 
-  const showAdminSection = !!role && ADMIN_SECTION_ROLES.includes(role as UserRole);
+  const can = (required: readonly string[]) =>
+    required.some((permission) => held.has(permission));
+
+  const items = NAV_ITEMS.filter((item) => can(item.permissions));
+  const adminItems = ADMIN_ITEMS.filter((item) => can(item.permissions));
+  const showAdminSection = adminItems.length > 0;
 
   return (
     <Sidebar collapsible="icon" className="border-r border-hairline">
@@ -144,7 +166,7 @@ export function AppSidebar({ role, footer }: AppSidebarProps) {
             <SidebarGroupLabel className="px-4">Administration</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {ADMIN_ITEMS.map((item) => {
+                {adminItems.map((item) => {
                   const Icon = item.icon;
                   const active = isActivePath(pathname, item.href);
                   return (

@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Loader2, CheckCircle2, AlertCircle, FileCheck2 } from 'lucide-react';
 import { FileUploader } from '@/components/forms/FileUploader';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { Pagination } from '@/components/forms/Pagination';
 import { Select } from '@/components/forms/Select';
 import { Spinner } from '@/components/feedback/Spinner';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
@@ -11,6 +12,7 @@ import { useCreateUploadJob, useUploadJob, useConfirmUpload } from '@/hooks/useU
 import { useBranches } from '@/hooks/useBranches';
 import { useSchemes } from '@/hooks/useSchemes';
 import { useAcademicYears } from '@/hooks/useAcademic';
+import { useTablePagination } from '@/hooks/useTablePagination';
 import { formatters } from '@/lib/utils/formatters';
 import type {
   ExtractedMarkRow,
@@ -224,6 +226,11 @@ interface JobStatusCardProps {
 }
 
 function JobStatusCard({ job, rows, parseErrors, onConfirm, confirming }: JobStatusCardProps) {
+  const { page, setPage, pageSize, setPageSize, total, pageItems } = useTablePagination(rows, {
+    pageSize: 10,
+    resetKey: job.id,
+  });
+
   return (
     <article className="cb-surface-card flex flex-col gap-base" aria-labelledby="job-status-title">
       <header className="flex flex-col gap-xs">
@@ -271,7 +278,7 @@ function JobStatusCard({ job, rows, parseErrors, onConfirm, confirming }: JobSta
                 </tr>
               </thead>
               <tbody>
-                {rows.slice(0, 8).map((row, idx) => (
+                {pageItems.map((row, idx) => (
                   <tr key={`${row.rollNo}-${row.subjectCode}-${row.examType}-${idx}`} className="border-t border-hairline">
                     <td className="num px-base py-sm text-ink">{row.rollNo}</td>
                     <td className="px-base py-sm text-ink">{row.subjectCode}</td>
@@ -284,9 +291,14 @@ function JobStatusCard({ job, rows, parseErrors, onConfirm, confirming }: JobSta
               </tbody>
             </table>
           </div>
-          <p className="text-caption text-muted">
-            Showing {Math.min(rows.length, 8)} of {rows.length} extracted rows.
-          </p>
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            className="border-t border-hairline pt-sm"
+          />
           <div className="flex flex-col gap-sm md:flex-row md:items-center md:justify-end">
             <button
               type="button"

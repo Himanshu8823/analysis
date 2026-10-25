@@ -99,6 +99,37 @@ export interface DashboardUpload {
 }
 
 /**
+ * The scope block alone.
+ *
+ * `GET /dashboard/header` returns just this, so the page chrome (title,
+ * description, upload action) can render before any of the heavier figures
+ * have been computed.
+ */
+export interface DashboardHeader {
+  scope: DashboardScopeKind;
+  scopeLabel: string;
+  roleLabel: string;
+  academicYear: { id: string; year: string } | null;
+}
+
+/** `GET /dashboard/metrics` — the KPI cards and their legacy mirrors. */
+export interface DashboardMetricsResponse {
+  metrics: DashboardMetric[];
+  kpis: DashboardResponse['kpis'];
+}
+
+/** `GET /dashboard/sections` — the chart blocks and any degraded sources. */
+export interface DashboardSectionsResponse {
+  sections: DashboardSection[];
+  degraded: string[];
+}
+
+/** `GET /dashboard/recent-uploads` — the latest upload jobs. */
+export interface DashboardUploadsResponse {
+  recentUploads: DashboardUpload[];
+}
+
+/**
  * The identity the dashboard is computed for.
  *
  * Resolved once per request from the database rather than from the JWT, because

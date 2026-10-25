@@ -1,7 +1,6 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { SchemeFormFields } from '@/components/forms/SchemeFormFields';
@@ -37,7 +36,7 @@ export default function EditSchemePage() {
   if (isError || !scheme) {
     return (
       <section className="flex flex-col gap-6 md:gap-8">
-        <PageHeader title="Edit scheme" />
+        <PageHeader title="Edit scheme" backLink={{ href: '/admin/schemes', label: 'Back to schemes' }} />
         <ErrorBanner message="Could not load this scheme." retry={() => refetch()} />
       </section>
     );
@@ -48,14 +47,7 @@ export default function EditSchemePage() {
       <PageHeader
         title={`Edit ${scheme.name}`}
         description="Update the scheme's rules and calculator strategy, then save."
-        actions={
-          <Button variant="secondary" asChild className="w-full md:w-auto">
-            <a href="/admin/schemes">
-              <ArrowLeft aria-hidden />
-              Back to schemes
-            </a>
-          </Button>
-        }
+        backLink={{ href: '/admin/schemes', label: 'Back to schemes' }}
       />
 
       <div className="rounded-xl border border-hairline bg-card p-4 md:p-6">

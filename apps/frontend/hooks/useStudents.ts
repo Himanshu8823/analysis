@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   studentsService,
   type Student,
@@ -18,6 +18,7 @@ export function useStudents(filters?: StudentListFilters) {
     queryKey: queryKeys.students.list(filters),
     queryFn: () => studentsService.list(filters),
     staleTime: 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 }
 

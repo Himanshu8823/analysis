@@ -265,11 +265,39 @@ export class UploadService {
         isActive: true,
         subject: { code: { in: subjectCodes }, isActive: true },
       },
-      select: { id: true, subject: { select: { code: true } } },
+      select: {
+        id: true,
+        subject: { select: { code: true, components: true } },
+      },
     });
     const offeringsByCode = new Map<string, { id: string }>(
       offerings.map((o) => [o.subject.code, { id: o.id }])
     );
+
+    /**
+     * The maximum for each component comes from the *subject's own*
+     * configuration, not from the parser.
+     *
+     * The statement prints the marks but never the maximum, so the parser
+     * has to assume one. The subject is what the college set up for the
+     * scheme, so it is the authority: a subject configured with a different
+     * split is recorded correctly, and a mark that exceeds the configured
+     * maximum is reported instead of being written.
+     */
+    const componentMaxByCode = new Map<string, Map<string, number>>();
+    for (const offering of offerings) {
+      const configured = offering.subject.components as unknown;
+      if (!Array.isArray(configured)) continue;
+
+      const byType = new Map<string, number>();
+      for (const entry of configured) {
+        const component = entry as { type?: unknown; maxMarks?: unknown };
+        if (typeof component.type !== 'string') continue;
+        if (typeof component.maxMarks !== 'number') continue;
+        byType.set(component.type, component.maxMarks);
+      }
+      if (byType.size > 0) componentMaxByCode.set(offering.subject.code, byType);
+    }
 
     // Resolve students by rollNo within the chosen academic year.
     const rollNos = [...new Set(rows.map((r) => r.rollNo))];
@@ -298,6 +326,23 @@ export class UploadService {
         });
         continue;
       }
+
+      /**
+       * The subject's own maximum wins over the parser's assumption, and a
+       * mark that exceeds it is reported rather than written — a mark above
+       * the maximum would corrupt every percentage the system derives.
+       */
+      const configuredMax = componentMaxByCode.get(row.subjectCode)?.get(row.examType);
+      const maxMarks = configuredMax ?? row.maxMarks;
+
+      if (configuredMax !== undefined && row.marksObtained > configuredMax) {
+        skipped.push({
+          reason: `mark ${row.marksObtained} exceeds the maximum of ${configuredMax} for ${row.subjectCode} ${row.examType}`,
+          row,
+        });
+        continue;
+      }
+
       ops.push(
         this.prisma.mark.upsert({
           where: {
@@ -313,14 +358,14 @@ export class UploadService {
             subjectOfferingId: offering.id,
             examType: row.examType,
             marksObtained: row.marksObtained,
-            maxMarks: row.maxMarks,
+            maxMarks,
             isAbsent: row.isAbsent ?? false,
             academicYearId: ctx.academicYearId,
             createdBy: confirmedBy,
           },
           update: {
             marksObtained: row.marksObtained,
-            maxMarks: row.maxMarks,
+            maxMarks,
             isAbsent: row.isAbsent ?? false,
             updatedBy: confirmedBy,
           },

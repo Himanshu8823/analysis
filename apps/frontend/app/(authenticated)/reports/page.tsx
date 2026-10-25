@@ -1,12 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Download, FileSpreadsheet, Loader2, FileCheck2, AlertCircle } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/forms/DataTable';
+import { Pagination } from '@/components/forms/Pagination';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
-import { Spinner } from '@/components/feedback/Spinner';
 import { Select } from '@/components/forms/Select';
 import {
   useGenerateReport,
@@ -56,6 +56,8 @@ export default function ReportsPage() {
   const [schemeId, setSchemeId] = useState('');
   const [semester, setSemester] = useState(1);
   const [academicYearId, setAcademicYearId] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [reportType, setReportType] = useState<ReportType>('STUDENT_WISE');
 
   const { data: branchesData } = useBranches();
@@ -63,13 +65,23 @@ export default function ReportsPage() {
   const { data: academicYears } = useAcademicYears();
 
   const { mutate: generate, isPending: generating } = useGenerateReport();
-  const { data: reportsData, isLoading: loadingList, isError, refetch } = useReports();
+  const { data: reportsData, isLoading: loadingList, isError, refetch } = useReports({
+    page,
+    pageSize,
+  });
   const { mutate: download, isPending: downloading } = useDownloadReport();
 
   const branches = branchesData ?? [];
   const schemes = schemesData ?? [];
   const years = academicYears ?? [];
   const reports = reportsData?.items ?? [];
+  const meta = reportsData?.meta;
+
+  useEffect(() => {
+    if (meta && meta.totalPages > 0 && page > meta.totalPages) {
+      setPage(meta.totalPages);
+    }
+  }, [meta, page]);
 
   // The backend requires an academic year for every report scope.
   const activeYear = years.find((y) => y.isActive) ?? years[0];
@@ -79,15 +91,18 @@ export default function ReportsPage() {
 
   const onGenerate = () => {
     if (!scopeReady) return;
-    generate({
-      type: reportType,
-      filters: {
-        branchId,
-        schemeId,
-        semester,
-        academicYearId: effectiveAcademicYearId,
+    generate(
+      {
+        type: reportType,
+        filters: {
+          branchId,
+          schemeId,
+          semester,
+          academicYearId: effectiveAcademicYearId,
+        },
       },
-    });
+      { onSuccess: () => setPage(1) },
+    );
   };
 
   const columns: DataTableColumn<Report>[] = [
@@ -254,24 +269,34 @@ export default function ReportsPage() {
         <h2 id="recent-reports-title" className="font-display text-title-md text-ink">
           Recent reports
         </h2>
-        {loadingList ? (
-          <div className="flex items-center gap-sm text-body-sm text-body">
-            <Spinner size={16} /> Loading reports…
-          </div>
-        ) : (
-          <DataTable
-            columns={columns}
-            rows={reports}
-            keyExtractor={(row) => row.id}
-            emptyState={
+        <DataTable
+          columns={columns}
+          rows={reports}
+          keyExtractor={(row) => row.id}
+          loading={loadingList}
+          emptyState={
               <EmptyState
                 title="No reports generated yet"
                 description="Configure a report above and click Generate to create your first multi-sheet Excel."
                 icon={<FileCheck2 className="h-8 w-8" aria-hidden />}
               />
             }
-          />
-        )}
+            footer={
+              !loadingList && meta && meta.total > 0 ? (
+                <Pagination
+                  page={page}
+                  pageSize={pageSize}
+                  total={meta.total}
+                  onPageChange={setPage}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size);
+                    setPage(1);
+                  }}
+                />
+              ) : undefined
+            }
+        />
+
         {reports.some((r) => r.status === 'FAILED') ? (
           <div className="flex items-start gap-sm rounded-md border border-hairline bg-surface-soft px-base py-sm text-body-sm text-semantic-down">
             <AlertCircle className="mt-0.5 h-4 w-4" aria-hidden />

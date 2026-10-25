@@ -1,7 +1,6 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { StudentFormFields } from '@/components/forms/StudentFormFields';
@@ -32,14 +31,7 @@ export default function NewStudentPage() {
       <PageHeader
         title="Add student"
         description="Fill in the student's details, then save to add them to the list."
-        actions={
-          <Button variant="secondary" asChild className="w-full md:w-auto">
-            <a href="/students">
-              <ArrowLeft aria-hidden />
-              Back to students
-            </a>
-          </Button>
-        }
+        backLink={{ href: '/students', label: 'Back to students' }}
       />
 
       <div className="rounded-xl border border-hairline bg-card p-4 md:p-6">

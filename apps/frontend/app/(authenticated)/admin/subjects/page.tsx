@@ -6,6 +6,7 @@ import { Pencil, Plus, Trash2, BookOpen, SearchX, X, Layers } from 'lucide-react
 
 import { DataTable, type DataTableColumn } from '@/components/forms/DataTable';
 import { FilterBar } from '@/components/forms/FilterBar';
+import { Pagination } from '@/components/forms/Pagination';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,6 +24,7 @@ import {
   useDeleteSubject,
   useSubjectCatalogueOfferings,
 } from '@/hooks/useSubjects';
+import { useTablePagination } from '@/hooks/useTablePagination';
 import { useBranches } from '@/hooks/useBranches';
 import { useSchemes } from '@/hooks/useSchemes';
 import {
@@ -128,6 +130,11 @@ export default function AdminSubjectsPage() {
     branchFilter !== 'all' ||
     schemeFilter !== 'all' ||
     semesterFilter !== 'all';
+
+  const { page, setPage, pageSize, setPageSize, total, pageItems } = useTablePagination(
+    visibleSubjects,
+    { resetKey: `${search}|${branchFilter}|${schemeFilter}|${semesterFilter}` },
+  );
 
   const clearFilters = () => {
     setSearch('');
@@ -322,16 +329,12 @@ export default function AdminSubjectsPage() {
             <ErrorBanner message="Could not load subjects." retry={() => refetch()} />
           ) : null}
 
-          {isLoading ? (
-            <div className="flex items-center gap-sm text-body-sm text-body">
-              <Spinner size={16} /> Loading subjects…
-            </div>
-          ) : (
-            <DataTable
-              columns={columns}
-              rows={visibleSubjects}
-              keyExtractor={(row) => row.id}
-              emptyState={
+          <DataTable
+            columns={columns}
+            rows={pageItems}
+            keyExtractor={(row) => row.id}
+            loading={isLoading}
+            emptyState={
                 hasActiveFilters ? (
                   // Filtered-empty: the subjects exist but are hidden by the
                   // filters, so the state explains the cause and offers a
@@ -367,8 +370,18 @@ export default function AdminSubjectsPage() {
                   />
                 )
               }
-            />
-          )}
+              footer={
+                !isLoading && total > 0 ? (
+                  <Pagination
+                    page={page}
+                    pageSize={pageSize}
+                    total={total}
+                    onPageChange={setPage}
+                    onPageSizeChange={setPageSize}
+                  />
+                ) : undefined
+              }
+          />
         </>
       ) : (
         <OfferingsTab

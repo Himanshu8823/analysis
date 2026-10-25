@@ -9,229 +9,400 @@ import {
   FileSpreadsheet,
   Upload,
   ArrowRight,
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
+  Info,
 } from 'lucide-react';
 
-import { useDashboard } from '@/hooks/useDashboard';
+import {
+  useDashboardHeader,
+  useDashboardMetrics,
+  useDashboardSections,
+  useDashboardRecentUploads,
+} from '@/hooks/useDashboard';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { DashboardSectionCard } from '@/components/charts/DashboardSectionCard';
 import { formatters } from '@/lib/utils/formatters';
 import { cn } from '@/lib/utils';
+import type { DashboardMetric } from '@/lib/services/dashboard.service';
 
-interface Kpi {
-  label: string;
-  value: string;
-  helper: string;
-  icon: typeof Users;
-  accent: string;
-}
-
+/**
+ * The dashboard renders four independent blocks: the scope header, the KPI
+ * row, the chart sections and the upload feed.
+ *
+ * Each block has its own query and its own skeleton. That is deliberate: the
+ * page used to wait for one composite request, so a slow chart query held the
+ * entire page behind a single skeleton. Now the chrome paints immediately and
+ * every block fills in as soon as its own data arrives — a slow block never
+ * blocks a fast one.
+ */
 export default function DashboardPage() {
-  const { data, isLoading, isError, refetch } = useDashboard();
+  const header = useDashboardHeader();
+  const metrics = useDashboardMetrics();
+  const sections = useDashboardSections();
+  const uploads = useDashboardRecentUploads();
 
-  if (isLoading) {
-    return <DashboardSkeleton />;
-  }
-
-  if (isError) {
-    return (
-      <ErrorBanner
-        message="We could not load your dashboard. Please try again."
-        retry={() => refetch()}
-      />
-    );
-  }
-
-  const kpis: Kpi[] = [
-    {
-      label: 'Total students',
-      value: String(data?.kpis.totalStudents ?? 0),
-      helper: 'Enrolled this academic year',
-      icon: Users,
-      accent: 'text-primary',
-    },
-    {
-      label: 'Pass rate',
-      value: formatters.percentage(data?.kpis.passPercentage ?? 0, 1),
-      helper: 'Across all branches',
-      icon: Percent,
-      accent: 'text-semantic-up',
-    },
-    {
-      label: 'Subjects',
-      value: String(data?.kpis.totalSubjects ?? 0),
-      helper: 'Active in the current scheme',
-      icon: BookOpen,
-      accent: 'text-accent-yellow',
-    },
-    {
-      label: 'Average score',
-      value: formatters.percentage(data?.kpis.averagePercentage ?? 0, 1),
-      helper: 'Class average across subjects',
-      icon: TrendingUp,
-      accent: 'text-primary',
-    },
-  ];
-
-  const uploads = data?.recentUploads ?? [];
+  const scope = header.data?.scope;
+  const isStudent = scope === 'own';
 
   return (
     <div className="flex flex-col gap-6 md:gap-8">
-      {/* Page intro */}
-      <PageHeader
-        title="Overview"
-        description={
-          data?.academicYear?.year
-            ? `Result analysis activity for the ${data.academicYear.year} academic year.`
-            : 'Result analysis activity across branches and schemes.'
-        }
-        actions={
-          <Button asChild className="w-full md:w-auto">
-            <Link href="/upload">
-              <Upload aria-hidden />
-              Upload results
-            </Link>
-          </Button>
-        }
-      />
+      <PageHeader title="Overview" />
 
-      {/* KPI row */}
+      {header.isError ? (
+        <ErrorBanner
+          message="We could not load your dashboard scope. Please try again."
+          retry={() => header.refetch()}
+        />
+      ) : null}
+
+      {/* Degraded data sources */}
+      {sections.data?.degraded && sections.data.degraded.length > 0 ? (
+        <div
+          role="status"
+          className="flex items-start gap-3 rounded-xl border border-hairline bg-surface-soft p-4 text-body-sm text-body"
+        >
+          <Info className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
+          <p>
+            Some figures could not be computed and are omitted:{' '}
+            <span className="font-semibold">{sections.data.degraded.join(', ')}</span>.
+          </p>
+        </div>
+      ) : null}
+
+      {/* Metric row */}
       <section
         aria-label="Key performance indicators"
+        aria-busy={metrics.isPending}
         className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4"
       >
-        {kpis.map((kpi) => {
-          const Icon = kpi.icon;
-          return (
-            <article
-              key={kpi.label}
-              className="flex flex-col gap-4 rounded-xl border border-hairline bg-card p-6 transition-colors hover:bg-surface-soft"
-              aria-label={`${kpi.label}: ${kpi.value}`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <span className="text-caption-strong uppercase tracking-wide text-muted">
-                  {kpi.label}
-                </span>
-                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-strong">
-                  <Icon className={cn('size-4', kpi.accent)} aria-hidden />
-                </span>
-              </div>
-              <p className="num font-display text-display-sm text-ink">{kpi.value}</p>
-              <p className="text-caption text-muted">{kpi.helper}</p>
-            </article>
-          );
-        })}
-      </section>
-
-      {/* Recent uploads */}
-      <section
-        aria-labelledby="recent-uploads-title"
-        className="overflow-hidden rounded-xl border border-hairline bg-card"
-      >
-        <header className="flex items-center justify-between gap-4 border-b border-hairline px-6 py-5">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-strong">
-              <FileSpreadsheet className="size-4 text-primary" aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <h3
-                id="recent-uploads-title"
-                className="font-display text-title-md text-ink"
-              >
-                Recent uploads
-              </h3>
-              <p className="text-caption text-muted">
-                The latest result files processed by the system
-              </p>
-            </div>
-          </div>
-          {uploads.length > 0 ? (
-            <Button asChild variant="ghost" size="sm" className="shrink-0">
-              <Link href="/upload">
-                View all
-                <ArrowRight aria-hidden />
-              </Link>
-            </Button>
-          ) : null}
-        </header>
-
-        {uploads.length > 0 ? (
-          <>
-            {/* Table on tablet and up; stacked rows on mobile. */}
-            <table className="hidden w-full text-left md:table">
-              <thead>
-                <tr className="border-b border-hairline bg-surface-soft">
-                  <th scope="col" className="px-6 py-3 text-caption-strong uppercase tracking-wide text-muted">
-                    File
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-caption-strong uppercase tracking-wide text-muted">
-                    Status
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-right text-caption-strong uppercase tracking-wide text-muted">
-                    Uploaded
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {uploads.map((upload) => (
-                  <tr
-                    key={upload.id}
-                    className="border-b border-hairline last:border-b-0 transition-colors hover:bg-surface-soft"
-                  >
-                    <td className="px-6 py-4">
-                      <span className="block max-w-md truncate text-body-sm font-semibold text-ink">
-                        {upload.fileName}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <UploadStatusBadge status={upload.status} />
-                    </td>
-                    <td className="num whitespace-nowrap px-6 py-4 text-right text-body-sm text-muted">
-                      {formatters.date(upload.createdAt, 'long')}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <ul className="divide-y divide-hairline md:hidden">
-              {uploads.map((upload) => (
-                <li key={upload.id} className="flex flex-col gap-2 px-6 py-4">
-                  <p className="truncate text-body-sm font-semibold text-ink">
-                    {upload.fileName}
-                  </p>
-                  <div className="flex items-center justify-between gap-3">
-                    <UploadStatusBadge status={upload.status} />
-                    <span className="num whitespace-nowrap text-caption text-muted">
-                      {formatters.date(upload.createdAt, 'long')}
-                    </span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : (
-          <div className="p-6">
-            <EmptyState
-              title="No uploads yet"
-              description="Upload your first Excel or PDF result file to populate the dashboard."
-              icon={<FileSpreadsheet className="size-6" aria-hidden />}
-              action={
-                <Button asChild>
-                  <Link href="/upload">
-                    <Upload aria-hidden />
-                    Upload results
-                  </Link>
-                </Button>
-              }
+        {metrics.isPending ? (
+          <MetricSkeletons />
+        ) : metrics.isError ? (
+          <div className="md:col-span-2 lg:col-span-4">
+            <ErrorBanner
+              message="We could not load your key figures."
+              retry={() => metrics.refetch()}
             />
           </div>
+        ) : (
+          metrics.data.metrics.map((metric) => <MetricCard key={metric.key} metric={metric} />)
         )}
       </section>
+
+      {/* Charts — each block is rendered by its own card; the section-level
+          skeleton only covers the first paint. */}
+      <section
+        aria-label="Charts"
+        aria-busy={sections.isPending}
+        className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-2"
+      >
+        {sections.isPending ? (
+          <SectionSkeletons />
+        ) : sections.isError ? (
+          <div className="lg:col-span-2">
+            <ErrorBanner
+              message="We could not load your charts."
+              retry={() => sections.refetch()}
+            />
+          </div>
+        ) : (
+          sections.data.sections.map((section) => (
+            <DashboardSectionCard key={section.key} section={section} />
+          ))
+        )}
+      </section>
+
+      {/* Recent uploads — students never see the upload feed, so the section
+          is not rendered for them once the scope is known. */}
+      {isStudent ? null : (
+        <section
+          aria-labelledby="recent-uploads-title"
+          aria-busy={uploads.isPending}
+          className="overflow-hidden rounded-xl border border-hairline bg-card"
+        >
+          <header className="flex items-center justify-between gap-4 border-b border-hairline px-6 py-5">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-strong">
+                <FileSpreadsheet className="size-4 text-primary" aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <h3
+                  id="recent-uploads-title"
+                  className="font-display text-title-md text-ink"
+                >
+                  Recent uploads
+                </h3>
+                <p className="text-caption text-muted">
+                  The latest result files processed by the system
+                </p>
+              </div>
+            </div>
+            {uploads.data && uploads.data.recentUploads.length > 0 ? (
+              <Button asChild variant="ghost" size="sm" className="shrink-0">
+                <Link href="/upload">
+                  View all
+                  <ArrowRight aria-hidden />
+                </Link>
+              </Button>
+            ) : null}
+          </header>
+
+          {uploads.isPending ? (
+            <UploadsSkeleton />
+          ) : uploads.isError ? (
+            <div className="p-6">
+              <ErrorBanner
+                message="We could not load recent uploads."
+                retry={() => uploads.refetch()}
+              />
+            </div>
+          ) : uploads.data.recentUploads.length > 0 ? (
+            <UploadsTable uploads={uploads.data.recentUploads} />
+          ) : (
+            <div className="p-6">
+              <EmptyState
+                title="No uploads yet"
+                description="Upload your first Excel or PDF result file to populate the dashboard."
+                icon={<FileSpreadsheet className="size-6" aria-hidden />}
+                action={
+                  <Button asChild>
+                    <Link href="/upload">
+                      <Upload aria-hidden />
+                      Upload results
+                    </Link>
+                  </Button>
+                }
+              />
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
+}
+
+/**
+ * One metric card.
+ *
+ * The metric's own `trend` decides the icon and the colour, so the card
+ * reads the same way for every role — a "pending" metric trends down, a
+ * "pass percentage" metric trends up.
+ */
+function MetricCard({ metric }: { metric: DashboardMetric }) {
+  const Icon = metricIcon(metric.key);
+  const TrendIcon =
+    metric.trend === 'up' ? ArrowUpRight : metric.trend === 'down' ? ArrowDownRight : Minus;
+
+  const trendTone =
+    metric.trend === 'up'
+      ? 'text-semantic-up'
+      : metric.trend === 'down'
+        ? 'text-semantic-down'
+        : 'text-muted';
+
+  return (
+    <article
+      className="flex flex-col gap-4 rounded-xl border border-hairline bg-card p-6 transition-colors hover:bg-surface-soft"
+      aria-label={`${metric.label}: ${formatMetricValue(metric)}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <span className="text-caption-strong uppercase tracking-wide text-muted">
+          {metric.label}
+        </span>
+        <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-strong">
+          <Icon className="size-4 text-primary" aria-hidden />
+        </span>
+      </div>
+      <p className="num font-display text-display-sm text-ink">
+        {formatMetricValue(metric)}
+      </p>
+      {metric.hint || metric.trend ? (
+        <p className="flex items-center gap-1.5 text-caption text-muted">
+          {metric.trend ? (
+            <TrendIcon className={cn('size-3.5 shrink-0', trendTone)} aria-hidden />
+          ) : null}
+          {metric.hint}
+        </p>
+      ) : null}
+    </article>
+  );
+}
+
+/** Four metric-shaped placeholders, matching the desktop grid. */
+function MetricSkeletons() {
+  return (
+    <>
+      {[0, 1, 2, 3].map((i) => (
+        <div
+          key={i}
+          className="flex flex-col gap-4 rounded-xl border border-hairline bg-card p-6"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="size-9 rounded-full" />
+          </div>
+          <Skeleton className="h-8 w-20" />
+          <Skeleton className="h-3 w-32" />
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** Two chart-shaped placeholders, matching the desktop two-column grid. */
+function SectionSkeletons() {
+  return (
+    <>
+      {[0, 1].map((i) => (
+        <div key={i} className="flex flex-col gap-6 rounded-xl border border-hairline bg-card p-6">
+          <Skeleton className="h-5 w-48" />
+          <Skeleton className="h-56 w-full" />
+        </div>
+      ))}
+    </>
+  );
+}
+
+/**
+ * The recent-uploads block: a header row and three rows on tablet and up, and
+ * stacked rows on mobile, so the loading shape matches the loaded shape.
+ */
+function UploadsSkeleton() {
+  return (
+    <>
+      <div className="hidden md:block">
+        <div className="grid grid-cols-3 gap-4 border-b border-hairline bg-surface-soft px-6 py-3">
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="ml-auto h-3 w-20" />
+        </div>
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="grid grid-cols-3 items-center gap-4 border-b border-hairline px-6 py-4 last:border-b-0"
+          >
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="ml-auto h-4 w-24" />
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-col gap-4 px-6 py-4 md:hidden">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex flex-col gap-2">
+            <Skeleton className="h-4 w-48" />
+            <div className="flex items-center justify-between gap-3">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-20" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/** The known upload feed, once loaded. */
+function UploadsTable({
+  uploads,
+}: {
+  uploads: Array<{ id: string; fileName: string; status: string; createdAt: string }>;
+}) {
+  return (
+    <>
+      {/* Table on tablet and up; stacked rows on mobile. */}
+      <table className="hidden w-full text-left md:table">
+        <thead>
+          <tr className="border-b border-hairline bg-surface-soft">
+            <th scope="col" className="px-6 py-3 text-caption-strong uppercase tracking-wide text-muted">
+              File
+            </th>
+            <th scope="col" className="px-6 py-3 text-caption-strong uppercase tracking-wide text-muted">
+              Status
+            </th>
+            <th scope="col" className="px-6 py-3 text-right text-caption-strong uppercase tracking-wide text-muted">
+              Uploaded
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {uploads.map((upload) => (
+            <tr
+              key={upload.id}
+              className="border-b border-hairline last:border-b-0 transition-colors hover:bg-surface-soft"
+            >
+              <td className="px-6 py-4">
+                <span className="block max-w-md truncate text-body-sm font-semibold text-ink">
+                  {upload.fileName}
+                </span>
+              </td>
+              <td className="px-6 py-4">
+                <UploadStatusBadge status={upload.status} />
+              </td>
+              <td className="num whitespace-nowrap px-6 py-4 text-right text-body-sm text-muted">
+                {formatters.date(upload.createdAt, 'long')}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <ul className="divide-y divide-hairline md:hidden">
+        {uploads.map((upload) => (
+          <li key={upload.id} className="flex flex-col gap-2 px-6 py-4">
+            <p className="truncate text-body-sm font-semibold text-ink">
+              {upload.fileName}
+            </p>
+            <div className="flex items-center justify-between gap-3">
+              <UploadStatusBadge status={upload.status} />
+              <span className="num whitespace-nowrap text-caption text-muted">
+                {formatters.date(upload.createdAt, 'long')}
+              </span>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+/**
+ * The icon for a metric, chosen by its key.
+ *
+ * The backend names the metric (`total-students`, `pass-percentage`, …), so
+ * the key is the stable contract between the two sides.
+ */
+function metricIcon(key: string): typeof Users {
+  switch (key) {
+    case 'total-students':
+      return Users;
+    case 'pass-percentage':
+      return Percent;
+    case 'total-subjects':
+      return BookOpen;
+    case 'average-percentage':
+      return TrendingUp;
+    default:
+      return TrendingUp;
+  }
+}
+
+/**
+ * A metric's value is a count, a percentage or a short string (a roll
+ * number, a pass/fail verdict). Numbers are shown as-is; the caller formats
+ * percentages.
+ */
+function formatMetricValue(metric: DashboardMetric): string {
+  if (typeof metric.value === 'string') return metric.value;
+  return Number.isInteger(metric.value)
+    ? String(metric.value)
+    : String(Math.round(metric.value * 10) / 10);
 }
 
 /**
@@ -254,22 +425,5 @@ function UploadStatusBadge({ status }: { status: string }) {
       <span className={cn('size-2 shrink-0 rounded-full', tone)} aria-hidden />
       <span className="text-body-sm capitalize text-body">{normalized.toLowerCase()}</span>
     </span>
-  );
-}
-
-function DashboardSkeleton() {
-  return (
-    <div className="flex flex-col gap-6 md:gap-8" aria-busy>
-      <div className="flex flex-col gap-2">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-4 w-72" />
-      </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {[0, 1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-40 rounded-xl" />
-        ))}
-      </div>
-      <Skeleton className="h-72 rounded-xl" />
-    </div>
   );
 }

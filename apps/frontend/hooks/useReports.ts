@@ -1,7 +1,12 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { reportsService, type GenerateReportPayload, type Report } from '@/lib/services/reports.service';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  reportsService,
+  type GenerateReportPayload,
+  type Report,
+  type ReportListFilters,
+} from '@/lib/services/reports.service';
 import { queryKeys } from '@/lib/query/queryKeys';
 import { invalidationRules } from '@/lib/query/invalidationRules';
 import type { ListResponse } from '@/lib/types/api';
@@ -21,11 +26,12 @@ export function useGenerateReport() {
   });
 }
 
-export function useReports() {
+export function useReports(filters?: ReportListFilters) {
   return useQuery<ListResponse<Report>>({
-    queryKey: queryKeys.reports.list(),
-    queryFn: () => reportsService.list(),
+    queryKey: queryKeys.reports.list(filters),
+    queryFn: () => reportsService.list(filters),
     staleTime: 60 * 1000,
+    placeholderData: keepPreviousData,
     /**
      * The list only polls while at least one report is still being built.
      * Once every report has reached a terminal state the polling stops, so

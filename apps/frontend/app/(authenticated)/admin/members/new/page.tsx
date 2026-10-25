@@ -1,7 +1,6 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { InviteMemberFormFields } from '@/components/forms/MemberFormFields';
@@ -29,14 +28,7 @@ export default function NewMemberPage() {
       <PageHeader
         title="Invite member"
         description="Send an invitation email and assign the member's role."
-        actions={
-          <Button variant="secondary" asChild className="w-full md:w-auto">
-            <a href="/admin/members">
-              <ArrowLeft aria-hidden />
-              Back to members
-            </a>
-          </Button>
-        }
+        backLink={{ href: '/admin/members', label: 'Back to members' }}
       />
 
       <div className="rounded-xl border border-hairline bg-card p-4 md:p-6">

@@ -5,6 +5,7 @@ import { Pencil, Plus, Trash2, Building2, SearchX, X } from 'lucide-react';
 
 import { DataTable, type DataTableColumn } from '@/components/forms/DataTable';
 import { FilterBar } from '@/components/forms/FilterBar';
+import { Pagination } from '@/components/forms/Pagination';
 import { BranchFormFields } from '@/components/forms/BranchFormFields';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -18,8 +19,8 @@ import {
 } from '@/components/ui/sheet';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
-import { Spinner } from '@/components/feedback/Spinner';
 import { useBranches, useCreateBranch, useUpdateBranch, useDeleteBranch } from '@/hooks/useBranches';
+import { useTablePagination } from '@/hooks/useTablePagination';
 import type { Branch, CreateBranchPayload } from '@/lib/services/branches.service';
 
 /**
@@ -57,6 +58,10 @@ export default function AdminBranchesPage() {
 
   const hasActiveFilters = search.trim().length > 0;
   const clearFilters = () => setSearch('');
+
+  const { page, setPage, pageSize, setPageSize, total, pageItems } = useTablePagination(rows, {
+    resetKey: search,
+  });
 
   const columns: DataTableColumn<Branch>[] = [
     {
@@ -156,16 +161,12 @@ export default function AdminBranchesPage() {
         <ErrorBanner message="Could not load branches." retry={() => refetch()} />
       ) : null}
 
-      {isLoading ? (
-        <div className="flex items-center gap-sm text-body-sm text-body">
-          <Spinner size={16} /> Loading branches…
-        </div>
-      ) : (
-        <DataTable
-          columns={columns}
-          rows={rows}
-          keyExtractor={(row) => row.id}
-          emptyState={
+      <DataTable
+        columns={columns}
+        rows={pageItems}
+        keyExtractor={(row) => row.id}
+        loading={isLoading}
+        emptyState={
             hasActiveFilters ? (
               // Filtered-empty: the branches exist but the search hides them,
               // so the state explains the cause and offers a reset instead of
@@ -199,8 +200,18 @@ export default function AdminBranchesPage() {
               />
             )
           }
-        />
-      )}
+          footer={
+            !isLoading && total > 0 ? (
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+              />
+            ) : undefined
+          }
+      />
 
       <Sheet
         open={sheet !== null}

@@ -103,6 +103,11 @@ export class AuthService {
         email: user.email,
         name: user.name,
         role: primaryRole,
+        // Every role the member holds, and the union of their permissions.
+        // The client gates its navigation on the permissions rather than on
+        // a role name (§3.1), so both have to travel with the session.
+        roles: userRoles.map((r) => r.name),
+        permissions,
         branchId: userRoles[0]?.branchId ?? null,
         mustChangePassword: user.mustChangePassword,
       },

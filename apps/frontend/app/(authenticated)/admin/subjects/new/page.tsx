@@ -1,7 +1,6 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { SubjectFormFields } from '@/components/forms/SubjectFormFields';
@@ -27,14 +26,7 @@ export default function NewSubjectPage() {
       <PageHeader
         title="New subject"
         description="Define a subject's identity and the assessment breakdown a teacher will fill in."
-        actions={
-          <Button variant="secondary" asChild className="w-full md:w-auto">
-            <a href="/admin/subjects">
-              <ArrowLeft aria-hidden />
-              Back to subjects
-            </a>
-          </Button>
-        }
+        backLink={{ href: '/admin/subjects', label: 'Back to subjects' }}
       />
 
       <div className="rounded-xl border border-hairline bg-card p-4 md:p-6">

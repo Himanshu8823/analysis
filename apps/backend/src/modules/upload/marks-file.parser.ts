@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import pdfParse from 'pdf-parse';
 import { parseCsv, parseExcel } from '../students/student-import.parser';
+import { parseDbatuStatement } from './dbatu-statement.parser';
 
 /**
  * One extracted mark row — exactly the fields the confirm DTO accepts.
@@ -21,14 +22,18 @@ export interface ParsedMarksSheet {
 }
 
 /**
- * The column headers the extractor understands, lower-cased and normalised.
+ * The column headers the tidy extractor understands, lower-cased and normalised.
  *
- * Two layouts are common in result spreadsheets:
- *  - one row per mark  (`Roll No | Subject Code | Exam Type | Marks | Max Marks`)
- *  - one row per student with a column per subject
+ * This is the *long* layout — one row per mark:
  *
- * The first is supported directly. The second is expanded by
- * `expandSubjectColumns`, which needs the subject codes from the header row.
+ * ```
+ * Roll No | Subject Code | Exam Type | Marks | Max Marks
+ * ```
+ *
+ * The *wide* layout the college actually prints — one row per student, with
+ * a merged two-row header naming the subjects and their components — is
+ * handled by {@link parseDbatuStatement} and routed to by
+ * {@link parseMarksFile} before this extractor is reached.
  */
 const COLUMN_ALIASES: Record<string, keyof ExtractedMark> = {
   rollno: 'rollNo',
@@ -37,6 +42,9 @@ const COLUMN_ALIASES: Record<string, keyof ExtractedMark> = {
   enrollmentno: 'rollNo',
   'enrollment no': 'rollNo',
   'enrollment number': 'rollNo',
+  'prn no': 'rollNo',
+  'prn number': 'rollNo',
+  prn: 'rollNo',
   subjectcode: 'subjectCode',
   'subject code': 'subjectCode',
   subject: 'subjectCode',
@@ -55,8 +63,6 @@ const COLUMN_ALIASES: Record<string, keyof ExtractedMark> = {
   'max marks': 'maxMarks',
   maximummarks: 'maxMarks',
   'maximum marks': 'maxMarks',
-  totalmarks: 'maxMarks',
-  'total marks': 'maxMarks',
   outof: 'maxMarks',
   'out of': 'maxMarks',
   isabsent: 'isAbsent',
@@ -269,6 +275,20 @@ export function parseMarksSheet(headerRow: unknown[], dataRows: unknown[][]): Pa
 /**
  * Reads an uploaded result sheet (CSV, Excel or a text PDF) into mark records.
  *
+ * Two layouts are supported, and the file decides which one it is:
+ *
+ *  - **the printed statement** — one row per student, with a merged two-row
+ *    header naming the subjects and their components. This is what the
+ *    examination cell actually receives, and it is handled by
+ *    {@link parseDbatuStatement};
+ *  - **the tidy sheet** — one row per mark
+ *    (`Roll No | Subject Code | Exam Type | Marks | Max Marks`), handled by
+ *    {@link parseMarksSheet}.
+ *
+ * The statement is detected first, because a statement also *contains* the
+ * column names `Roll` and `Subject`, and would otherwise be mistaken for a
+ * tidy sheet.
+ *
  * A PDF is parsed by extracting its text layer and then reading the rows the
  * same way a CSV is read. A scanned PDF has no text layer — that needs OCR,
  * which is not part of the extraction pipeline, so it is rejected with a
@@ -291,8 +311,35 @@ export async function parseMarksFile(buffer: Buffer, filename: string): Promise<
     throw new BadRequestException('The file is empty.');
   }
 
+  // The printed statement is checked first: it is the format the college
+  // produces, and it must not be mistaken for a tidy sheet.
+  if (isStatementFormat(matrix)) {
+    return parseDbatuStatement(matrix);
+  }
+
   const [headerRow, ...dataRows] = matrix;
   return parseMarksSheet(headerRow ?? [], dataRows);
+}
+
+/**
+ * Whether the grid is a printed result statement rather than a tidy sheet.
+ *
+ * The tell is a subject header such as `BTCOM701:INT` — a code followed by a
+ * part marker. A tidy sheet names its subject in a column called
+ * "Subject Code", which this test does not match.
+ */
+export function isStatementFormat(matrix: unknown[][]): boolean {
+  for (const row of matrix.slice(0, 10)) {
+    if (!row) continue;
+    for (const cell of row) {
+      const text = String(cell ?? '').trim();
+      if (!text) continue;
+      // `CODE:INT` or `CODE:PR`, where the code looks like a subject code.
+      const match = text.match(/^([A-Za-z]{2,}[0-9]{3,})\s*:\s*(INT|PR|THEORY|PRACTICAL)$/i);
+      if (match) return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -333,20 +380,20 @@ async function parsePdfText(buffer: Buffer): Promise<unknown[][]> {
   // A header row is the first line that names at least a roll number and a
   // subject column; the lines above it are titles and captions.
   const headerIndex = lines.findIndex((line) => {
+    if (hasSubjectCode(line)) return true;
     const normalised = normaliseHeader(line);
     return normalised.includes('roll') && normalised.includes('subject');
   });
 
   if (headerIndex === -1) {
     throw new BadRequestException(
-      'The PDF has no recognisable header row. Expected a line naming "Roll No" and "Subject".'
+      'The PDF has no recognisable header row. Expected a line naming the subjects, for example "BTCOM701:INT".'
     );
   }
 
-  const headerCells = splitPdfCells(lines[headerIndex]);
-  const rows: unknown[][] = [headerCells];
+  const rows: unknown[][] = [];
 
-  for (let i = headerIndex + 1; i < lines.length; i += 1) {
+  for (let i = headerIndex; i < lines.length; i += 1) {
     const cells = splitPdfCells(lines[i]);
     // Rows shorter than the header are footers or page furniture.
     if (cells.length < 2) continue;
@@ -357,14 +404,25 @@ async function parsePdfText(buffer: Buffer): Promise<unknown[][]> {
 }
 
 /**
+ * Whether a line carries a subject code such as `BTCOM701:INT`.
+ */
+function hasSubjectCode(line: string): boolean {
+  return /[A-Za-z]{2,}[0-9]{3,}\s*:\s*(INT|PR|THEORY|PRACTICAL)/i.test(line);
+}
+
+/**
  * Splits one line of PDF text into cells.
  *
  * Cells are separated by two or more spaces — a single space is common inside
  * a name ("Akshay Kumar") and must not split the cell.
+ *
+ * Empty cells are *kept* as empty strings. A printed statement's header has
+ * a subject header spanning several columns, with the sub-header row naming
+ * the component under each one; dropping the empty cells would shift every
+ * later column out of alignment and mis-assign the marks.
  */
 function splitPdfCells(line: string): string[] {
   return line
     .split(/\s{2,}/)
-    .map((cell) => cell.trim())
-    .filter((cell) => cell.length > 0);
+    .map((cell) => cell.trim());
 }

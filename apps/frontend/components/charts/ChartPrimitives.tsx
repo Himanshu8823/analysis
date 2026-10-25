@@ -62,7 +62,10 @@ export function PieChart({
   height = 240,
   className,
   ariaLabel,
-}: BaseProps & { data: NamedDataPoint[] }): ReactElement {
+  colors,
+}: BaseProps & { data: NamedDataPoint[]; colors?: string[] }): ReactElement {
+  const palette = colors && colors.length > 0 ? colors : CHART_SERIES;
+
   return (
     <div
       className={className}
@@ -96,10 +99,7 @@ export function PieChart({
             stroke={CHART_COLORS.surface}
           >
             {data.map((entry, index) => (
-              <Cell
-                key={entry.name}
-                fill={CHART_SERIES[index % CHART_SERIES.length]}
-              />
+              <Cell key={entry.name} fill={palette[index % palette.length]} />
             ))}
           </Pie>
         </RePieChart>

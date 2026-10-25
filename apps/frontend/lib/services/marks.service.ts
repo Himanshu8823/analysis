@@ -7,7 +7,11 @@ export type ExamType = 'CA1' | 'CA2' | 'MID_SEM' | 'WRITTEN' | 'PRACTICAL' | 'OR
 export interface Mark {
   id: string;
   studentId: string;
-  subjectId: string;
+  /**
+   * The subject *offering* the mark belongs to — the subject as it runs in
+   * one branch, semester and scheme.
+   */
+  subjectOfferingId: string;
   examType: ExamType;
   marksObtained: number;
   maxMarks: number;
@@ -20,13 +24,20 @@ export interface Mark {
 export interface MarkListFilters {
   studentId?: string;
   subjectId?: string;
+  subjectOfferingId?: string;
   examType?: string;
   academicYearId?: string;
 }
 
 export interface BulkMarkInput {
   studentId: string;
-  subjectId: string;
+  /**
+   * The subject offering id — the backend validates `subjectOfferingId`, not
+   * `subjectId`. The same subject is offered in several semesters, and each
+   * offering has its own class of students, so the offering is the unit a
+   * mark belongs to.
+   */
+  subjectOfferingId: string;
   examType: ExamType;
   marksObtained: number;
   maxMarks: number;
@@ -93,7 +104,12 @@ export const marksService = {
   /** The backend exposes `PUT /marks/:id`, not `PATCH`. */
   update: async (
     id: string,
-    payload: Partial<Omit<BulkMarkInput, 'studentId' | 'subjectId' | 'examType' | 'academicYearId'>>,
+    payload: Partial<
+      Omit<
+        BulkMarkInput,
+        'studentId' | 'subjectOfferingId' | 'examType' | 'academicYearId'
+      >
+    >,
   ) => {
     const res = await apiClient.put(ENDPOINTS.MARKS.UPDATE(id), payload);
     return res.data.data;
