@@ -155,4 +155,13 @@ export const ENDPOINTS = {
     SECTIONS: '/dashboard/sections',
     RECENT_UPLOADS: '/dashboard/recent-uploads',
   },
+  AUDIT_LOGS: {
+    LIST: '/audit-logs',
+    /**
+     * The distinct actions, resources and users in the trail, so the filter
+     * dropdowns never have to be built by paging through the whole log.
+     */
+    FACETS: '/audit-logs/facets',
+    DETAIL: (id: string) => `/audit-logs/${id}`,
+  },
 } as const;

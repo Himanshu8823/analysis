@@ -37,7 +37,7 @@ export {
   useUpdateMark,
   useCalculateMarks,
 } from './useMarks';
-export { useCreateUploadJob, useUploadJob, useConfirmUpload } from './useUpload';
+export { useCreateUploadJob, useUploadJob, useConfirmUpload, useUploadJobs } from './useUpload';
 export {
   useGenerateReport,
   useReports,
@@ -94,3 +94,4 @@ export {
   useCreatePermission,
   useDeletePermission,
 } from './useRolePermissions';
+export { useAuditLogs, useAuditLogFacets } from './useAuditLogs';

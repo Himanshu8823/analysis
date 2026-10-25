@@ -41,6 +41,7 @@ const PERM = {
   ANALYTICS_READ: 'analytics:read',
   ANALYTICS_READ_OWN_DEPARTMENT: 'analytics:read_own_department',
   UPLOAD_CREATE: 'upload:create',
+  UPLOAD_READ: 'upload:read',
   TOPPERS_READ: 'toppers:read',
   /**
    * The governance permission. A member who can read the audit trail is
@@ -1382,12 +1383,20 @@ export class DashboardService {
    * scopes see the jobs raised by the member themselves — an HOD has no
    * business reading another branch's upload history, and a student sees
    * none at all.
+   *
+   * The feed is gated on `upload:read` as well as on the scope. The scope
+   * alone was not enough: the Super Admin's scope *is* the college, so they
+   * were served the full feed even though the role holds no upload
+   * permission at all. The upload trail belongs to the people who work with
+   * uploads (§3.2, §5), and to nobody else.
    */
   private async recentUploads(
     scope: DashboardScopeKind,
     viewer: DashboardViewer
   ): Promise<DashboardUpload[]> {
     if (scope === 'own') return [];
+
+    if (!viewer.permissions.includes(PERM.UPLOAD_READ)) return [];
 
     const where: Prisma.UploadJobWhereInput =
       scope === 'college' ? {} : { uploadedBy: viewer.userId };
@@ -1396,7 +1405,13 @@ export class DashboardService {
       where,
       orderBy: { createdAt: 'desc' },
       take: 5,
-      select: { id: true, fileName: true, status: true, createdAt: true },
+      select: {
+        id: true,
+        fileName: true,
+        status: true,
+        createdAt: true,
+        uploadedByUser: { select: { id: true, email: true, name: true } },
+      },
     });
 
     return rows.map((row) => ({
@@ -1404,6 +1419,7 @@ export class DashboardService {
       fileName: row.fileName,
       status: row.status,
       createdAt: row.createdAt.toISOString(),
+      uploadedBy: row.uploadedByUser,
     }));
   }
 

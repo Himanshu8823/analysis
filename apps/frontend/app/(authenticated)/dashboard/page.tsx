@@ -7,7 +7,6 @@ import {
   BookOpen,
   TrendingUp,
   FileSpreadsheet,
-  Upload,
   ArrowRight,
   ArrowUpRight,
   ArrowDownRight,
@@ -21,6 +20,7 @@ import {
   useDashboardSections,
   useDashboardRecentUploads,
 } from '@/hooks/useDashboard';
+import { useCurrentUser } from '@/hooks/useAuth';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -46,9 +46,16 @@ export default function DashboardPage() {
   const metrics = useDashboardMetrics();
   const sections = useDashboardSections();
   const uploads = useDashboardRecentUploads();
+  const { data: user } = useCurrentUser();
 
   const scope = header.data?.scope;
   const isStudent = scope === 'own';
+  /**
+   * The upload feed belongs to the people who work with uploads (§5). The
+   * Super Admin supervises the college and uploads nothing (§3.2), so the
+   * section is not rendered for them at all — not even empty.
+   */
+  const canSeeUploads = (user?.permissions ?? []).includes('upload:read');
 
   return (
     <div className="flex flex-col gap-6 md:gap-8">
@@ -118,9 +125,11 @@ export default function DashboardPage() {
         )}
       </section>
 
-      {/* Recent uploads — students never see the upload feed, so the section
-          is not rendered for them once the scope is known. */}
-      {isStudent ? null : (
+      {/* Recent uploads — the feed is read-only, and it belongs to the roles
+          that work with uploads. A student never sees it, and neither does a
+          member without `upload:read`, so the section is not rendered at
+          all rather than shown empty. */}
+      {isStudent || !canSeeUploads ? null : (
         <section
           aria-labelledby="recent-uploads-title"
           aria-busy={uploads.isPending}
@@ -145,7 +154,7 @@ export default function DashboardPage() {
             </div>
             {uploads.data && uploads.data.recentUploads.length > 0 ? (
               <Button asChild variant="ghost" size="sm" className="shrink-0">
-                <Link href="/upload">
+                <Link href="/upload-history">
                   View all
                   <ArrowRight aria-hidden />
                 </Link>
@@ -166,18 +175,13 @@ export default function DashboardPage() {
             <UploadsTable uploads={uploads.data.recentUploads} />
           ) : (
             <div className="p-6">
+              {/* The feed is read-only, so the empty state offers no upload
+                  action — the section reports what happened, and the Upload
+                  Results screen is where a file is put in. */}
               <EmptyState
                 title="No uploads yet"
-                description="Upload your first Excel or PDF result file to populate the dashboard."
+                description="Once a result file is processed, it appears here."
                 icon={<FileSpreadsheet className="size-6" aria-hidden />}
-                action={
-                  <Button asChild>
-                    <Link href="/upload">
-                      <Upload aria-hidden />
-                      Upload results
-                    </Link>
-                  </Button>
-                }
               />
             </div>
           )}
@@ -277,17 +281,19 @@ function UploadsSkeleton() {
   return (
     <>
       <div className="hidden md:block">
-        <div className="grid grid-cols-3 gap-4 border-b border-hairline bg-surface-soft px-6 py-3">
+        <div className="grid grid-cols-4 gap-4 border-b border-hairline bg-surface-soft px-6 py-3">
           <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 w-20" />
           <Skeleton className="h-3 w-16" />
           <Skeleton className="ml-auto h-3 w-20" />
         </div>
         {[0, 1, 2].map((i) => (
           <div
             key={i}
-            className="grid grid-cols-3 items-center gap-4 border-b border-hairline px-6 py-4 last:border-b-0"
+            className="grid grid-cols-4 items-center gap-4 border-b border-hairline px-6 py-4 last:border-b-0"
           >
             <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-4 w-28" />
             <Skeleton className="h-4 w-24" />
             <Skeleton className="ml-auto h-4 w-24" />
           </div>
@@ -297,6 +303,7 @@ function UploadsSkeleton() {
         {[0, 1, 2].map((i) => (
           <div key={i} className="flex flex-col gap-2">
             <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-3 w-32" />
             <div className="flex items-center justify-between gap-3">
               <Skeleton className="h-4 w-24" />
               <Skeleton className="h-4 w-20" />
@@ -308,11 +315,23 @@ function UploadsSkeleton() {
   );
 }
 
-/** The known upload feed, once loaded. */
+/**
+ * The known upload feed, once loaded.
+ *
+ * Read-only by design: the feed reports what the system has processed. It
+ * carries no upload action — putting a file in is the Upload Results
+ * screen's job.
+ */
 function UploadsTable({
   uploads,
 }: {
-  uploads: Array<{ id: string; fileName: string; status: string; createdAt: string }>;
+  uploads: Array<{
+    id: string;
+    fileName: string;
+    status: string;
+    createdAt: string;
+    uploadedBy?: { id: string; email: string; name: string } | null;
+  }>;
 }) {
   return (
     <>
@@ -322,6 +341,9 @@ function UploadsTable({
           <tr className="border-b border-hairline bg-surface-soft">
             <th scope="col" className="px-6 py-3 text-caption-strong uppercase tracking-wide text-muted">
               File
+            </th>
+            <th scope="col" className="px-6 py-3 text-caption-strong uppercase tracking-wide text-muted">
+              Uploaded by
             </th>
             <th scope="col" className="px-6 py-3 text-caption-strong uppercase tracking-wide text-muted">
               Status
@@ -343,6 +365,11 @@ function UploadsTable({
                 </span>
               </td>
               <td className="px-6 py-4">
+                <span className="block max-w-xs truncate text-body-sm text-body">
+                  {upload.uploadedBy?.name ?? upload.uploadedBy?.email ?? '—'}
+                </span>
+              </td>
+              <td className="px-6 py-4">
                 <UploadStatusBadge status={upload.status} />
               </td>
               <td className="num whitespace-nowrap px-6 py-4 text-right text-body-sm text-muted">
@@ -359,6 +386,11 @@ function UploadsTable({
             <p className="truncate text-body-sm font-semibold text-ink">
               {upload.fileName}
             </p>
+            {upload.uploadedBy?.name || upload.uploadedBy?.email ? (
+              <p className="truncate text-caption text-muted">
+                Uploaded by {upload.uploadedBy?.name ?? upload.uploadedBy?.email}
+              </p>
+            ) : null}
             <div className="flex items-center justify-between gap-3">
               <UploadStatusBadge status={upload.status} />
               <span className="num whitespace-nowrap text-caption text-muted">

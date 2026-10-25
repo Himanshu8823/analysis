@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Loader2, CheckCircle2, AlertCircle, FileCheck2 } from 'lucide-react';
+import { RequirePermission } from '@/components/auth/RequirePermission';
 import { FileUploader } from '@/components/forms/FileUploader';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Pagination } from '@/components/forms/Pagination';
@@ -9,6 +10,7 @@ import { Select } from '@/components/forms/Select';
 import { Spinner } from '@/components/feedback/Spinner';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
 import { useCreateUploadJob, useUploadJob, useConfirmUpload } from '@/hooks/useUpload';
+import { useCurrentUser } from '@/hooks/useAuth';
 import { useBranches } from '@/hooks/useBranches';
 import { useSchemes } from '@/hooks/useSchemes';
 import { useAcademicYears } from '@/hooks/useAcademic';
@@ -35,7 +37,30 @@ const STATUS_TONE: Record<UploadJob['status'], string> = {
   FAILED: 'bg-surface-strong text-semantic-down',
 };
 
+/**
+ * UploadPage — the screen a member uploads a result file on.
+ *
+ * The screen is gated on `upload:create`. The Upload Results screen is for
+ * the two roles that work with uploads (§5): the exam cell, which puts the
+ * file into the system, and the teacher, who uploads the statement for the
+ * subjects they teach. The Super Admin supervises the college and uploads
+ * nothing (§3.2), so the screen refuses rather than showing a form whose
+ * every action the server will reject.
+ *
+ * A member who may upload but not confirm — a teacher who is allocated
+ * subjects — still sees the "Confirm and save" step, because writing the
+ * extracted score for their own subjects is theirs to do
+ * (`upload:process_own_subject`).
+ */
 export default function UploadPage() {
+  return (
+    <RequirePermission permissions={['upload:create']}>
+      <UploadResultsScreen />
+    </RequirePermission>
+  );
+}
+
+function UploadResultsScreen() {
   const [branchId, setBranchId] = useState('');
   const [schemeId, setSchemeId] = useState('');
   const [semester, setSemester] = useState(1);
@@ -48,10 +73,23 @@ export default function UploadPage() {
   const { mutate: createJob, isPending: uploading } = useCreateUploadJob();
   const { data: job, isLoading: jobLoading, isError } = useUploadJob();
   const { mutate: confirm, isPending: confirming } = useConfirmUpload();
+  const { data: user } = useCurrentUser();
 
   const branches = branchesData ?? [];
   const schemes = schemesData ?? [];
   const years = academicYears ?? [];
+
+  /**
+   * Confirming is what turns an extraction into a student's score, so it is
+   * a separate right from uploading. The exam cell holds `upload:process`
+   * and approves the whole batch; a teacher holds
+   * `upload:process_own_subject` and writes the score for the subjects the
+   * HOD allocated to them. A member with neither can upload a file but has
+   * no right to publish what came out of it, so the button is not offered.
+   */
+  const canConfirm =
+    (user?.permissions ?? []).includes('upload:process') ||
+    (user?.permissions ?? []).includes('upload:process_own_subject');
 
   const activeYear = years.find((y) => y.isActive) ?? years[0];
 
@@ -164,6 +202,7 @@ export default function UploadPage() {
           job={job}
           rows={rows}
           parseErrors={parseErrors}
+          canConfirm={canConfirm}
           onConfirm={() =>
             confirm({
               jobId: job.id,
@@ -221,11 +260,20 @@ interface JobStatusCardProps {
   job: UploadJob;
   rows: ExtractedMarkRow[];
   parseErrors: Array<{ row: number; error: string }>;
+  /** Whether the viewer may turn the extraction into marks. */
+  canConfirm: boolean;
   onConfirm: () => void;
   confirming: boolean;
 }
 
-function JobStatusCard({ job, rows, parseErrors, onConfirm, confirming }: JobStatusCardProps) {
+function JobStatusCard({
+  job,
+  rows,
+  parseErrors,
+  canConfirm,
+  onConfirm,
+  confirming,
+}: JobStatusCardProps) {
   const { page, setPage, pageSize, setPageSize, total, pageItems } = useTablePagination(rows, {
     pageSize: 10,
     resetKey: job.id,
@@ -300,20 +348,28 @@ function JobStatusCard({ job, rows, parseErrors, onConfirm, confirming }: JobSta
             className="border-t border-hairline pt-sm"
           />
           <div className="flex flex-col gap-sm md:flex-row md:items-center md:justify-end">
-            <button
-              type="button"
-              className="cb-btn-primary"
-              onClick={onConfirm}
-              disabled={confirming}
-            >
-              {confirming ? (
-                <span className="inline-flex items-center gap-sm">
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Confirming
-                </span>
-              ) : (
-                'Confirm and save'
-              )}
-            </button>
+            {canConfirm ? (
+              <button
+                type="button"
+                className="cb-btn-primary"
+                onClick={onConfirm}
+                disabled={confirming}
+              >
+                {confirming ? (
+                  <span className="inline-flex items-center gap-sm">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Confirming
+                  </span>
+                ) : (
+                  'Confirm and save'
+                )}
+              </button>
+            ) : (
+              // The extraction is ready, but writing it is not this viewer's
+              // right. Saying so beats offering a button that would fail.
+              <p className="text-body-sm text-muted">
+                Extracted rows are ready. A member who can write marks must confirm them.
+              </p>
+            )}
           </div>
         </>
       ) : null}

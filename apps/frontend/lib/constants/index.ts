@@ -29,6 +29,12 @@ export const NAV_ITEMS = [
     permissions: ['upload:create'],
   },
   {
+    href: '/upload-history',
+    label: 'Upload History',
+    icon: 'history',
+    permissions: ['upload:read'],
+  },
+  {
     href: '/students',
     label: 'Students',
     icon: 'users',

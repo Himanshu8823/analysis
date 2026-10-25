@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Upload,
+  History,
   Users,
   FileSpreadsheet,
   Award,
@@ -49,6 +50,7 @@ interface AppSidebarProps {
 const ICONS: Record<string, LucideIcon> = {
   home: LayoutDashboard,
   upload: Upload,
+  history: History,
   users: Users,
   file: FileSpreadsheet,
   award: Award,

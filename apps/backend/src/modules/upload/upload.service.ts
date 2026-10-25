@@ -1,10 +1,17 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaClient } from '@prisma/client';
 import type { Prisma, UploadJob } from '@prisma/client';
 import { UploadRepository } from './upload.repository';
 import { StorageService } from '../storage/storage.service';
+import { PermissionsCacheRepository } from '@/modules/rbac/permissions-cache.repository';
 
 export interface CreateUploadJobInput {
   uploadedBy: string;
@@ -43,6 +50,7 @@ export class UploadService {
     private readonly repository: UploadRepository,
     private readonly prisma: PrismaClient,
     private readonly storage: StorageService,
+    private readonly permissionsRepository: PermissionsCacheRepository,
     @InjectQueue('upload-jobs') private readonly uploadQueue: Queue,
     @InjectQueue('ocr-jobs') private readonly ocrQueue: Queue
   ) {}
@@ -171,13 +179,39 @@ export class UploadService {
     return { type: 'UNKNOWN', mimeHint: '' };
   }
 
-  async findAll(params: {
-    page?: number;
-    pageSize?: number;
-    status?: string;
-    uploadedBy?: string;
-  }) {
-    return this.repository.findAll(params);
+  /**
+   * The upload jobs a member may read.
+   *
+   * The exam cell sees every job in the college — it administers the whole
+   * exam. Everyone else sees only the jobs they raised themselves: a
+   * teacher's upload history is their own, and an HOD has no business
+   * reading another branch's upload trail.
+   *
+   * The `uploadedBy` filter narrows within that set. It can never widen it,
+   * so asking for another member's jobs returns the caller's own rather than
+   * somebody else's.
+   */
+  async findAll(
+    params: {
+      page?: number;
+      pageSize?: number;
+      status?: string;
+      uploadedBy?: string;
+    },
+    viewerId?: string
+  ) {
+    let uploadedBy = params.uploadedBy;
+
+    if (viewerId) {
+      const permissions = await this.permissionsRepository.getPermissionsForUser(viewerId);
+      const seesEverything = permissions.includes('upload:process');
+      if (!seesEverything) {
+        // Forced to their own jobs — the requested `uploadedBy` is dropped.
+        uploadedBy = viewerId;
+      }
+    }
+
+    return this.repository.findAll({ ...params, uploadedBy });
   }
 
   async findById(id: string): Promise<UploadJob> {
@@ -208,6 +242,19 @@ export class UploadService {
   /**
    * Confirm the extracted payload and persist it into the marks table.
    * Returns the count of marks upserted.
+   *
+   * Two rights can land here, and they are not the same right (§3.3, §3.6):
+   *
+   *  - `upload:process` — the exam cell approves the extraction for the
+   *    whole batch, for any subject in the class;
+   *  - `upload:process_own_subject` — a teacher writes a score for the
+   *    subjects the HOD allocated to them, and for no others.
+   *
+   * The teacher's path is checked against `TeacherSubject` for the academic
+   * year being written. A row whose subject is not allocated is *skipped*
+   * rather than rejected: a statement often covers a whole class, and the
+   * teacher's own subjects are only part of it. The upload is still reported
+   * as completed, with the skipped rows listed in the audit trail.
    */
   async confirmExtraction(
     jobId: string,
@@ -312,6 +359,47 @@ export class UploadService {
 
     const ops: Prisma.PrismaPromise<unknown>[] = [];
     const skipped: Array<{ reason: string; row: (typeof rows)[number] }> = [];
+
+    /**
+     * Which right the confirmer is exercising.
+     *
+     * The exam cell's `upload:process` covers every offering in the class.
+     * A teacher's `upload:process_own_subject` covers only the offerings
+     * the HOD allocated to them for this academic year — so the allowed
+     * set is resolved once, here, and every row below is checked against it.
+     */
+    const permissions = confirmedBy
+      ? await this.permissionsRepository.getPermissionsForUser(confirmedBy)
+      : [];
+    const canProcessAny = permissions.includes('upload:process');
+    const canProcessOwn = permissions.includes('upload:process_own_subject');
+
+    if (!canProcessAny && !canProcessOwn) {
+      throw new ForbiddenException(
+        'You do not have permission to confirm an upload and write its marks.'
+      );
+    }
+
+    /**
+     * The offerings a teacher is allowed to write.
+     *
+     * `null` means the caller is the exam cell and every offering in the
+     * class is in reach. Otherwise it is the set of offerings the HOD
+     * allocated to this teacher for the year being written.
+     */
+    let allowedOfferingIds: Set<string> | null = null;
+    if (!canProcessAny) {
+      const allocations = await this.prisma.teacherSubject.findMany({
+        where: {
+          teacherId: confirmedBy!,
+          academicYearId: ctx.academicYearId,
+          subjectOfferingId: { in: [...offeringsByCode.values()].map((o) => o.id) },
+        },
+        select: { subjectOfferingId: true },
+      });
+      allowedOfferingIds = new Set(allocations.map((a) => a.subjectOfferingId));
+    }
+
     for (const row of rows) {
       const student = studentByRollNo.get(row.rollNo);
       const offering = offeringsByCode.get(row.subjectCode);
@@ -322,6 +410,18 @@ export class UploadService {
       if (!offering) {
         skipped.push({
           reason: `subject is not offered in this class: ${row.subjectCode}`,
+          row,
+        });
+        continue;
+      }
+      /**
+       * A teacher writes only the subjects allocated to them. The row is
+       * skipped rather than rejected, because a statement commonly covers
+       * the whole class and the teacher's own subjects are part of it.
+       */
+      if (allowedOfferingIds && !allowedOfferingIds.has(offering.id)) {
+        skipped.push({
+          reason: `you are not allocated to ${row.subjectCode} for ${ctx.academicYearId}`,
           row,
         });
         continue;

@@ -24,6 +24,9 @@ export interface UploadJob {
   fileSize?: number;
   errorMessage?: string | null;
   createdAt: string;
+  /** Who raised the upload — present on the list endpoint. */
+  uploadedBy?: string;
+  uploadedByUser?: { id: string; email: string; name: string } | null;
   extractedData?: {
     /** The mark rows the backend extracted from the file. */
     rows?: ExtractedMarkRow[];
@@ -32,6 +35,23 @@ export interface UploadJob {
     totalRows?: number;
     errorCount?: number;
   } | null;
+}
+
+/** The page metadata the list endpoint returns alongside the rows. */
+export interface UploadJobListMeta {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+/** Filters accepted by the upload list endpoint. */
+export interface UploadJobFilters {
+  page?: number;
+  pageSize?: number;
+  status?: UploadStatus;
+  /** Narrows to one member's jobs. The server may force this to the caller. */
+  uploadedBy?: string;
 }
 
 /** The scope a confirmation is applied against. */
@@ -85,8 +105,17 @@ export const uploadService = {
     const res = await apiClient.post(ENDPOINTS.UPLOAD.CONFIRM(jobId), payload);
     return res.data.data;
   },
-  list: async (): Promise<{ items: UploadJob[]; meta: Record<string, number> }> => {
-    const res = await apiClient.get(ENDPOINTS.UPLOAD.JOBS);
+  /**
+   * The upload jobs the caller may read.
+   *
+   * The exam cell sees every job in the college; everyone else sees only
+   * the jobs they raised themselves. The server decides — the `uploadedBy`
+   * filter narrows within that set and never widens it.
+   */
+  list: async (
+    filters: UploadJobFilters = {}
+  ): Promise<{ items: UploadJob[]; meta: UploadJobListMeta }> => {
+    const res = await apiClient.get(ENDPOINTS.UPLOAD.JOBS, { params: filters });
     return res.data.data;
   },
 };

@@ -104,7 +104,11 @@ export const queryKeys = {
   upload: {
     all: () => ['upload'] as const,
     job: (jobId: string) => ['upload', 'job', jobId] as const,
-    jobsList: () => ['upload', 'jobs'] as const,
+    /**
+     * The upload history. The filters are part of the key, so switching a
+     * filter does not serve the previous filter's rows.
+     */
+    jobsList: (filters?: unknown) => ['upload', 'jobs', filters ?? null] as const,
   },
   reports: {
     all: () => ['reports'] as const,
@@ -134,5 +138,12 @@ export const queryKeys = {
     metrics: () => ['dashboard', 'metrics'] as const,
     sections: () => ['dashboard', 'sections'] as const,
     recentUploads: () => ['dashboard', 'recent-uploads'] as const,
+  },
+  auditLogs: {
+    all: () => ['audit-logs'] as const,
+    /** The filters are part of the key, so changing one refetches. */
+    list: (filters?: unknown) => ['audit-logs', 'list', filters ?? null] as const,
+    facets: () => ['audit-logs', 'facets'] as const,
+    detail: (id: string) => ['audit-logs', 'detail', id] as const,
   },
 } as const;

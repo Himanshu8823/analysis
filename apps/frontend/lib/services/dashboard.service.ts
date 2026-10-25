@@ -13,6 +13,8 @@ export interface RecentUpload {
   fileName: string;
   status: string;
   createdAt: string;
+  /** Who raised the upload. */
+  uploadedBy?: { id: string; email: string; name: string } | null;
 }
 
 /**

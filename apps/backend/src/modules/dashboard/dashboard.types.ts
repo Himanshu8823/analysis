@@ -96,6 +96,8 @@ export interface DashboardUpload {
   fileName: string;
   status: string;
   createdAt: string;
+  /** Who raised the upload — the member's name and email. */
+  uploadedBy?: { id: string; email: string; name: string } | null;
 }
 
 /**

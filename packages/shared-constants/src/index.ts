@@ -32,6 +32,12 @@ export const PERMISSIONS = {
   UPLOAD_CREATE: 'upload:create',
   UPLOAD_READ: 'upload:read',
   UPLOAD_PROCESS: 'upload:process',
+  /**
+   * Writing marks that came from an upload, for the subjects the member is
+   * allocated to. Narrower than `upload:process` — the exam cell's
+   * administrative reach over a whole extraction batch.
+   */
+  UPLOAD_PROCESS_OWN_SUBJECT: 'upload:process_own_subject',
   ANALYTICS_READ: 'analytics:read',
   ANALYTICS_READ_OWN_DEPARTMENT: 'analytics:read_own_department',
   USERS_READ: 'users:read',
@@ -121,6 +127,10 @@ export const ROLE_PERMISSIONS = {
     PERMISSIONS.MARKS_ENTER_OWN_SUBJECT,
     PERMISSIONS.UPLOAD_CREATE,
     PERMISSIONS.UPLOAD_READ,
+    // The exam cell approves an extraction for the whole batch. The teacher's
+    // narrower right — `upload:process_own_subject` — is deliberately absent:
+    // a teacher writes a score only for the subjects the HOD allocated to
+    // them, and an exam-cell admin holds no allocation (§3.3, §3.6).
     PERMISSIONS.UPLOAD_PROCESS,
     PERMISSIONS.REPORTS_READ,
     PERMISSIONS.REPORTS_GENERATE,
@@ -143,7 +153,6 @@ export const ROLE_PERMISSIONS = {
     PERMISSIONS.REPORTS_GENERATE,
     PERMISSIONS.REPORTS_DOWNLOAD,
     PERMISSIONS.UPLOAD_READ,
-    PERMISSIONS.UPLOAD_PROCESS,
     PERMISSIONS.ANALYTICS_READ,
     PERMISSIONS.ANALYTICS_READ_OWN_DEPARTMENT,
     PERMISSIONS.DASHBOARD_READ,
@@ -159,7 +168,12 @@ export const ROLE_PERMISSIONS = {
     PERMISSIONS.CLASS_TEACHER_ASSIGNMENTS_READ,
     PERMISSIONS.CLASS_TEACHER_ASSIGNMENTS_WRITE,
   ],
-  /** Strictly read-only — not a single write permission. */
+  /**
+   * Strictly read-only — not a single write permission.
+   *
+   * `audit:read` is read-only too, and §7.18 names the Principal as one of
+   * the two roles that need to see who changed what.
+   */
   PRINCIPAL: [
     PERMISSIONS.STUDENTS_READ,
     PERMISSIONS.MARKS_READ,
@@ -172,11 +186,17 @@ export const ROLE_PERMISSIONS = {
     PERMISSIONS.SUBJECTS_READ,
     PERMISSIONS.SUBJECT_OFFERINGS_READ,
     PERMISSIONS.TOPPERS_READ,
+    PERMISSIONS.AUDIT_READ,
   ],
   /**
    * The subject teacher. Marks are entered under `marks:enter_own_subject`
    * rather than `marks:write` — the allocation check restricts the teacher
    * to the subjects the HOD has allocated to them.
+   *
+   * The teacher is one of the two roles the Upload Results screen is for
+   * (§5): they upload the statement for the subjects they teach, and
+   * `upload:process_own_subject` lets them write the extracted score for
+   * those subjects and no others.
    */
   TEACHER: [
     PERMISSIONS.STUDENTS_READ,
@@ -184,7 +204,8 @@ export const ROLE_PERMISSIONS = {
     PERMISSIONS.MARKS_ENTER_OWN_SUBJECT,
     PERMISSIONS.REPORTS_READ,
     PERMISSIONS.UPLOAD_READ,
-    PERMISSIONS.UPLOAD_PROCESS,
+    PERMISSIONS.UPLOAD_CREATE,
+    PERMISSIONS.UPLOAD_PROCESS_OWN_SUBJECT,
     PERMISSIONS.DASHBOARD_READ,
     PERMISSIONS.BRANCHES_READ,
     PERMISSIONS.SCHEMES_READ,

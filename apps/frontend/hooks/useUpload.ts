@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { uploadService, type ConfirmPayload, type UploadJob } from '@/lib/services/upload.service';
+import { uploadService, type ConfirmPayload, type UploadJob, type UploadJobFilters, type UploadJobListMeta } from '@/lib/services/upload.service';
 import { queryKeys } from '@/lib/query/queryKeys';
 import { invalidationRules } from '@/lib/query/invalidationRules';
 import {
@@ -17,7 +17,9 @@ export function useCreateUploadJob() {
   return useMutation({
     mutationFn: uploadService.upload,
     onSuccess: (job) => {
-      qc.invalidateQueries({ queryKey: queryKeys.upload.jobsList() });
+      // The whole upload domain is invalidated, so the history list refetches
+      // under whichever filters it is currently showing.
+      qc.invalidateQueries({ queryKey: queryKeys.upload.all() });
       qc.setQueryData(queryKeys.upload.job(job.id), job);
       // The new job becomes the active one, so leaving the page and coming
       // back resumes it instead of starting over.
@@ -70,5 +72,21 @@ export function useConfirmUpload() {
       toast.success('Upload confirmed and saved');
     },
     onError: () => toast.error('Failed to confirm upload'),
+  });
+}
+
+/**
+ * The upload history — every job the caller may read.
+ *
+ * The exam cell sees the whole college's trail; a teacher sees only the
+ * jobs they raised. The server decides which, so the page never has to
+ * reason about it.
+ */
+export function useUploadJobs(filters: UploadJobFilters = {}) {
+  return useQuery<{ items: UploadJob[]; meta: UploadJobListMeta }>({
+    queryKey: queryKeys.upload.jobsList(filters),
+    queryFn: () => uploadService.list(filters),
+    placeholderData: (previous) => previous,
+    staleTime: 30 * 1000,
   });
 }

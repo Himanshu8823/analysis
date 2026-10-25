@@ -72,17 +72,21 @@ export class UploadController {
   @Get()
   @Permissions('upload:read')
   async findAll(
+    @CurrentUser() user: JwtPayload,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('status') status?: string,
     @Query('uploadedBy') uploadedBy?: string
   ) {
-    return this.service.findAll({
-      page: parseOptionalInt(page),
-      pageSize: parseOptionalInt(pageSize),
-      status: parseOptionalString(status),
-      uploadedBy: parseOptionalString(uploadedBy),
-    });
+    return this.service.findAll(
+      {
+        page: parseOptionalInt(page),
+        pageSize: parseOptionalInt(pageSize),
+        status: parseOptionalString(status),
+        uploadedBy: parseOptionalString(uploadedBy),
+      },
+      user.sub
+    );
   }
 
   @Get('jobs/:jobId')
@@ -92,8 +96,25 @@ export class UploadController {
     return this.service.findById(jobId);
   }
 
+  /**
+   * Confirms an extraction and writes it to the marks table.
+   *
+   * The route is gated on `upload:read` rather than on a single write
+   * permission, because two different rights can land here and they are not
+   * the same right:
+   *
+   *  - `upload:process` — the exam cell's administrative reach. It approves
+   *    a whole extraction for the college.
+   *  - `upload:process_own_subject` — the teacher's right to write a score
+   *    for the subjects the HOD allocated to them, and nothing else (§3.6).
+   *
+   * The guard would need *every* listed permission (`every`, not `some`), so
+   * listing both here would lock out both groups. The service therefore
+   * resolves which right the caller holds and applies the matching rule —
+   * the teacher's path checks every offering against their allocations.
+   */
   @Post('jobs/:jobId/confirm')
-  @Permissions('upload:process')
+  @Permissions('upload:read')
   @Audited(AuditResource.UPLOAD_JOB, AuditAction.CONFIRM, {
     resourceIdSource: 'param',
     resourceIdField: 'jobId',
@@ -113,15 +134,19 @@ export class UploadController {
   @Get('jobs')
   @Permissions('upload:read')
   async listJobs(
+    @CurrentUser() user: JwtPayload,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('status') status?: string
   ) {
-    return this.service.findAll({
-      page: parseOptionalInt(page),
-      pageSize: parseOptionalInt(pageSize),
-      status: parseOptionalString(status),
-    });
+    return this.service.findAll(
+      {
+        page: parseOptionalInt(page),
+        pageSize: parseOptionalInt(pageSize),
+        status: parseOptionalString(status),
+      },
+      user.sub
+    );
   }
 
   @Delete(':id')

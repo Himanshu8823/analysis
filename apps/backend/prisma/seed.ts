@@ -34,6 +34,18 @@ const PERMISSIONS = [
   { name: 'upload:create', resource: 'upload', action: 'create' },
   { name: 'upload:read', resource: 'upload', action: 'read' },
   { name: 'upload:process', resource: 'upload', action: 'process' },
+  /**
+   * Writing marks that came from an upload, for the subjects the member is
+   * allocated to.
+   *
+   * Separate from `upload:process` on purpose. `upload:process` is the
+   * exam cell's administrative reach — it approves and publishes an
+   * extraction for the whole batch. This one is narrower: it is the
+   * *teacher's* right to write a score for a subject the HOD allocated to
+   * them, and nothing else (§3.6). Holding it without an allocation grants
+   * nothing, because the write itself is checked against the allocation.
+   */
+  { name: 'upload:process_own_subject', resource: 'upload', action: 'process_own_subject' },
   { name: 'analytics:read', resource: 'analytics', action: 'read' },
   { name: 'analytics:read_own_department', resource: 'analytics', action: 'read_own_department' },
   { name: 'users:read', resource: 'users', action: 'read' },
@@ -133,6 +145,10 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'marks:enter_own_subject',
     'upload:create',
     'upload:read',
+    // The exam cell approves an extraction for the whole batch. The teacher's
+    // narrower right — `upload:process_own_subject` — is deliberately absent:
+    // a teacher writes a score only for the subjects the HOD allocated to
+    // them, and an exam-cell admin holds no allocation (§3.3, §3.6).
     'upload:process',
     'reports:read',
     'reports:generate',
@@ -158,7 +174,6 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'reports:generate',
     'reports:download',
     'upload:read',
-    'upload:process',
     'analytics:read',
     'analytics:read_own_department',
     'dashboard:read',
@@ -177,6 +192,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   /**
    * Strictly read-only. The Principal sees the results and nothing else —
    * not a single write permission.
+   *
+   * `audit:read` is read-only too, and §7.18 names the Principal as one of
+   * the two roles that need to see who changed what.
    */
   PRINCIPAL: [
     'students:read',
@@ -190,11 +208,19 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'subjects:read',
     'subject_offerings:read',
     'toppers:read',
+    'audit:read',
   ],
   /**
    * The subject teacher. Marks are entered under `marks:enter_own_subject`
    * rather than `marks:write` — the allocation check restricts the teacher
    * to the subjects the HOD has allocated to them.
+   *
+   * The teacher is also one of the two roles the Upload Results screen is
+   * for (§5): they upload the statement for the subjects they teach, and
+   * `upload:process_own_subject` lets them write the extracted score for
+   * those subjects and no others. The exam cell's `upload:create` is the
+   * other half — it puts the file into the system; the teacher is the one
+   * who turns it into a student's score (§3.3).
    */
   TEACHER: [
     'students:read',
@@ -202,7 +228,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'marks:enter_own_subject',
     'reports:read',
     'upload:read',
-    'upload:process',
+    'upload:create',
+    'upload:process_own_subject',
     'dashboard:read',
     'branches:read',
     'schemes:read',

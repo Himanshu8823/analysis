@@ -15,3 +15,4 @@ export { toppersService } from './toppers.service';
 export { analyticsService } from './analytics.service';
 export { usersService } from './users.service';
 export { dashboardService } from './dashboard.service';
+export { auditLogsService } from './audit-logs.service';
