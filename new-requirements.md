@@ -128,6 +128,28 @@ what they can do.
 | View branch analytics, toppers, pass-fail | Create students |
 | Manage subjects for their branch | Invite users or configure permissions |
 | Manage students for their branch | Change the college's structure |
+| **Assign subjects to teachers of their branch** | |
+| **Assign the class teacher for each class in their branch** | |
+
+**Each branch has its own HOD.** There is one HOD per branch — the CS branch
+has its HOD, the ME branch has its own, and so on. The HOD role is therefore
+always **branch-scoped**: an HOD sees and manages their own branch only, never
+another branch's.
+
+**The HOD allocates the branch's teaching staff.** Two assignments, both made
+by the HOD, both scoped to their own branch:
+
+1. **Subject assignment** — which teacher teaches which subject in which
+   semester.
+2. **Class teacher assignment** — who is the class teacher for each class
+   (branch + semester + scheme + academic year). Exactly one per class.
+
+Both are assignments the HOD makes to teachers already onboarded by the Super
+Admin, for subjects already created by the Exam Cell. The HOD does not create
+teachers or subjects — only allocates the ones that exist.
+
+Because the two duties are separate, they are separate permissions: granting
+one does not grant the other.
 
 ### 3.5 Principal
 
@@ -164,6 +186,7 @@ academic year). May or may not also teach a subject.
 
 **Both kinds require an explicit allocation.** A teacher with the role but no
 subject allocation, and no class-teacher assignment, cannot enter any marks.
+Both allocations are made by the HOD of that branch (§3.4).
 
 ### 3.7 Student
 
@@ -211,6 +234,7 @@ clicking through the app.
 | Admin ▸ Members | Invite, deactivate, assign roles + branch scope | Super Admin |
 | Roles & Permissions | Configure the permission matrix and role bundles | Super Admin |
 | Subjects | Subject catalogue + offerings per branch/semester/scheme | Admin (Exam Cell), HOD (own branch) |
+| Assignments | Assign subjects to teachers; assign each class's class teacher | HOD (own branch) |
 | Students | Add/edit students, single + bulk import | Admin (Exam Cell) |
 | Upload Results | CSV / PDF / image-PDF entry | Admin, Teacher (allocated subjects) |
 | Marks | Manual entry + review of entered marks | Teacher (allocated subjects), Admin, HOD |
@@ -235,8 +259,15 @@ Resources that need permissions:
 `audit`, `dashboard`.
 
 Actions: `read`, `create`, `update`, `delete`, `publish`, `export`, plus
-resource-specific ones such as `marks:enter_own_subject` and
-`students:read_own`.
+resource-specific ones such as `marks:enter_own_subject`,
+`students:read_own`, `teacher_allocations:write` and
+`class_teacher_assignments:write`.
+
+**The two allocation permissions are separate on purpose.**
+`teacher_allocations:write` lets an HOD give a subject to a teacher;
+`class_teacher_assignments:write` lets an HOD decide a class's class teacher.
+Granting one does not grant the other, so a college can, if it wants, let one
+HOD allocate subjects while another handles class-teacher duties.
 
 **Scope** is a property of the assignment, not the permission:
 
@@ -246,6 +277,13 @@ resource-specific ones such as `marks:enter_own_subject` and
 | Branch | HOD, Teacher, Principal | Data filtered to the assigned branch |
 | Class | Class Teacher | Data filtered to branch + semester + scheme + academic year |
 | Own | Student | Data filtered to the student's own records |
+
+**Who grants the allocation permissions.** The Super Admin sets the permission
+matrix and grants permissions to roles and members — including granting an
+Admin the right to allocate teaching staff, and granting an HOD the right to
+allocate subjects and class teachers within their own branch. The Super Admin
+does not make these allocations themselves; they delegate that to the roles
+they have granted the permissions to.
 
 ---
 
@@ -400,13 +438,29 @@ The role bundle is frozen at seed time.
 ### 7.11 Teacher allocation cannot be managed in the UI
 
 **Requirement:** a teacher enters marks only for allocated subjects; a class
-teacher is assigned to a class (§3.6).
+teacher is assigned to a class; the HOD makes both allocations (§3.4, §3.6).
 
 **Current:** `TeacherSubject` rows exist and `TeacherSubject` has a unique
 constraint on `(teacherId, subjectId, academicYearId)`, but there is **no UI**
-to allocate a subject to a teacher, and no UI to assign a class teacher.
+to allocate a subject to a teacher, and no UI to assign a class teacher. There
+is no class-teacher assignment entity at all (see §7.3).
 
 **Impact:** allocation can only be done by editing the database directly.
+
+### 7.11a Class-teacher assignment has no backend either
+
+**Requirement:** the HOD assigns one class teacher per class (§3.4), and the
+class teacher then sees that class's statistics (§3.6).
+
+**Current:** the class-teacher concept does not exist in the backend. The
+`TeacherSubject` table covers subject allocation only. There is no way to
+record "Teacher-C is the class teacher for CS / semester 5 / scheme 2024 /
+academic year 2025-26", and no way to enforce "exactly one class teacher per
+class".
+
+**Impact:** the class teacher role cannot be exercised at all. §7.13's class
+statistics cannot be scoped to a class, and there is no assignment record to
+audit.
 
 ### 7.12 Teacher allocation is not enforced when entering marks
 
@@ -522,19 +576,20 @@ Ordered by how much they block the stated requirements.
 |---|---|---|---|
 | 1 | Subject / subject-offering not split | §2, §3.3, §4 | Large — schema + all subject/marks code |
 | 2 | No `Examination` entity; result publication unstateable | §2 | Medium — schema + result service |
-| 3 | No class-teacher assignment entity | §3.6 | Medium — schema + stats scope |
+| 3 | No class-teacher assignment entity (backend or UI) | §3.4, §3.6, §7.11a | Medium — schema + stats scope + UI |
 | 4 | No `Student`↔`User` link; student login unimplementable | §3.7, §7.4 | Medium |
 | 5 | Student data access not owner-scoped | §3.7, §7.5 | Medium |
 | 6 | Role guards veto permission grants | §3.1, §7.7 | Medium — every controller |
 | 7 | Teacher allocation not enforced on marks entry | §3.6, §7.12 | Medium |
+| 7a | HOD has no allocation screen (subjects or class teacher) | §3.4, §7.11 | Medium |
 | 8 | Branch scope not enforced on reads | §3.4, §3.5, §7.16 | Medium — all read paths |
 | 9 | Super Admin holds every write permission | §3.2, §7.6 | Small — seed + permission set |
 | 10 | No branches page | §3.2, §5, §7.8 | Medium — new page + API wiring |
 | 11 | No academic-years page | §3.2, §5 | Small — new page + API wiring |
 | 12 | No subjects page | §3.3, §5, §7.9 | Large — new page + offerings UI |
 | 13 | No roles/permissions editing UI | §3.1, §3.2, §7.10 | Medium |
-| 14 | No teacher-allocation UI | §3.6, §7.11 | Medium |
-| 15 | No class-teacher assignment UI | §3.6, §7.11 | Medium |
+| 14 | No teacher-allocation UI | §3.4, §3.6, §7.11 | Medium |
+| 15 | No class-teacher assignment UI | §3.4, §3.6, §7.11, §7.11a | Medium |
 | 16 | Dashboard not role-aware | §3.2, §7.15 | Medium |
 | 17 | No "my result" screen | §3.7, §7.14 | Medium |
 | 18 | Student excluded from class toppers | §3.7, §7.14 | Small |
