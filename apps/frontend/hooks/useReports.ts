@@ -6,11 +6,14 @@ import {
   type GenerateReportPayload,
   type Report,
   type ReportListFilters,
+  type ReportReadiness,
+  type ReportScope,
 } from '@/lib/services/reports.service';
 import { queryKeys } from '@/lib/query/queryKeys';
 import { invalidationRules } from '@/lib/query/invalidationRules';
 import type { ListResponse } from '@/lib/types/api';
 import { useToast } from '@/lib/utils/notifications';
+import { extractErrorMessage } from './useAuth';
 
 export function useGenerateReport() {
   const qc = useQueryClient();
@@ -22,7 +25,29 @@ export function useGenerateReport() {
       qc.setQueryData(queryKeys.reports.detail(report.id), report);
       toast.success('Report generation started');
     },
-    onError: () => toast.error('Failed to start report generation'),
+    onError: (error: unknown) => {
+      /**
+       * The backend refuses a report for a class whose result is not
+       * complete, and says what is missing. That message is far more useful
+       * than a generic failure, so it is shown as it stands.
+       */
+      toast.error(extractErrorMessage(error));
+    },
+  });
+}
+
+/**
+ * Whether the class's result is complete enough to report on.
+ *
+ * The check runs as soon as the scope is complete, so the operator is told
+ * what is missing before they press the button rather than after.
+ */
+export function useReportReadiness(scope?: ReportScope) {
+  return useQuery<ReportReadiness>({
+    queryKey: queryKeys.reports.readiness(scope),
+    queryFn: () => reportsService.checkReadiness(scope as ReportScope),
+    enabled: !!scope?.branchId && !!scope?.schemeId && !!scope?.academicYearId,
+    staleTime: 30 * 1000,
   });
 }
 
@@ -75,6 +100,13 @@ export function useDownloadReport() {
       URL.revokeObjectURL(url);
     },
     onSuccess: () => toast.success('Report downloaded'),
-    onError: () => toast.error('Failed to download report'),
+    onError: (error: unknown) => {
+      /**
+       * A download is refused when the class's result is no longer complete
+       * — marks may have been withdrawn since the report was queued. The
+       * backend says what is missing, so that message is shown as it stands.
+       */
+      toast.error(extractErrorMessage(error));
+    },
   });
 }

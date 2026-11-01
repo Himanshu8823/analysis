@@ -38,7 +38,7 @@ See [PROJECT.md](./PROJECT.md) for the complete project plan (source of truth).
 
 ### Database & Storage
 - **Primary DB**: PostgreSQL (Neon Cloud)
-- **Storage**: Neon Storage (Excel, PDF, generated reports)
+- **Storage**: Neon Storage (Excel, PDF, generated reports, profile pictures)
 - **Cache / Queue**: Redis (Upstash or local)
 
 ### Tooling

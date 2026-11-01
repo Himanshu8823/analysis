@@ -517,10 +517,14 @@ export class StudentSelfService {
    *
    * The calculator already reports the subject's code and name alongside
    * each result, so no lookup is needed here.
+   *
+   * A subject with no result in yet is *pending*, not failed — it is kept
+   * out of the failed list, so a student whose marks are still being entered
+   * is not shown as having failed a subject they have not sat.
    */
   private buildTotals(calculation: StudentCalculationResult): MyResultTotals {
     const failedSubjects = calculation.subjectResults
-      .filter((result) => !result.isPass)
+      .filter((result) => result.isEvaluated && !result.isPass)
       .map((result) => ({
         subjectCode: result.subjectCode,
         subjectName: result.subjectName,

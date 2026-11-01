@@ -45,6 +45,33 @@ export class TeacherAllocationsController {
     return this.service.createTeacherAllocation(dto);
   }
 
+  /**
+   * The teachers who may be allocated a subject in a branch.
+   *
+   * Declared before the list route so the literal path wins over it.
+   *
+   * This is guarded by `teacher_allocations:read` — the permission the HOD
+   * already holds to do the allocation — rather than by `users:read`. The
+   * member list would expose every account in the college, which is more
+   * than the HOD needs to allocate a subject and more than they are
+   * entitled to.
+   */
+  @Get('assignable-teachers')
+  @Permissions('teacher_allocations:read')
+  @ApiOperation({ summary: 'List the teachers assignable in a branch' })
+  @ApiQuery({ name: 'branchId', required: false })
+  async findAssignableTeachers(
+    @CurrentUser() user: JwtPayload,
+    @Query('branchId') branchId?: string
+  ) {
+    const effectiveBranchId = await this.scope.resolveBranchScope(
+      user.sub,
+      parseOptionalString(branchId)
+    );
+
+    return this.service.findAssignableTeachers(effectiveBranchId);
+  }
+
   @Get()
   @Permissions('teacher_allocations:read')
   @ApiOperation({ summary: 'List subject-to-teacher allocations' })

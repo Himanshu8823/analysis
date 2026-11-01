@@ -50,7 +50,7 @@ A complete software product with proper MVC architecture, RBAC, automated OCR fo
 
 ### Database:
 - **Primary DB**: PostgreSQL (Neon Cloud)
-- **Storage**: Neon Storage (for Excel, PDF, generated reports)
+- **Storage**: Neon Storage (for Excel, PDF, generated reports, profile pictures)
 - **Cache/Queue**: Redis (Upstash or local)
 
 ### Tooling:
@@ -375,6 +375,7 @@ apps/frontend/
 | Endpoint | Limit |
 |----------|-------|
 | `POST /auth/login` | 5 / 15min / IP |
+| `POST /auth/profile/avatar` | 20 / hour / user |
 | `POST /upload` | 10 / hour / user |
 | `POST /reports/generate` | 5 / hour / user |
 | `GET /api/*` (general) | 100 / min / user |

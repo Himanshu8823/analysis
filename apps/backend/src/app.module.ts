@@ -27,6 +27,7 @@ import { AcademicModule } from './modules/academic/academic.module';
 import { SchemesModule } from './modules/schemes/schemes.module';
 import { SubjectsModule } from './modules/subjects/subjects.module';
 import { AllocationsModule } from './modules/allocations/allocations.module';
+import { ClassOverviewModule } from './modules/class-overview/class-overview.module';
 import { StudentsModule } from './modules/students/students.module';
 import { MarksModule } from './modules/marks/marks.module';
 import { UploadModule } from './modules/upload/upload.module';
@@ -100,6 +101,7 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     SchemesModule,
     SubjectsModule,
     AllocationsModule,
+    ClassOverviewModule,
     StudentsModule,
     MarksModule,
     UploadModule,

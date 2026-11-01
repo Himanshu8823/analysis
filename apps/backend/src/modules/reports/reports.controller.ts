@@ -64,6 +64,38 @@ export class ReportsController {
     });
   }
 
+  /**
+   * Whether a class's result is complete enough to report on.
+   *
+   * The reports screen calls this before offering the generate button, so
+   * the operator is told what is missing *before* they try — rather than
+   * only after the request is refused.
+   *
+   * Declared before `@Get(':id')` so the literal path wins over it.
+   */
+  @Get('readiness')
+  @Permissions('reports:read')
+  @ApiOperation({ summary: 'Check whether a class result is complete enough to report on' })
+  async readiness(
+    @CurrentUser() user: JwtPayload,
+    @Query('branchId') branchId?: string,
+    @Query('schemeId') schemeId?: string,
+    @Query('semester') semester?: string,
+    @Query('academicYearId') academicYearId?: string
+  ) {
+    const effectiveBranchId = await this.scope.resolveBranchScope(
+      user.sub,
+      parseOptionalString(branchId)
+    );
+
+    return this.service.checkReadiness({
+      branchId: effectiveBranchId ?? '',
+      schemeId: parseOptionalString(schemeId) ?? '',
+      semester: parseOptionalInt(semester) ?? 0,
+      academicYearId: parseOptionalString(academicYearId) ?? '',
+    });
+  }
+
   @Get(':id')
   @Permissions('reports:read')
   async findById(@CurrentUser() user: JwtPayload, @Param('id') id: string) {

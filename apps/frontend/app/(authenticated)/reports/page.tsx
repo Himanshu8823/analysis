@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Download, FileSpreadsheet, Loader2, FileCheck2, AlertCircle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Download, FileSpreadsheet, Loader2, FileCheck2, AlertCircle, Clock } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/forms/DataTable';
 import { Pagination } from '@/components/forms/Pagination';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -12,12 +12,13 @@ import {
   useGenerateReport,
   useReports,
   useDownloadReport,
+  useReportReadiness,
 } from '@/hooks/useReports';
 import { useBranches } from '@/hooks/useBranches';
 import { useSchemes } from '@/hooks/useSchemes';
 import { useAcademicYears } from '@/hooks/useAcademic';
 import { formatters } from '@/lib/utils/formatters';
-import type { Report, ReportType } from '@/lib/services/reports.service';
+import type { Report, ReportType, ReportReadiness } from '@/lib/services/reports.service';
 
 const REPORT_TYPES: Array<{ value: ReportType; label: string }> = [
   { value: 'STUDENT_WISE', label: 'Student-wise result' },
@@ -89,17 +90,41 @@ export default function ReportsPage() {
 
   const scopeReady = !!branchId && !!schemeId && !!effectiveAcademicYearId && semester > 0;
 
+  /**
+   * The scope object is built only once the scope is complete. The
+   * readiness check is disabled until then, so it never asks the server
+   * about a half-picked class.
+   */
+  const scope = useMemo(
+    () =>
+      scopeReady
+        ? {
+            branchId,
+            schemeId,
+            semester,
+            academicYearId: effectiveAcademicYearId,
+          }
+        : undefined,
+    [scopeReady, branchId, schemeId, semester, effectiveAcademicYearId]
+  );
+
+  const readinessQuery = useReportReadiness(scope);
+  const readiness = readinessQuery.data;
+
+  /**
+   * The report is only offered when the class's result is complete. The
+   * button stays disabled while the check is still running, so the operator
+   * is never offered a report that the server would refuse.
+   */
+  const resultReady = readiness?.isReady === true;
+  const canGenerate = scopeReady && readinessQuery.isSuccess && resultReady && !generating;
+
   const onGenerate = () => {
-    if (!scopeReady) return;
+    if (!scopeReady || !scope) return;
     generate(
       {
         type: reportType,
-        filters: {
-          branchId,
-          schemeId,
-          semester,
-          academicYearId: effectiveAcademicYearId,
-        },
+        filters: scope,
       },
       { onSuccess: () => setPage(1) },
     );
@@ -243,11 +268,20 @@ export default function ReportsPage() {
             exact scope.
           </p>
         ) : null}
+
+        {scopeReady ? (
+          <ReadinessNotice
+            readiness={readiness}
+            loading={readinessQuery.isLoading}
+            error={readinessQuery.isError}
+          />
+        ) : null}
+
         <div className="mt-lg flex flex-col gap-sm md:flex-row md:items-center md:justify-end">
           <button
             type="button"
             className="cb-btn-primary w-full md:w-auto"
-            disabled={!scopeReady || generating}
+            disabled={!canGenerate}
             onClick={onGenerate}
           >
             {generating ? (
@@ -305,5 +339,116 @@ export default function ReportsPage() {
         ) : null}
       </section>
     </section>
+  );
+}
+
+/**
+ * The state of the class's result, shown above the generate button.
+ *
+ * A report states a verdict — a PASS or a FAIL — for every student in the
+ * class, so it is only produced once every student has a result in every
+ * subject. This notice says what is still missing, so the operator knows
+ * what to enter rather than just that the button is dead.
+ */
+function ReadinessNotice({
+  readiness,
+  loading,
+  error,
+}: {
+  readiness?: ReportReadiness;
+  loading: boolean;
+  error: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="mt-base flex items-center gap-sm rounded-md border border-hairline bg-surface-soft px-base py-sm text-body-sm text-body">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        <span>Checking whether every student&apos;s result is in…</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="mt-base flex items-start gap-sm rounded-md border border-hairline bg-surface-soft px-base py-sm text-body-sm text-semantic-down">
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        <span>Could not check whether the result is complete. Try again.</span>
+      </div>
+    );
+  }
+
+  if (!readiness) return null;
+
+  if (readiness.isReady) {
+    return (
+      <div className="mt-base flex items-start gap-sm rounded-md border border-hairline bg-surface-soft px-base py-sm text-body-sm text-body">
+        <FileCheck2 className="mt-0.5 h-4 w-4 shrink-0 text-semantic-up" aria-hidden />
+        <span>
+          Every student&apos;s result is in ({readiness.completeCount} of {readiness.studentCount}
+          ). The report can be generated.
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="mt-base flex flex-col gap-sm rounded-md border border-hairline bg-surface-soft px-base py-sm text-body-sm text-body"
+      role="status"
+    >
+      <div className="flex items-start gap-sm">
+        <Clock className="mt-0.5 h-4 w-4 shrink-0 text-semantic-down" aria-hidden />
+        <div className="min-w-0">
+          <p className="font-semibold text-ink">Result not available yet</p>
+          <p className="mt-1">{readiness.message}</p>
+          <p className="mt-1 text-muted">
+            {readiness.completeCount} of {readiness.studentCount} students have a complete result.
+            The report is generated once every student&apos;s result is in.
+          </p>
+        </div>
+      </div>
+
+      {readiness.pendingSubjects.length ? (
+        <div>
+          <p className="text-caption-strong uppercase tracking-wide text-muted">
+            Marks still missing
+          </p>
+          <ul className="mt-1 flex flex-wrap gap-x-sm gap-y-xs">
+            {readiness.pendingSubjects.map((subject) => (
+              <li key={subject.subjectCode} className="text-body-sm">
+                <span className="num font-medium text-ink">{subject.subjectCode}</span>{' '}
+                <span className="text-muted">
+                  ({subject.missingCount} student{subject.missingCount === 1 ? '' : 's'})
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {readiness.pendingStudents.length ? (
+        <details className="text-body-sm">
+          <summary className="cursor-pointer font-medium text-ink">
+            Students awaiting marks ({readiness.pendingCount})
+          </summary>
+          <ul className="mt-2 space-y-xs">
+            {readiness.pendingStudents.map((student) => (
+              <li key={student.rollNo} className="flex flex-wrap items-baseline gap-x-sm">
+                <span className="num text-muted">{student.rollNo}</span>
+                <span className="font-medium text-ink">{student.name}</span>
+                <span className="num text-muted">
+                  missing {student.missingSubjects.join(', ')}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {readiness.pendingCount > readiness.pendingStudents.length ? (
+            <p className="mt-2 text-muted">
+              and {readiness.pendingCount - readiness.pendingStudents.length} more.
+            </p>
+          ) : null}
+        </details>
+      ) : null}
+    </div>
   );
 }

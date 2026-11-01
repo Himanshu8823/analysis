@@ -10,8 +10,6 @@ export const queryKeys = {
     list: (filters?: unknown) => ['members', 'list', filters ?? null] as const,
     detail: (id: string) => ['members', 'detail', id] as const,
     roles: () => ['members', 'roles'] as const,
-    /** The members holding the TEACHER role, narrowed to a branch. */
-    teachers: (branchId?: string) => ['members', 'teachers', branchId ?? null] as const,
   },
   invites: {
     all: () => ['invites'] as const,
@@ -73,6 +71,15 @@ export const queryKeys = {
      */
     offeringOptions: (filters?: unknown) =>
       ['teacher-allocations', 'offering-options', filters ?? null] as const,
+    /**
+     * The teachers assignable in a branch.
+     *
+     * A separate key from `members.teachers`: the two hold different shapes
+     * — this one carries no roles or permissions — and the member list is no
+     * longer what the allocation picker reads.
+     */
+    assignableTeachers: (branchId?: string) =>
+      ['teacher-allocations', 'assignable-teachers', branchId ?? null] as const,
   },
   /**
    * Class-teacher assignments — one class teacher per class context.
@@ -114,6 +121,24 @@ export const queryKeys = {
     all: () => ['reports'] as const,
     list: (filters?: unknown) => ['reports', 'list', filters ?? null] as const,
     detail: (id: string) => ['reports', 'detail', id] as const,
+    /**
+     * Whether a class's result is complete enough to report on.
+     *
+     * The scope is part of the key, so switching the scope refetches.
+     */
+    readiness: (scope?: unknown) => ['reports', 'readiness', scope ?? null] as const,
+  },
+  /**
+   * The class overview of the signed-in class teacher.
+   *
+   * The keys are scoped to the session, so they are separate from the
+   * roster and topper keys: invalidating those must not throw away the
+   * class teacher's own class view.
+   */
+  classOverview: {
+    all: () => ['class-overview'] as const,
+    myClasses: () => ['class-overview', 'my-classes'] as const,
+    detail: (assignmentId: string) => ['class-overview', 'detail', assignmentId] as const,
   },
   toppers: {
     subjectWise: (filters?: unknown) => ['toppers', 'subject', filters ?? null] as const,

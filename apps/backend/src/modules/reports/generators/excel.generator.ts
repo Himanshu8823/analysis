@@ -20,7 +20,18 @@ interface StudentRowResult {
   isOverallPass: boolean;
   earnedCredits: number;
   totalCredits: number;
-  perSubject: Map<string, { obtained: number; max: number; percentage: number; isPass: boolean }>;
+  /**
+   * Whether every subject of this student has a verdict.
+   *
+   * The report layer refuses to generate a report for an incomplete class,
+   * so a row reaching the sheet is complete. The flag is carried anyway so
+   * the sheet can never print a verdict it did not earn.
+   */
+  isComplete: boolean;
+  perSubject: Map<
+    string,
+    { obtained: number; max: number; percentage: number; isPass: boolean; isEvaluated: boolean }
+  >;
 }
 
 /**
@@ -133,7 +144,7 @@ export class ExcelReportGenerator {
       const result = calc.calculateStudentResult(student.id, studentMarks, offeringContexts);
       const perSubject = new Map<
         string,
-        { obtained: number; max: number; percentage: number; isPass: boolean }
+        { obtained: number; max: number; percentage: number; isPass: boolean; isEvaluated: boolean }
       >();
       for (const sub of result.subjectResults) {
         perSubject.set(sub.subjectId, {
@@ -141,6 +152,7 @@ export class ExcelReportGenerator {
           max: sub.totalMax,
           percentage: sub.percentage,
           isPass: sub.isPass,
+          isEvaluated: sub.isEvaluated,
         });
       }
       rows.set(student.id, {
@@ -152,6 +164,7 @@ export class ExcelReportGenerator {
         isOverallPass: result.isOverallPass,
         earnedCredits: result.earnedCredits,
         totalCredits: result.totalCredits,
+        isComplete: result.isComplete,
         perSubject,
       });
     }
@@ -198,7 +211,12 @@ export class ExcelReportGenerator {
         }),
         row.totalObtained,
         `${row.overallPercentage.toFixed(2)}%`,
-        row.isOverallPass ? 'PASS' : 'FAIL',
+        /**
+         * The verdict is only printed when it exists. A result that is not
+         * complete reads as pending, never as a failure — a student whose
+         * marks are still being entered has not failed anything.
+         */
+        row.isComplete ? (row.isOverallPass ? 'PASS' : 'FAIL') : 'PENDING',
       ];
       sheet.addRow(cells);
     }
@@ -273,8 +291,16 @@ export class ExcelReportGenerator {
     for (const sub of data.subjects) {
       const studentScores = data.students
         .map((s) => data.rows.get(s.id)?.perSubject.get(sub.id))
-        .filter((v): v is { obtained: number; max: number; percentage: number; isPass: boolean } =>
-          Boolean(v && v.max > 0)
+        .filter(
+          (
+            v
+          ): v is {
+            obtained: number;
+            max: number;
+            percentage: number;
+            isPass: boolean;
+            isEvaluated: boolean;
+          } => Boolean(v && v.max > 0 && v.isEvaluated)
         );
 
       if (studentScores.length === 0) {
@@ -338,7 +364,11 @@ export class ExcelReportGenerator {
         row.totalMax,
         `${row.overallPercentage.toFixed(2)}%`,
         `${row.earnedCredits}/${row.totalCredits}`,
-        row.isOverallPass ? 'PASS' : 'FAIL',
+        /**
+         * The verdict is only printed when it exists. A result that is not
+         * complete reads as pending, never as a failure.
+         */
+        row.isComplete ? (row.isOverallPass ? 'PASS' : 'FAIL') : 'PENDING',
       ]);
     }
   }
@@ -376,21 +406,39 @@ export class ExcelReportGenerator {
     sheet.getRow(1).font = { bold: true };
 
     const totalStudents = data.rows.size;
-    const passed = [...data.rows.values()].filter((r) => r.isOverallPass).length;
-    const failed = totalStudents - passed;
-    const distinction = [...data.rows.values()].filter((r) => r.overallPercentage >= 75).length;
-    const firstClass = [...data.rows.values()].filter(
+    const allRows = [...data.rows.values()];
+
+    /**
+     * The pass and fail counts cover the students whose result is complete.
+     * A student whose result is still pending is counted on its own row
+     * rather than being folded into the failures — they have not failed
+     * anything yet.
+     */
+    const completeRows = allRows.filter((r) => r.isComplete);
+    const pendingRows = allRows.filter((r) => !r.isComplete);
+
+    const passed = completeRows.filter((r) => r.isOverallPass).length;
+    const failed = completeRows.length - passed;
+    const distinction = completeRows.filter((r) => r.overallPercentage >= 75).length;
+    const firstClass = completeRows.filter(
       (r) => r.overallPercentage >= 60 && r.overallPercentage < 75
     ).length;
-    const secondClass = [...data.rows.values()].filter(
+    const secondClass = completeRows.filter(
       (r) => r.overallPercentage >= 50 && r.overallPercentage < 60
     ).length;
 
-    const fmt = (n: number) =>
-      totalStudents > 0 ? `${((n / totalStudents) * 100).toFixed(2)}%` : '0%';
+    /**
+     * The percentages are taken over the students who have a verdict, so
+     * the column adds up to 100% of the *reported* class rather than being
+     * diluted by the students still waiting on their marks.
+     */
+    const reported = completeRows.length;
+    const fmt = (n: number) => (reported > 0 ? `${((n / reported) * 100).toFixed(2)}%` : '0%');
     sheet.addRow(['Total Students', totalStudents, '100%']);
+    sheet.addRow(['Results Reported', reported, fmt(reported)]);
     sheet.addRow(['Pass', passed, fmt(passed)]);
     sheet.addRow(['Fail', failed, fmt(failed)]);
+    sheet.addRow(['Awaiting Result', pendingRows.length, fmt(pendingRows.length)]);
     sheet.addRow(['Distinction (>=75%)', distinction, fmt(distinction)]);
     sheet.addRow(['First Class (60-74.99%)', firstClass, fmt(firstClass)]);
     sheet.addRow(['Second Class (50-59.99%)', secondClass, fmt(secondClass)]);
@@ -411,8 +459,18 @@ export class ExcelReportGenerator {
       'Second Class (50-59%)': 0,
       'Pass (40-49%)': 0,
       'Fail (<40%)': 0,
+      'Awaiting Result': 0,
     };
     for (const r of data.rows.values()) {
+      /**
+       * A student whose result is not complete has no percentage to place,
+       * so they are bucketed as awaiting rather than landing in the failure
+       * bucket by default.
+       */
+      if (!r.isComplete) {
+        buckets['Awaiting Result']++;
+        continue;
+      }
       const p = r.overallPercentage;
       if (p >= 75) buckets['Distinction (>=75%)']++;
       else if (p >= 60) buckets['First Class (60-74%)']++;

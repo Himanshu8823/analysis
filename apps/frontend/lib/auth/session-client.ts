@@ -22,6 +22,11 @@ interface Session {
      * rest of the application. The backend is the authority on this flag.
      */
     mustChangePassword: boolean;
+    /**
+     * The member's profile picture, as a URL into the object-storage bucket.
+     * Absent when the member never picked one.
+     */
+    avatarUrl?: string | null;
   };
 }
 

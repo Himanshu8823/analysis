@@ -1,12 +1,34 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Patch,
+  Post,
+  Req,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
-import { AcceptInviteDto, ChangePasswordDto, LoginDto, RefreshTokenDto } from './dto';
+import {
+  AcceptInviteDto,
+  ChangePasswordDto,
+  LoginDto,
+  RefreshTokenDto,
+  UpdateProfileDto,
+} from './dto';
 import { Public, CurrentUser, AllowPasswordChange } from '@/common/decorators';
 import type { JwtPayload } from '@/common/types';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
+import { MAX_AVATAR_BYTES } from '@/common/validators/image-file.validator';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -107,5 +129,65 @@ export class AuthController {
   @ApiBearerAuth()
   async me(@CurrentUser() user: JwtPayload) {
     return this.authService.getMe(user.sub);
+  }
+
+  /**
+   * Updates the signed-in user's own profile.
+   *
+   * Only the name is editable. The email identifies the account and is the
+   * login, so it is never changed from here — the client renders it as a
+   * disabled field instead of sending it.
+   *
+   * Exempt from the forced-password-change gate: a member who has just
+   * signed in with a temporary password should still be able to correct
+   * their name.
+   */
+  @Patch('profile')
+  @UseGuards(JwtAuthGuard)
+  @AllowPasswordChange()
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update your own profile' })
+  async updateProfile(@Body() dto: UpdateProfileDto, @CurrentUser() user: JwtPayload) {
+    return this.authService.updateProfile(user.sub, dto);
+  }
+
+  /**
+   * Uploads the signed-in user's profile picture.
+   *
+   * The file is written to the object-storage bucket and the account is
+   * pointed at it. The previous picture is deleted once the new one is
+   * stored.
+   */
+  @Post('profile/avatar')
+  @UseGuards(JwtAuthGuard)
+  @AllowPasswordChange()
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload your profile picture' })
+  @Throttle({ default: { limit: 20, ttl: 3600000 } }) // 20/hour/user
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_AVATAR_BYTES } }))
+  async uploadAvatar(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: JwtPayload
+  ) {
+    if (!file) {
+      throw new BadRequestException('An image file is required');
+    }
+    return this.authService.updateAvatar(user.sub, file);
+  }
+
+  /**
+   * Removes the signed-in user's profile picture.
+   *
+   * The account falls back to showing the member's initials.
+   */
+  @Delete('profile/avatar')
+  @UseGuards(JwtAuthGuard)
+  @AllowPasswordChange()
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remove your profile picture' })
+  async removeAvatar(@CurrentUser() user: JwtPayload) {
+    return this.authService.removeAvatar(user.sub);
   }
 }

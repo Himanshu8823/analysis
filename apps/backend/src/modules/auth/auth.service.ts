@@ -10,13 +10,15 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { AuthRepository } from './auth.repository';
-import { AcceptInviteDto, ChangePasswordDto, LoginDto } from './dto';
+import { AcceptInviteDto, ChangePasswordDto, LoginDto, UpdateProfileDto } from './dto';
 import type { JwtPayload } from '@/common/types';
 import { CACHE_SERVICE } from '@/common/constants/injection-tokens';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import type { CacheService } from '@/common/interfaces/cache.service';
 import { CacheKeys, CACHE_TTL_SECONDS } from '../cache/cache.constants';
 import { InvitesService } from '../invites/invites.service';
+import { StorageService } from '../storage/storage.service';
+import { validateImageFile } from '@/common/validators/image-file.validator';
 
 export interface RequestMetadata {
   ip?: string;
@@ -32,6 +34,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly auditLogsService: AuditLogsService,
     private readonly invitesService: InvitesService,
+    private readonly storage: StorageService,
     @Inject(CACHE_SERVICE) private readonly cache: CacheService
   ) {}
 
@@ -110,6 +113,7 @@ export class AuthService {
         permissions,
         branchId: userRoles[0]?.branchId ?? null,
         mustChangePassword: user.mustChangePassword,
+        avatarUrl: user.avatarUrl,
       },
     };
   }
@@ -342,7 +346,142 @@ export class AuthService {
       permissions,
       branchId: userRoles[0]?.branchId ?? null,
       mustChangePassword: user.mustChangePassword,
+      avatarUrl: user.avatarUrl,
       lastLoginAt: user.lastLoginAt,
     };
+  }
+
+  /**
+   * Updates the signed-in user's own profile.
+   *
+   * Only the name is editable. The email identifies the account and is the
+   * login, so it is never changed from here — changing it is an
+   * administrative act, not a personal one.
+   */
+  async updateProfile(
+    userId: string,
+    dto: UpdateProfileDto
+  ): Promise<{ name: string; avatarUrl: string | null }> {
+    const user = await this.repository.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException();
+    }
+
+    const name = dto.name?.trim();
+    if (!name) {
+      throw new BadRequestException('Your name cannot be empty');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { name, updatedBy: userId },
+    });
+
+    await this.auditLogsService.log({
+      userId,
+      action: 'PROFILE_UPDATED',
+      resource: 'user',
+      resourceId: userId,
+      details: { name },
+    });
+
+    return { name, avatarUrl: user.avatarUrl };
+  }
+
+  /**
+   * Stores a new profile picture and points the account at it.
+   *
+   * The bytes are validated by their magic bytes rather than by the name or
+   * the declared content type — both of those are chosen by the client. The
+   * previous picture is deleted only after the new one is safely stored, so a
+   * failed upload never leaves the member without a picture.
+   */
+  async updateAvatar(
+    userId: string,
+    file: { buffer: Buffer; originalname: string; mimetype: string; size: number }
+  ): Promise<{ avatarUrl: string }> {
+    const user = await this.repository.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException();
+    }
+
+    const { extension } = validateImageFile(file);
+
+    /**
+     * The stored name carries the detected extension, so the file in the
+     * bucket always matches its bytes — a renamed `.png` is stored as the
+     * image type it actually is.
+     */
+    const stored = await this.storage.save(file.buffer, `avatar${extension}`, 'avatars');
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl: stored.fileUrl, updatedBy: userId },
+    });
+
+    /**
+     * The old picture is removed once the new one is in place. A failure
+     * here is not worth failing the request over — the member already has
+     * their new picture, and a stale file in the bucket is harmless.
+     */
+    if (user.avatarUrl) {
+      await this.removeStoredAvatar(user.avatarUrl);
+    }
+
+    await this.auditLogsService.log({
+      userId,
+      action: 'AVATAR_UPDATED',
+      resource: 'user',
+      resourceId: userId,
+    });
+
+    return { avatarUrl: stored.fileUrl };
+  }
+
+  /**
+   * Removes the profile picture and falls the account back to its initials.
+   */
+  async removeAvatar(userId: string): Promise<{ avatarUrl: null }> {
+    const user = await this.repository.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException();
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl: null, updatedBy: userId },
+    });
+
+    if (user.avatarUrl) {
+      await this.removeStoredAvatar(user.avatarUrl);
+    }
+
+    await this.auditLogsService.log({
+      userId,
+      action: 'AVATAR_REMOVED',
+      resource: 'user',
+      resourceId: userId,
+    });
+
+    return { avatarUrl: null };
+  }
+
+  /**
+   * Deletes a stored avatar file.
+   *
+   * The URL is turned back into the path it was written under and handed to
+   * the storage service, which resolves it inside its own root — a URL that
+   * points somewhere else is simply not removed.
+   */
+  private async removeStoredAvatar(avatarUrl: string): Promise<void> {
+    try {
+      const relativePath = this.storage.relativePathFromUrl(avatarUrl);
+      if (relativePath) {
+        await this.storage.remove(relativePath);
+      }
+    } catch {
+      // The picture stays in the bucket. The member no longer points at it,
+      // which is what matters.
+    }
   }
 }

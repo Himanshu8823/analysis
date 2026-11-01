@@ -9,6 +9,7 @@ import {
   AllocationsRepository,
   type TeacherAllocationRow,
   type ClassTeacherAssignmentRow,
+  type AssignableTeacher,
 } from './allocations.repository';
 import { CreateTeacherAllocationDto, CreateClassTeacherAssignmentDto } from './dto';
 
@@ -22,6 +23,18 @@ export class AllocationsService {
   // ---------------------------------------------------------------------
   // Teacher allocations — "this teacher teaches this subject offering"
   // ---------------------------------------------------------------------
+
+  /**
+   * The teachers who may be allocated a subject in a branch.
+   *
+   * This is deliberately not the member list. The member list carries the
+   * whole college's people — every account, with its roles — and is guarded
+   * by `users:read`, which the HOD does not hold. The HOD needs only the
+   * teachers of their own branch, so they get exactly that.
+   */
+  async findAssignableTeachers(branchId?: string): Promise<AssignableTeacher[]> {
+    return this.repository.findAssignableTeachers(branchId);
+  }
 
   async findTeacherAllocations(params: {
     branchId?: string;

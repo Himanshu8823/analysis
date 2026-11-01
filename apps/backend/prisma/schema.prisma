@@ -30,6 +30,10 @@ model User {
   invitedById        String?   @map("invited_by_id")
   invitedAt          DateTime? @map("invited_at")
 
+  // The member's profile picture, stored in the object-storage bucket.
+  // `null` means the member never picked one — the UI shows their initials.
+  avatarUrl String? @map("avatar_url")
+
   // Relations
   userRoles               UserRole[]
   teacherSubjects         TeacherSubject[]         @relation("TeacherSubjects")

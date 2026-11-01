@@ -28,6 +28,15 @@ export interface SubjectCalculationResult {
   percentage: number;
   isPass: boolean;
   reason: string;
+  /**
+   * Whether this subject's result has actually been evaluated.
+   *
+   * A subject with no marks recorded has no verdict yet — it is *pending*,
+   * not failed. Without this flag an empty subject reads as a zero-scored
+   * failure, which is how a class with half-entered marks ends up looking
+   * like a class where everyone failed.
+   */
+  isEvaluated: boolean;
 }
 
 /**
@@ -47,6 +56,8 @@ export interface StudentCalculationResult {
     percentage: number;
     isPass: boolean;
     reason: string;
+    /** Whether this subject has a verdict yet (see `isEvaluated`). */
+    isEvaluated: boolean;
   }>;
   totalObtained: number;
   totalMax: number;
@@ -56,6 +67,20 @@ export interface StudentCalculationResult {
   isOverallPass: boolean;
   subjectCount: number;
   passCount: number;
+  /**
+   * How many of the student's subjects have no verdict yet.
+   *
+   * A non-zero count means the student's result is incomplete — the class is
+   * not ready to be published or reported on.
+   */
+  pendingSubjectCount: number;
+  /**
+   * Whether every subject of this student has been evaluated.
+   *
+   * A student whose result is complete can be reported on; one whose is not
+   * must not be counted as passing or failing.
+   */
+  isComplete: boolean;
 }
 
 /**

@@ -23,6 +23,11 @@ interface AuthUser {
   permissions?: string[];
   branchId?: string | null;
   mustChangePassword: boolean;
+  /**
+   * The member's profile picture, as a URL into the object-storage bucket.
+   * Absent when the member never picked one — the UI shows their initials.
+   */
+  avatarUrl?: string | null;
 }
 
 /**
@@ -40,6 +45,7 @@ interface AuthMeResponse {
   permissions?: string[];
   branchId?: string | null;
   mustChangePassword: boolean;
+  avatarUrl?: string | null;
 }
 
 interface AuthResponse {
@@ -60,6 +66,7 @@ function toAuthUser(me: AuthMeResponse): AuthUser {
     permissions: me.permissions ?? [],
     branchId: me.branchId ?? null,
     mustChangePassword: me.mustChangePassword,
+    avatarUrl: me.avatarUrl ?? null,
   };
 }
 
@@ -98,5 +105,31 @@ export const authService = {
     password: string;
   }): Promise<void> => {
     await apiClient.post(ENDPOINTS.AUTH.CHANGE_PASSWORD, payload);
+  },
+  /**
+   * Updates the signed-in user's own profile.
+   *
+   * Only the name is sent. The email is not part of the payload — it
+   * identifies the account and is never changed from the profile screen.
+   */
+  updateProfile: async (payload: { name: string }): Promise<{ name: string; avatarUrl: string | null }> => {
+    const res = await apiClient.patch(ENDPOINTS.AUTH.PROFILE, payload);
+    return res.data.data;
+  },
+  /**
+   * Uploads the signed-in user's profile picture.
+   *
+   * The file is sent as multipart form data under the `file` field.
+   */
+  uploadAvatar: async (file: File): Promise<{ avatarUrl: string }> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await apiClient.post(ENDPOINTS.AUTH.PROFILE_AVATAR, form);
+    return res.data.data;
+  },
+  /** Removes the signed-in user's profile picture. */
+  removeAvatar: async (): Promise<{ avatarUrl: null }> => {
+    const res = await apiClient.delete(ENDPOINTS.AUTH.PROFILE_AVATAR);
+    return res.data.data;
   },
 };

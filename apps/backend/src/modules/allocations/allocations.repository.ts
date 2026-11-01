@@ -38,9 +38,51 @@ export interface ClassTeacherAssignmentRow {
   assignedAt: string;
 }
 
+/**
+ * A teacher who may be allocated a subject in a branch.
+ *
+ * Only what the allocation screen needs is returned — the member's name and
+ * email — so the endpoint can stay narrower than the full member list.
+ */
+export interface AssignableTeacher {
+  id: string;
+  name: string;
+  email: string;
+}
+
 @Injectable()
 export class AllocationsRepository {
   constructor(private readonly prisma: PrismaClient) {}
+
+  /**
+   * The teachers who may be allocated a subject in a branch.
+   *
+   * A teacher is assignable when they hold the TEACHER role in that branch
+   * — or in no branch at all, since a college-wide teacher teaches wherever
+   * they are needed. Inactive accounts are excluded: a deactivated teacher
+   * cannot be given new work.
+   *
+   * The branch filter is applied on the `UserRole` relation, because the
+   * `User` table carries no branch of its own.
+   */
+  async findAssignableTeachers(branchId?: string): Promise<AssignableTeacher[]> {
+    const rows = await this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        userRoles: {
+          some: {
+            role: { name: 'TEACHER' },
+            ...(branchId ? { OR: [{ branchId }, { branchId: null }] } : {}),
+          },
+        },
+      },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: 'asc' },
+      take: 500,
+    });
+
+    return rows;
+  }
 
   async findTeacherAllocations(params: {
     branchId?: string;

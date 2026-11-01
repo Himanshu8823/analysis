@@ -38,6 +38,18 @@ export interface CreateTeacherAllocationPayload {
 }
 
 /**
+ * A teacher who may be allocated a subject in a branch.
+ *
+ * Only the fields the allocation screen shows — the member carries no roles
+ * or permissions here, because the caller only needs to pick a name.
+ */
+export interface AssignableTeacher {
+  id: string;
+  name: string;
+  email: string;
+}
+
+/**
  * A class-teacher assignment.
  *
  * A "class" is branch + semester + scheme + academic year, and it has exactly
@@ -72,6 +84,18 @@ export interface CreateClassTeacherAssignmentPayload {
 }
 
 export const allocationsService = {
+  /**
+   * Lists the teachers who may be allocated a subject in a branch.
+   *
+   * This is the branch-scoped teacher list, not the college's member list.
+   */
+  listAssignableTeachers: async (branchId?: string): Promise<AssignableTeacher[]> => {
+    const res = await apiClient.get(ENDPOINTS.TEACHER_ALLOCATIONS.ASSIGNABLE_TEACHERS, {
+      params: { branchId },
+    });
+    return res.data.data;
+  },
+
   /**
    * Lists the subject-to-teacher allocations for a scope.
    *

@@ -186,9 +186,11 @@ export class StudentsService {
   }
 
   /**
-   * Imports students from an uploaded spreadsheet. The scope is supplied as
-   * query parameters because a multipart body cannot carry the nested JSON
-   * the DTO describes.
+   * Imports students from an uploaded spreadsheet.
+   *
+   * The sheet carries only the roll number and the name. The class details
+   * are supplied once as query parameters — a multipart body cannot carry
+   * the nested JSON the DTO describes — and they apply to every row.
    */
   async bulkImportFile(
     rows: ParsedStudentRow[],
@@ -209,16 +211,21 @@ export class StudentsService {
       throw new BadRequestException('No rows to import');
     }
 
+    /**
+     * The scope is chosen by the operator on the import page, so it is
+     * required. Falling back to a default would file students under a class
+     * nobody picked.
+     */
+    if (!scope.branchId || !scope.schemeId || !scope.batchId || !scope.academicYearId) {
+      throw new BadRequestException(
+        'Select the branch, scheme, academic year and batch before importing'
+      );
+    }
+
     const dto: BulkImportStudentsDto = {
       rows: rows.map((row) => ({
         rollNo: row.rollNo,
         name: row.name,
-        ...(row.branchId ? { branchId: row.branchId } : {}),
-        ...(row.currentYear !== undefined ? { currentYear: row.currentYear } : {}),
-        ...(row.semester !== undefined ? { semester: row.semester } : {}),
-        ...(row.schemeId ? { schemeId: row.schemeId } : {}),
-        ...(row.batchId ? { batchId: row.batchId } : {}),
-        ...(row.academicYearId ? { academicYearId: row.academicYearId } : {}),
       })),
       ...scope,
     };

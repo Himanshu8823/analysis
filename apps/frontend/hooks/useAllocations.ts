@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   allocationsService,
+  type AssignableTeacher,
   type ClassTeacherAssignment,
   type ClassTeacherAssignmentFilters,
   type CreateClassTeacherAssignmentPayload,
@@ -19,8 +20,6 @@ import {
   type SubjectOfferingFilters,
   type SubjectOfferingOption,
 } from '@/lib/services/subject-offerings';
-import { usersService } from '@/lib/services/users.service';
-import type { Member } from '@result-analysis/shared-types';
 
 /**
  * The subject offerings a teacher can be allocated to.
@@ -38,32 +37,19 @@ export function useSubjectOfferings(filters?: SubjectOfferingFilters) {
 }
 
 /**
- * The members who can be allocated teaching work — the ones holding the
- * TEACHER role.
+ * The teachers who can be allocated teaching work.
  *
- * The members endpoint filters server-side on the role, and the branch filter
- * is applied again on the client: a branch-scoped role assignment carries its
- * own `branchId`, and a teacher whose role is not bound to a branch (an
- * institution-wide teacher) is still assignable within any branch.
+ * The list comes from the branch-scoped `assignable-teachers` endpoint rather
+ * than from the member list: the member list is guarded by `users:read`,
+ * which the HOD does not hold, and it carries every account in the college
+ * when it is held. A teacher whose role is not bound to a branch (an
+ * institution-wide teacher) is assignable within any branch, and the server
+ * handles that.
  */
 export function useAssignableTeachers(branchId?: string) {
-  return useQuery<Member[]>({
-    queryKey: queryKeys.members.teachers(branchId),
-    queryFn: async () => {
-      const res = await usersService.listMembers({ role: 'TEACHER', pageSize: 100 });
-      const members = res.items ?? [];
-      if (!branchId) return members;
-
-      return members.filter((member) =>
-        member.roles.some(
-          (role) =>
-            role.roleName === 'TEACHER' &&
-            (role.branchId === null ||
-              role.branchId === undefined ||
-              role.branchId === branchId),
-        ),
-      );
-    },
+  return useQuery<AssignableTeacher[]>({
+    queryKey: queryKeys.teacherAllocations.assignableTeachers(branchId),
+    queryFn: () => allocationsService.listAssignableTeachers(branchId),
     enabled: !!branchId,
     staleTime: 5 * 60 * 1000,
   });

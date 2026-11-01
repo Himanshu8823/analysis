@@ -9,6 +9,13 @@ export const ENDPOINTS = {
     ME: '/auth/me',
     ACCEPT_INVITE: '/auth/accept-invite',
     CHANGE_PASSWORD: '/auth/change-password',
+    /**
+     * The signed-in user's own profile. These are scoped to the session —
+     * there is no id in the path, so the client cannot address another
+     * member's account.
+     */
+    PROFILE: '/auth/profile',
+    PROFILE_AVATAR: '/auth/profile/avatar',
   },
   USERS: {
     GET: (id: string) => `/users/${id}`,
@@ -83,6 +90,11 @@ export const ENDPOINTS = {
     LIST: '/teacher-allocations',
     CREATE: '/teacher-allocations',
     DELETE: (id: string) => `/teacher-allocations/${id}`,
+    /**
+     * The teachers assignable in a branch — a narrower read than the member
+     * list, which carries every account in the college.
+     */
+    ASSIGNABLE_TEACHERS: '/teacher-allocations/assignable-teachers',
   },
   /**
    * Class-teacher assignments — exactly one class teacher per class
@@ -133,6 +145,25 @@ export const ENDPOINTS = {
     LIST: '/reports',
     GET: (id: string) => `/reports/${id}`,
     DOWNLOAD: (id: string) => `/reports/${id}/download`,
+    /**
+     * Whether a class's result is complete enough to report on.
+     *
+     * The scope travels as query parameters here — the check is a read, and
+     * it needs the same branch / scheme / semester / year the report would
+     * be generated for.
+     */
+    READINESS: '/reports/readiness',
+  },
+  /**
+   * The class overview of the signed-in class teacher.
+   *
+   * These resolve the class from the session, so there is no branch,
+   * semester or teacher id in the path — a member can only read the classes
+   * they are the class teacher of.
+   */
+  CLASS_OVERVIEW: {
+    LIST: '/class-overview',
+    DETAIL: (assignmentId: string) => `/class-overview/${assignmentId}`,
   },
   TOPPERS: {
     SUBJECT_WISE: '/toppers/subject-wise',

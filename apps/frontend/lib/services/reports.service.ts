@@ -46,6 +46,41 @@ export interface ReportListFilters {
   pageSize?: number;
 }
 
+/**
+ * The scope a report is generated for.
+ */
+export interface ReportScope {
+  branchId: string;
+  schemeId: string;
+  semester: number;
+  academicYearId: string;
+}
+
+/**
+ * Whether a class's result is complete enough to report on.
+ *
+ * The report cannot be generated until every student has a result in every
+ * subject — a report states a verdict for the whole class, so it must not
+ * be produced while some of it is still pending.
+ */
+export interface ReportReadiness {
+  isReady: boolean;
+  studentCount: number;
+  completeCount: number;
+  pendingCount: number;
+  pendingSubjects: Array<{
+    subjectCode: string;
+    subjectName: string;
+    missingCount: number;
+  }>;
+  pendingStudents: Array<{
+    rollNo: string;
+    name: string;
+    missingSubjects: string[];
+  }>;
+  message: string;
+}
+
 export const reportsService = {
   generate: async (payload: GenerateReportPayload): Promise<Report> => {
     const res = await apiClient.post(ENDPOINTS.REPORTS.GENERATE, payload);
@@ -64,5 +99,12 @@ export const reportsService = {
       responseType: 'blob',
     });
     return res.data;
+  },
+  /**
+   * Whether the class's result is complete enough to report on.
+   */
+  checkReadiness: async (scope: ReportScope): Promise<ReportReadiness> => {
+    const res = await apiClient.get(ENDPOINTS.REPORTS.READINESS, { params: scope });
+    return res.data.data;
   },
 };

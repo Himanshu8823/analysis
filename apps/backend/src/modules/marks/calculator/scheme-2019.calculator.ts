@@ -61,6 +61,13 @@ export class Scheme2019Calculator implements ISchemeCalculator {
       isAbsent: m.isAbsent,
     }));
 
+    /**
+     * A subject with no marks at all has no verdict yet. It is pending, not
+     * failed — scoring it as a zero would report every half-entered class
+     * as a class where everybody failed.
+     */
+    const isEvaluated = marks.length > 0;
+
     const totalObtained = marks.reduce((sum, m) => sum + (m.isAbsent ? 0 : m.marksObtained), 0);
     const totalMax = marks.reduce((sum, m) => sum + m.maxMarks, 0);
     const percentage = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
@@ -93,8 +100,15 @@ export class Scheme2019Calculator implements ISchemeCalculator {
     const externalPass = written ? !written.isAbsent && written.marksObtained >= WRITTEN_MIN : true;
     const aggregatePass = percentage >= AGGREGATE_MIN_PERCENT;
 
-    const isPass = internalPass && externalPass && aggregatePass && reasons.length === 0;
-    const reason = isPass ? 'Pass' : reasons.length > 0 ? reasons.join('; ') : 'Fail';
+    const isPass =
+      isEvaluated && internalPass && externalPass && aggregatePass && reasons.length === 0;
+    const reason = !isEvaluated
+      ? 'Result not entered yet'
+      : isPass
+        ? 'Pass'
+        : reasons.length > 0
+          ? reasons.join('; ')
+          : 'Fail';
 
     return {
       breakdown,
@@ -103,6 +117,7 @@ export class Scheme2019Calculator implements ISchemeCalculator {
       percentage,
       isPass,
       reason,
+      isEvaluated,
     };
   }
 
@@ -126,6 +141,14 @@ export class Scheme2019Calculator implements ISchemeCalculator {
     const totalMax = subjectResults.reduce((s, r) => s + r.totalMax, 0);
     const overallPercentage = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
 
+    /**
+     * A subject with no verdict yet earns no credits — but it is pending,
+     * not failed, so it is counted separately rather than being treated as a
+     * failure.
+     */
+    const pendingSubjectCount = subjectResults.filter((r) => !r.isEvaluated).length;
+    const isComplete = offerings.length > 0 && pendingSubjectCount === 0;
+
     const earnedCredits = offerings.reduce((sum, offering) => {
       const r = subjectResults.find((x) => x.subjectOfferingId === offering.id);
       return sum + (r?.isPass ? offering.subject.credits : 0);
@@ -133,7 +156,13 @@ export class Scheme2019Calculator implements ISchemeCalculator {
     const totalCredits = offerings.reduce((sum, offering) => sum + offering.subject.credits, 0);
 
     const passCount = subjectResults.filter((r) => r.isPass).length;
-    const isOverallPass = passCount === offerings.length && offerings.length > 0;
+
+    /**
+     * The student passes only when every subject has a verdict and every one
+     * of them is a pass. An incomplete result is neither a pass nor a fail:
+     * the report layer refuses to publish it at all.
+     */
+    const isOverallPass = isComplete && passCount === offerings.length;
 
     return {
       subjectResults,
@@ -145,6 +174,8 @@ export class Scheme2019Calculator implements ISchemeCalculator {
       isOverallPass,
       subjectCount: offerings.length,
       passCount,
+      pendingSubjectCount,
+      isComplete,
     };
   }
 }

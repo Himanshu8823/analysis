@@ -1,8 +1,14 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  S3Client,
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+} from '@aws-sdk/client-s3';
 import { createHash, randomUUID } from 'crypto';
 import { mkdir, readFile, unlink, writeFile } from 'fs/promises';
-import { dirname, extname, join, resolve, sep } from 'path';
+import { dirname, extname, resolve, sep } from 'path';
 
 export interface StoredFile {
   /** The absolute URL the backend can fetch the file from. */
@@ -13,21 +19,41 @@ export interface StoredFile {
 }
 
 /**
- * Local-disk file storage.
+ * The object-storage client used when the bucket is configured.
  *
- * The upload flow needs a URL the backend can fetch the bytes from. S3-style
- * presigned uploads are the production answer, but they need a live bucket and
- * a signing endpoint; the local store keeps the whole flow working end to end
- * and is what the multipart endpoint uses today.
+ * The S3-compatible settings work with Neon Storage, AWS S3, Cloudflare R2 and
+ * MinIO alike — only the endpoint and the credentials differ.
+ */
+interface S3Settings {
+  endpoint: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  region: string;
+  bucket: string;
+  forcePathStyle: boolean;
+}
+
+/**
+ * File storage.
  *
- * Files are written under a single root directory and every path is resolved
- * and checked against that root, so a crafted file name cannot escape it.
+ * Files live in an S3-compatible bucket — Neon Storage in this deployment —
+ * and the database only ever holds the URL they were published under.
+ *
+ * The local-disk store is the fallback for a deployment with no bucket
+ * configured (a fresh checkout, a CI run). It is not used when the bucket is
+ * configured, so an installation never silently splits its files across two
+ * stores.
+ *
+ * Every local path is resolved and checked against the storage root, so a
+ * crafted file name cannot escape it.
  */
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
   private readonly root: string;
   private readonly publicBaseUrl: string;
+  private readonly s3: S3Settings | null;
+  private readonly s3Client: S3Client | null;
 
   constructor(private readonly config: ConfigService) {
     this.root = resolve(
@@ -43,23 +69,93 @@ export class StorageService {
       this.config.get<string>('storage.local.publicBaseUrl') ||
       `http://localhost:${this.config.get<number>('server.port') ?? 3001}`
     ).replace(/\/+$/, '');
+
+    this.s3 = this.readS3Settings();
+    this.s3Client = this.s3
+      ? new S3Client({
+          region: this.s3.region,
+          endpoint: this.s3.endpoint,
+          forcePathStyle: this.s3.forcePathStyle,
+          credentials: {
+            accessKeyId: this.s3.accessKeyId,
+            secretAccessKey: this.s3.secretAccessKey,
+          },
+        })
+      : null;
   }
 
-  /** The directory every uploaded file lives under. */
+  /**
+   * Reads the bucket settings, or returns `null` when the bucket is not
+   * fully configured.
+   *
+   * All four values are required. A partially configured bucket would produce
+   * a client that fails on the first write with an opaque credential error,
+   * so the store falls back to local disk instead and says so in the log.
+   */
+  private readS3Settings(): S3Settings | null {
+    const endpoint = this.config.get<string>('storage.s3.endpoint');
+    const accessKeyId = this.config.get<string>('storage.s3.accessKeyId');
+    const secretAccessKey = this.config.get<string>('storage.s3.secretAccessKey');
+    const bucket = this.config.get<string>('storage.s3.bucket');
+
+    if (!endpoint || !accessKeyId || !secretAccessKey || !bucket) {
+      return null;
+    }
+
+    return {
+      endpoint,
+      accessKeyId,
+      secretAccessKey,
+      bucket,
+      region: this.config.get<string>('storage.s3.region') ?? 'us-east-2',
+      forcePathStyle: this.config.get<boolean>('storage.s3.forcePathStyle') ?? false,
+    };
+  }
+
+  /** True when files are written to the object-storage bucket. */
+  get usesObjectStorage(): boolean {
+    return this.s3Client !== null;
+  }
+
+  /** The directory every locally stored file lives under. */
   get rootDirectory(): string {
     return this.root;
   }
 
   /**
-   * Writes a buffer to disk and returns the URL it can be fetched from.
+   * Writes a buffer to storage and returns the URL it can be fetched from.
+   *
+   * `folder` groups the files inside the bucket — an upload and a profile
+   * picture share the bucket but not the prefix, so a listing of one never
+   * walks into the other.
    */
-  async save(buffer: Buffer, originalName: string): Promise<StoredFile> {
+  async save(buffer: Buffer, originalName: string, folder = 'uploads'): Promise<StoredFile> {
     if (!buffer.length) {
       throw new BadRequestException('The uploaded file is empty');
     }
 
     const extension = extname(originalName).toLowerCase().slice(0, 10);
-    const relativePath = join(new Date().toISOString().slice(0, 10), `${randomUUID()}${extension}`);
+    const relativePath = `${folder}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}${extension}`;
+
+    if (this.s3Client && this.s3) {
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.s3.bucket,
+          Key: relativePath,
+          Body: buffer,
+        })
+      );
+
+      this.logger.log(
+        `Stored upload ${relativePath} in ${this.s3.bucket} (${buffer.length} bytes)`
+      );
+
+      return {
+        fileUrl: this.publicObjectUrl(relativePath),
+        relativePath,
+        size: buffer.length,
+      };
+    }
 
     const absolutePath = this.resolveInsideRoot(relativePath);
     await mkdir(dirname(absolutePath), { recursive: true });
@@ -74,8 +170,53 @@ export class StorageService {
     };
   }
 
-  /** Reads a stored file back. */
+  /**
+   * The public URL a stored object is served from.
+   *
+   * For a path-style endpoint the bucket is part of the path; for a
+   * virtual-hosted endpoint it is the host's first label. Neon Storage uses
+   * the path style, which is why the bucket is prefixed here.
+   */
+  private publicObjectUrl(relativePath: string): string {
+    if (!this.s3) {
+      return `${this.publicBaseUrl}/files/${relativePath}`;
+    }
+
+    const endpoint = this.s3.endpoint.replace(/\/+$/, '');
+    if (this.s3.forcePathStyle) {
+      return `${endpoint}/${this.s3.bucket}/${relativePath}`;
+    }
+
+    // A virtual-hosted endpoint already carries the bucket in its host.
+    return `${endpoint}/${relativePath}`;
+  }
+
+  /**
+   * Reads a stored file back.
+   *
+   * Reads from the bucket when one is configured, and from the local store
+   * otherwise. A path is tried against the configured store first, so a file
+   * written before the bucket was configured is still readable.
+   */
   async read(relativePath: string): Promise<Buffer> {
+    if (this.s3Client && this.s3) {
+      try {
+        const result = await this.s3Client.send(
+          new GetObjectCommand({
+            Bucket: this.s3.bucket,
+            Key: relativePath,
+          })
+        );
+        if (result.Body) {
+          return Buffer.from(await result.Body.transformToByteArray());
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Could not read ${relativePath} from ${this.s3.bucket}: ${error instanceof Error ? error.message : 'unknown error'}`
+        );
+      }
+    }
+
     return readFile(this.resolveInsideRoot(relativePath));
   }
 
@@ -84,12 +225,13 @@ export class StorageService {
    *
    * The parser workers need the bytes of a file the backend itself stored.
    * Fetching that URL over HTTP would hit the JWT guard on the `/files`
-   * route, so the bytes are read straight from disk instead — the path is
-   * derived from the URL and then resolved inside the storage root, so a
+   * route, so the bytes are read straight from the store instead — the path
+   * is derived from the URL and then resolved inside the storage root, so a
    * crafted URL still cannot escape it.
    *
-   * Returns `null` when the URL does not point at this store, which lets the
-   * caller fall back to fetching it over HTTP.
+   * Returns `null` when the URL does not point at this store — for example
+   * when the file lives in an external bucket — and the caller can then fall
+   * back to fetching it over HTTP.
    */
   async readByUrl(fileUrl: string): Promise<Buffer | null> {
     const relativePath = this.relativePathFromUrl(fileUrl);
@@ -108,7 +250,7 @@ export class StorageService {
    * Returns `null` when the URL does not address this store — for example
    * when the file lives in an external bucket.
    */
-  private relativePathFromUrl(fileUrl: string): string | null {
+  relativePathFromUrl(fileUrl: string): string | null {
     let pathname: string;
     try {
       pathname = new URL(fileUrl).pathname;
@@ -116,19 +258,45 @@ export class StorageService {
       return null;
     }
 
-    const marker = '/files/';
-    const index = pathname.indexOf(marker);
-    if (index === -1) return null;
+    /**
+     * A bucket URL carries the bucket as its first path segment, so the
+     * marker is looked for after it rather than at the start.
+     */
+    for (const marker of ['/files/', '/neon/']) {
+      const index = pathname.indexOf(marker);
+      if (index === -1) continue;
 
-    const relativePath = decodeURIComponent(pathname.slice(index + marker.length));
-    if (!relativePath) return null;
+      const relativePath = decodeURIComponent(pathname.slice(index + marker.length));
+      if (!relativePath) continue;
 
-    // `resolveInsideRoot` rejects anything that tries to escape the root.
-    return relativePath;
+      // `resolveInsideRoot` rejects anything that tries to escape the root.
+      return relativePath;
+    }
+
+    return null;
   }
 
-  /** Deletes a stored file. Missing files are ignored. */
+  /**
+   * Deletes a stored file. Missing files are ignored.
+   */
   async remove(relativePath: string): Promise<void> {
+    if (this.s3Client && this.s3) {
+      try {
+        await this.s3Client.send(
+          new DeleteObjectCommand({
+            Bucket: this.s3.bucket,
+            Key: relativePath,
+          })
+        );
+        return;
+      } catch (error) {
+        this.logger.warn(
+          `Could not delete ${relativePath} from ${this.s3.bucket}: ${error instanceof Error ? error.message : 'unknown error'}`
+        );
+        return;
+      }
+    }
+
     try {
       await unlink(this.resolveInsideRoot(relativePath));
     } catch {

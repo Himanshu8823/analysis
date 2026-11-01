@@ -23,6 +23,11 @@ export interface SessionUser {
   permissions?: string[];
   branchId?: string | null;
   mustChangePassword: boolean;
+  /**
+   * The member's profile picture, as a URL into the object-storage bucket.
+   * Absent when the member never picked one — the UI shows their initials.
+   */
+  avatarUrl?: string | null;
 }
 
 interface AuthResponse {
@@ -195,6 +200,77 @@ export function useCurrentUser() {
     staleTime: 60 * 1000,
     enabled: hasSession,
     retry: false,
+  });
+}
+
+/**
+ * Mirrors a changed user into the cached session and the React Query cache.
+ *
+ * The header renders from the cached session user, so a profile change has
+ * to be written to both places — otherwise the header would keep showing the
+ * old name until the page was reloaded.
+ */
+function applyUserUpdate(qc: ReturnType<typeof useQueryClient>, patch: Partial<SessionUser>): void {
+  updateSessionUser(patch);
+  qc.setQueryData(queryKeys.auth.me(), (old: SessionUser | undefined) =>
+    old ? { ...old, ...patch } : old,
+  );
+}
+
+/**
+ * Updates the signed-in user's own name.
+ *
+ * The email is not part of this mutation — it identifies the account and is
+ * never changed from the profile screen.
+ */
+export function useUpdateProfile() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  return useMutation({
+    mutationFn: (input: { name: string }) => authService.updateProfile(input),
+    onSuccess: (data) => {
+      applyUserUpdate(qc, { name: data.name });
+      toast.success('Your profile has been updated');
+    },
+    onError: (error: unknown) => {
+      toast.error(extractErrorMessage(error));
+    },
+  });
+}
+
+/**
+ * Uploads the signed-in user's profile picture.
+ */
+export function useUploadAvatar() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  return useMutation({
+    mutationFn: (file: File) => authService.uploadAvatar(file),
+    onSuccess: (data) => {
+      applyUserUpdate(qc, { avatarUrl: data.avatarUrl });
+      toast.success('Your profile picture has been updated');
+    },
+    onError: (error: unknown) => {
+      toast.error(extractErrorMessage(error));
+    },
+  });
+}
+
+/**
+ * Removes the signed-in user's profile picture.
+ */
+export function useRemoveAvatar() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  return useMutation({
+    mutationFn: () => authService.removeAvatar(),
+    onSuccess: () => {
+      applyUserUpdate(qc, { avatarUrl: null });
+      toast.success('Your profile picture has been removed');
+    },
+    onError: (error: unknown) => {
+      toast.error(extractErrorMessage(error));
+    },
   });
 }
 

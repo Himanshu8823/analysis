@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useCurrentUser, useLogout } from '@/hooks/useAuth';
 
@@ -60,11 +60,7 @@ export function AppHeader() {
                 variant="ghost"
                 className="h-11 gap-2 rounded-full px-2 hover:bg-surface-strong focus-visible:ring-0 focus-visible:ring-offset-0"
               >
-                <Avatar className="size-8">
-                  <AvatarFallback className="bg-surface-strong text-caption-strong text-ink">
-                    {initials(user.name)}
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar name={user.name} avatarUrl={user.avatarUrl} size="sm" />
                 <span className="hidden max-w-[10rem] truncate text-body-sm font-semibold text-ink md:inline">
                   {user.name}
                 </span>
@@ -89,7 +85,7 @@ export function AppHeader() {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/dashboard">
+                <Link href="/my-account">
                   <User aria-hidden />
                   My account
                 </Link>
@@ -113,13 +109,4 @@ export function AppHeader() {
       </div>
     </header>
   );
-}
-
-function initials(name: string): string {
-  return name
-    .split(' ')
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('');
 }

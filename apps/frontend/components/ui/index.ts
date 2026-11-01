@@ -25,6 +25,7 @@ export {
 export { Separator } from './separator';
 export { Skeleton } from './skeleton';
 export { Avatar, AvatarImage, AvatarFallback } from './avatar';
+export { UserAvatar } from './user-avatar';
 export {
   Tooltip,
   TooltipTrigger,

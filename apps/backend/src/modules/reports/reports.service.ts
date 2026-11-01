@@ -3,6 +3,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ReportsRepository } from './reports.repository';
 import { ExcelReportGenerator } from './generators/excel.generator';
+import { ReportReadinessService, type ReadinessScope } from './report-readiness.service';
 import { CreateReportDto } from './dto';
 import { PrismaClient } from '@prisma/client';
 import type { Report } from '@prisma/client';
@@ -23,15 +24,39 @@ export class ReportsService {
   constructor(
     private readonly repository: ReportsRepository,
     private readonly excelGenerator: ExcelReportGenerator,
+    private readonly readiness: ReportReadinessService,
     private readonly prisma: PrismaClient,
     @InjectQueue(REPORT_QUEUE_NAME) private readonly reportQueue: Queue
   ) {}
 
   /**
-   * Create a report job. For COMPLETE it goes through the queue (slow); other
-   * types are streamed back synchronously to make the dev workflow snappy.
+   * Create a report job.
+   *
+   * The job is refused when the class's result is not complete. A report is
+   * a published statement about the class — every student in it gets a
+   * PASS or a FAIL on the sheet — so producing one while marks are still
+   * missing would publish a verdict for students whose result is not in
+   * yet. The refusal names what is missing, so the operator knows what to
+   * enter.
    */
   async create(dto: CreateReportDto, generatedBy: string): Promise<Report> {
+    const scope = this.readScope(dto.filters);
+    const readiness = await this.readiness.check(scope);
+
+    if (!readiness.isReady) {
+      throw new BadRequestException({
+        message: readiness.message,
+        code: 'RESULT_NOT_AVAILABLE',
+        readiness: {
+          studentCount: readiness.studentCount,
+          completeCount: readiness.completeCount,
+          pendingCount: readiness.pendingCount,
+          pendingSubjects: readiness.pendingSubjects,
+          pendingStudents: readiness.pendingStudents,
+        },
+      });
+    }
+
     const report = await this.repository.create(dto, generatedBy);
     try {
       await this.reportQueue.add(
@@ -116,13 +141,43 @@ export class ReportsService {
     }
   }
 
-  /** Stream the latest generated file as a Buffer. */
+  /**
+   * Stream the latest generated file as a Buffer.
+   *
+   * The file is generated fresh from the marks rather than being served
+   * from disk, so it always reflects the current data. That means the
+   * readiness check has to run here too: marks may have been added or
+   * withdrawn since the report was queued, and a download must never hand
+   * out a sheet that states a verdict for a result that is not in.
+   */
   async download(reportId: string): Promise<{ buffer: Buffer; filename: string }> {
     const report = await this.findById(reportId);
     if (report.status !== 'COMPLETED') {
       throw new BadRequestException(`Report is not ready for download (status=${report.status})`);
     }
     const filters = this.validateFilters(report.filters as Record<string, unknown>);
+
+    const readiness = await this.readiness.check({
+      branchId: filters.branchId,
+      schemeId: filters.schemeId,
+      semester: filters.semester,
+      academicYearId: filters.academicYearId,
+    });
+
+    if (!readiness.isReady) {
+      throw new BadRequestException({
+        message: readiness.message,
+        code: 'RESULT_NOT_AVAILABLE',
+        readiness: {
+          studentCount: readiness.studentCount,
+          completeCount: readiness.completeCount,
+          pendingCount: readiness.pendingCount,
+          pendingSubjects: readiness.pendingSubjects,
+          pendingStudents: readiness.pendingStudents,
+        },
+      });
+    }
+
     const buffer = await this.excelGenerator.generateCompleteReport({
       branchId: filters.branchId,
       schemeId: filters.schemeId,
@@ -157,5 +212,26 @@ export class ReportsService {
       );
     }
     return { branchId, schemeId, semester, academicYearId };
+  }
+
+  /**
+   * Whether a class's result is complete enough to report on.
+   *
+   * The scope is resolved by the controller before it reaches here, so a
+   * branch-scoped caller cannot ask about a class outside their branch.
+   */
+  async checkReadiness(scope: ReadinessScope) {
+    return this.readiness.check(scope);
+  }
+
+  /**
+   * The scope the readiness check runs against.
+   *
+   * The filters are validated first, so a request missing them fails with
+   * the same message it always has — the readiness check is about the
+   * marks, not about the shape of the request.
+   */
+  private readScope(filters: Record<string, unknown>): ReadinessScope {
+    return this.validateFilters(filters);
   }
 }

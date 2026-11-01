@@ -38,6 +38,8 @@ export const AuditResource = {
   TEACHER_ALLOCATION: 'teacher_allocation',
   CLASS_TEACHER_ASSIGNMENT: 'class_teacher_assignment',
   UPLOAD_JOB: 'upload_job',
+  /** A member's own account — the profile screen's changes. */
+  USER: 'user',
 } as const;
 
 export type AuditResourceValue = (typeof AuditResource)[keyof typeof AuditResource];

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Select } from '@/components/forms/Select';
@@ -9,16 +10,24 @@ import { useImportStudents } from '@/hooks/useStudents';
 import { useBranches } from '@/hooks/useBranches';
 import { useSchemes } from '@/hooks/useSchemes';
 import { useAcademicYears, useBatches } from '@/hooks/useAcademic';
+import { extractErrorMessage } from '@/hooks/useAuth';
+import { ALL_SEMESTERS, yearForSemester } from '@/lib/academic';
 import type { BulkImportResult, BulkImportScope } from '@/lib/services/students.service';
 
 /**
  * Import students — the bulk import flow.
  *
- * Separate from the single-record create/edit pages because the scope is
- * optional here (it can be read from the sheet itself) and the result needs
- * room to show per-row errors.
+ * The sheet carries only the two things that are unique to each student:
+ * their roll number and their name. Everything that is true of the whole
+ * batch — the branch, scheme, academic year, batch, year and semester —
+ * is chosen once on this page and applied to every row, exactly as it is
+ * when a single student is added by hand.
+ *
+ * That keeps the sheet free of repeated columns and keeps the file readable
+ * for whoever prepares it.
  */
 export default function ImportStudentsPage() {
+  const router = useRouter();
   const { data: branchesData } = useBranches();
   const { data: schemesData } = useSchemes();
   const { data: academicYears } = useAcademicYears();
@@ -27,6 +36,7 @@ export default function ImportStudentsPage() {
 
   const [result, setResult] = useState<BulkImportResult | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const branches = branchesData ?? [];
   const schemes = schemesData ?? [];
@@ -36,18 +46,39 @@ export default function ImportStudentsPage() {
   const [branchId, setBranchId] = useState('');
   const [schemeId, setSchemeId] = useState('');
   const [batchId, setBatchId] = useState('');
-  const [academicYearId, setAcademicYearId] = useState(activeYear?.id ?? '');
+  const [academicYearId, setAcademicYearId] = useState('');
   const [currentYear, setCurrentYear] = useState(1);
   const [semester, setSemester] = useState(1);
+
+  /**
+   * The academic year falls back to the active one.
+   *
+   * The years are fetched asynchronously, so the state starts empty and is
+   * filled in only once the operator picks one — a Radix select never fires
+   * `onValueChange` for the value that is already selected, so leaving the
+   * state empty would keep the scope unresolved on a college with a single
+   * academic year.
+   */
+  const effectiveAcademicYearId = academicYearId || activeYear?.id || '';
 
   const scope: BulkImportScope = {
     branchId: branchId || undefined,
     schemeId: schemeId || undefined,
     batchId: batchId || undefined,
-    academicYearId: academicYearId || undefined,
+    academicYearId: effectiveAcademicYearId || undefined,
     currentYear,
     semester,
   };
+
+  /**
+   * Everything except the file has to be chosen before the import runs.
+   * The import button stays disabled until it is, so a student cannot end up
+   * filed under the wrong branch.
+   */
+  const scopeComplete = Boolean(
+    branchId && schemeId && batchId && effectiveAcademicYearId
+  );
+  const canImport = Boolean(file) && scopeComplete && !importing;
 
   return (
     <section className="flex flex-col gap-6 md:gap-8">
@@ -60,8 +91,8 @@ export default function ImportStudentsPage() {
       <div className="rounded-xl border border-hairline bg-card p-4 md:p-6">
         <p className="text-body-sm text-body">
           Upload a CSV or Excel sheet with a <strong>Roll No</strong> and{' '}
-          <strong>Name</strong> column. Any other scope columns are optional —
-          whatever you leave blank here is read from the sheet.
+          <strong>Name</strong> column. The class details below apply to every
+          student in the file.
         </p>
 
         <div className="mt-4 grid grid-cols-1 gap-base md:grid-cols-2">
@@ -69,8 +100,11 @@ export default function ImportStudentsPage() {
             label="Branch"
             value={branchId}
             onChange={(e) => setBranchId(e.target.value)}
+            required
           >
-            <option value="">From the sheet</option>
+            <option value="" disabled>
+              Select a branch
+            </option>
             {branches.map((branch) => (
               <option key={branch.id} value={branch.id}>
                 {branch.code} · {branch.name}
@@ -81,8 +115,11 @@ export default function ImportStudentsPage() {
             label="Scheme"
             value={schemeId}
             onChange={(e) => setSchemeId(e.target.value)}
+            required
           >
-            <option value="">From the sheet</option>
+            <option value="" disabled>
+              Select a scheme
+            </option>
             {schemes.map((scheme) => (
               <option key={scheme.id} value={scheme.id}>
                 {scheme.name}
@@ -91,33 +128,48 @@ export default function ImportStudentsPage() {
           </Select>
           <Select
             label="Academic year"
-            value={academicYearId}
+            value={effectiveAcademicYearId}
             onChange={(e) => setAcademicYearId(e.target.value)}
+            required
           >
-            <option value="">From the sheet</option>
+            <option value="" disabled>
+              Select an academic year
+            </option>
             {academicYears?.map((year) => (
               <option key={year.id} value={year.id}>
                 {year.year}
               </option>
             ))}
           </Select>
+          {/**
+           * A batch records the year a student was admitted, while
+           * `academicYearId` is the year the student is currently in. They are
+           * different years, so filtering the batches by the current academic
+           * year would hide the very batch the student belongs to. Every
+           * batch is listed instead — the same rule the single-student form
+           * follows.
+           */}
           <Select
             label="Batch"
             value={batchId}
             onChange={(e) => setBatchId(e.target.value)}
+            required
           >
-            <option value="">From the sheet</option>
+            <option value="" disabled>
+              Select a batch
+            </option>
             {batches.map((batch) => (
               <option key={batch.id} value={batch.id}>
                 {batch.name}
               </option>
             ))}
           </Select>
-          <Select
-            label="Year"
-            value={String(currentYear)}
-            onChange={(e) => setCurrentYear(Number(e.target.value))}
-          >
+          {/**
+           * The year follows from the semester — semesters 1 and 2 are year 1,
+           * semesters 3 and 4 are year 2, and so on. It is shown for
+           * reference but not chosen, so the two can never disagree.
+           */}
+          <Select label="Year" value={String(currentYear)} disabled>
             {[1, 2, 3, 4].map((n) => (
               <option key={n} value={n}>
                 Year {n}
@@ -127,9 +179,13 @@ export default function ImportStudentsPage() {
           <Select
             label="Semester"
             value={String(semester)}
-            onChange={(e) => setSemester(Number(e.target.value))}
+            onChange={(e) => {
+              const next = Number(e.target.value);
+              setSemester(next);
+              setCurrentYear(yearForSemester(next));
+            }}
           >
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+            {ALL_SEMESTERS.map((n) => (
               <option key={n} value={n}>
                 Semester {n}
               </option>
@@ -145,8 +201,13 @@ export default function ImportStudentsPage() {
             className="cb-input"
             onChange={(e) => {
               setFile(e.target.files?.[0] ?? null);
+              setError(null);
             }}
           />
+          <span className="text-body-sm text-muted">
+            The sheet needs a header row with <strong>Roll No</strong> and{' '}
+            <strong>Name</strong> columns.
+          </span>
         </label>
 
         <div className="mt-6 flex flex-col-reverse gap-2 border-t border-hairline pt-4 md:flex-row md:items-center md:justify-end">
@@ -154,13 +215,42 @@ export default function ImportStudentsPage() {
             <a href="/students">Cancel</a>
           </Button>
           <Button
-            disabled={!file || importing}
-            onClick={() => file && importStudents({ file, scope }, { onSuccess: setResult })}
+            disabled={!canImport}
+            onClick={() =>
+              file &&
+              importStudents(
+                { file, scope },
+                {
+                  onSuccess: (imported) => {
+                    /**
+                     * The import is done — the operator is sent to the student
+                     * list, which is where they would go to check the result.
+                     * The toast from the hook carries the count.
+                     */
+                    if (imported.inserted > 0) {
+                      router.push('/students');
+                      return;
+                    }
+                    setResult(imported);
+                  },
+                  onError: (error) => setError(extractErrorMessage(error)),
+                }
+              )
+            }
             className="w-full md:w-auto"
           >
             {importing ? 'Importing…' : 'Import students'}
           </Button>
         </div>
+
+        {error ? (
+          <div
+            role="alert"
+            className="mt-4 rounded-md border border-hairline bg-surface-soft p-base text-body-sm text-semantic-down"
+          >
+            {error}
+          </div>
+        ) : null}
 
         {result ? (
           <div className="mt-4 flex flex-col gap-xs rounded-md border border-hairline bg-surface-soft p-base">
@@ -172,12 +262,12 @@ export default function ImportStudentsPage() {
             </p>
             {result.errors && result.errors.length > 0 ? (
               <ul className="flex flex-col gap-xs">
-                {result.errors.slice(0, 10).map((error) => (
+                {result.errors.slice(0, 10).map((rowError) => (
                   <li
-                    key={`${error.row}-${error.error}`}
+                    key={`${rowError.row}-${rowError.error}`}
                     className="text-body-sm text-semantic-down"
                   >
-                    Row {error.row}: {error.error}
+                    Row {rowError.row}: {rowError.error}
                   </li>
                 ))}
               </ul>

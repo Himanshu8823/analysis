@@ -4,12 +4,6 @@ import * as ExcelJS from 'exceljs';
 export interface ParsedStudentRow {
   rollNo: string;
   name: string;
-  branchId?: string;
-  schemeId?: string;
-  batchId?: string;
-  academicYearId?: string;
-  currentYear?: number;
-  semester?: number;
 }
 
 export interface ParsedSheet {
@@ -18,7 +12,15 @@ export interface ParsedSheet {
   errors: Array<{ row: number; error: string }>;
 }
 
-/** The column headers the importer understands, lower-cased and normalised. */
+/**
+ * The column headers the importer understands, lower-cased and normalised.
+ *
+ * Only the two columns that are unique to a student are read. The class
+ * details — branch, scheme, academic year, batch, year and semester — are
+ * chosen once on the import page and applied to every row, so a sheet that
+ * still carries one of those columns is simply ignored rather than allowed
+ * to override the operator's choice.
+ */
 const COLUMN_ALIASES: Record<string, keyof ParsedStudentRow> = {
   rollno: 'rollNo',
   'roll no': 'rollNo',
@@ -29,24 +31,6 @@ const COLUMN_ALIASES: Record<string, keyof ParsedStudentRow> = {
   'student name': 'name',
   fullname: 'name',
   'full name': 'name',
-  branchid: 'branchId',
-  'branch id': 'branchId',
-  branch: 'branchId',
-  schemeid: 'schemeId',
-  'scheme id': 'schemeId',
-  scheme: 'schemeId',
-  batchid: 'batchId',
-  'batch id': 'batchId',
-  batch: 'batchId',
-  academicyearid: 'academicYearId',
-  'academic year id': 'academicYearId',
-  'academic year': 'academicYearId',
-  academicyear: 'academicYearId',
-  year: 'currentYear',
-  currentyear: 'currentYear',
-  'current year': 'currentYear',
-  semester: 'semester',
-  sem: 'semester',
 };
 
 const MAX_ROWS = 5000;
@@ -79,35 +63,6 @@ function asString(value: unknown): string {
     return '';
   }
   return String(value).trim();
-}
-
-/**
- * A UUID is the only identifier the client can send for a scope column.
- * Anything else (a branch code, a batch name) is rejected with a clear
- * message rather than being silently dropped — the client has to resolve
- * names to ids first.
- */
-function asUuid(value: unknown, column: string, rowNumber: number): string {
-  const text = asString(value);
-  if (!text) return '';
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);
-  if (!isUuid) {
-    throw new RowError(
-      rowNumber,
-      `"${column}" must be a UUID — resolve the name to an id before importing`
-    );
-  }
-  return text;
-}
-
-function asInt(value: unknown, column: string, rowNumber: number): number | undefined {
-  const text = asString(value);
-  if (!text) return undefined;
-  const parsed = Number(text);
-  if (!Number.isInteger(parsed)) {
-    throw new RowError(rowNumber, `"${column}" must be a whole number`);
-  }
-  return parsed;
 }
 
 class RowError extends Error {
@@ -161,24 +116,6 @@ export function parseStudentSheet(headerRow: unknown[], dataRows: unknown[][]): 
           case 'name':
             parsed.name = asString(value);
             break;
-          case 'branchId':
-            parsed.branchId = asUuid(value, 'Branch', rowNumber) || undefined;
-            break;
-          case 'schemeId':
-            parsed.schemeId = asUuid(value, 'Scheme', rowNumber) || undefined;
-            break;
-          case 'batchId':
-            parsed.batchId = asUuid(value, 'Batch', rowNumber) || undefined;
-            break;
-          case 'academicYearId':
-            parsed.academicYearId = asUuid(value, 'Academic Year', rowNumber) || undefined;
-            break;
-          case 'currentYear':
-            parsed.currentYear = asInt(value, 'Year', rowNumber);
-            break;
-          case 'semester':
-            parsed.semester = asInt(value, 'Semester', rowNumber);
-            break;
           default:
             break;
         }
@@ -186,12 +123,6 @@ export function parseStudentSheet(headerRow: unknown[], dataRows: unknown[][]): 
 
       if (!parsed.rollNo) throw new RowError(rowNumber, 'Roll No is required');
       if (!parsed.name) throw new RowError(rowNumber, 'Name is required');
-      if (parsed.currentYear !== undefined && parsed.currentYear < 1) {
-        throw new RowError(rowNumber, 'Year must be 1 or greater');
-      }
-      if (parsed.semester !== undefined && parsed.semester < 1) {
-        throw new RowError(rowNumber, 'Semester must be 1 or greater');
-      }
 
       rows.push(parsed);
     } catch (error) {

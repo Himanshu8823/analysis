@@ -128,6 +128,18 @@ export class ToppersRepository {
     const summaries = new Map<string, StudentSummary>();
     const creditsBySubjectId = new Map<string, number>(subjects.map((s) => [s.id, s.credits]));
 
+    /**
+     * The subjects the class is running — the ones every student is
+     * expected to have a result in.
+     *
+     * The verdict has to be measured against this set, not against the
+     * subjects a student happens to have marks for: a student with one
+     * subject entered would otherwise be judged on that one subject alone
+     * and could be called a pass while the rest of their result is still
+     * missing.
+     */
+    const classSubjectIds = new Set(subjects.map((s) => s.id));
+
     for (const student of students) {
       const subjMap = perStudentSubject.get(student.id) ?? new Map();
       let totalObtained = 0;
@@ -147,6 +159,13 @@ export class ToppersRepository {
         }
       }
       const percentage = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
+
+      /**
+       * A student with a mark for every subject of the class has a complete
+       * result; only then does the pass/fail verdict mean anything.
+       */
+      const isComplete = classSubjectIds.size > 0 && subjMap.size === classSubjectIds.size;
+
       summaries.set(student.id, {
         studentId: student.id,
         rollNo: student.rollNo,
@@ -156,9 +175,9 @@ export class ToppersRepository {
         percentage,
         earnedCredits,
         totalCredits,
-        isOverallPass: passCount === subjMap.size && subjMap.size > 0,
+        isOverallPass: isComplete && passCount === classSubjectIds.size,
         passCount,
-        subjectCount: subjMap.size,
+        subjectCount: classSubjectIds.size,
       });
     }
 

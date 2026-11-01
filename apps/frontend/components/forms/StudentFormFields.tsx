@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { Select } from '@/components/forms/Select';
 import { useBatches } from '@/hooks/useAcademic';
+import { ALL_SEMESTERS, yearForSemester } from '@/lib/academic';
 import type { Student } from '@/lib/services/students.service';
 
 interface StudentFormFieldsProps {
@@ -45,7 +46,14 @@ export function StudentFormFields({
           name: initial.name,
           branchId: initial.branchId,
           schemeId: initial.schemeId,
-          currentYear: initial.currentYear,
+          /**
+           * The year is taken from the semester rather than from the stored
+           * record, so the disabled field always agrees with the semester
+           * the operator sees. A record saved before this rule was in place
+           * would otherwise open showing a year that contradicts its own
+           * semester.
+           */
+          currentYear: yearForSemester(initial.semester),
           semester: initial.semester,
           batchId: initial.batchId,
           academicYearId: initial.academicYearId,
@@ -158,11 +166,12 @@ export function StudentFormFields({
           </option>
         ))}
       </Select>
-      <Select
-        label="Year"
-        value={String(form.currentYear)}
-        onChange={(e) => setForm({ ...form, currentYear: Number(e.target.value) })}
-      >
+      {/**
+       * The year follows from the semester — semesters 1 and 2 are year 1,
+       * semesters 3 and 4 are year 2, and so on. It is shown for reference
+       * but not chosen, so the two can never disagree.
+       */}
+      <Select label="Year" value={String(form.currentYear)} disabled>
         {[1, 2, 3, 4].map((n) => (
           <option key={n} value={n}>
             Year {n}
@@ -172,9 +181,12 @@ export function StudentFormFields({
       <Select
         label="Semester"
         value={String(form.semester)}
-        onChange={(e) => setForm({ ...form, semester: Number(e.target.value) })}
+        onChange={(e) => {
+          const semester = Number(e.target.value);
+          setForm({ ...form, semester, currentYear: yearForSemester(semester) });
+        }}
       >
-        {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+        {ALL_SEMESTERS.map((n) => (
           <option key={n} value={n}>
             Semester {n}
           </option>
