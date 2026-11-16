@@ -14,9 +14,12 @@ import {
   FolderCog,
   Building2,
   CalendarRange,
+  Layers,
   KeyRound,
   BookOpen,
   ClipboardCheck,
+  FileText,
+  FileCheck2,
   ScrollText,
   type LucideIcon,
 } from 'lucide-react';
@@ -60,6 +63,7 @@ const ICONS: Record<string, LucideIcon> = {
   book: BookOpen,
   assignments: ClipboardCheck,
   audit: ScrollText,
+  layers: Layers,
 };
 
 /**
@@ -94,6 +98,12 @@ const ADMIN_ITEMS: {
     permissions: ['schemes:read'],
   },
   {
+    href: '/admin/schemes/read',
+    label: 'Read a Syllabus',
+    icon: FileText,
+    permissions: ['schemes:read'],
+  },
+  {
     href: '/admin/branches',
     label: 'Branches',
     icon: Building2,
@@ -104,6 +114,26 @@ const ADMIN_ITEMS: {
     label: 'Academic Years',
     icon: CalendarRange,
     permissions: ['academic_years:read'],
+  },
+  {
+    /**
+     * The screen the college navigates by — branches, years, semesters,
+     * subjects, teachers and readiness.
+     */
+    href: '/admin/academic-structure',
+    label: 'Academic Structure',
+    icon: Layers,
+    permissions: ['subject_offerings:read', 'subjects:read'],
+  },
+  {
+    /**
+     * The last step of the college's cycle: the moment a class's result
+     * becomes the answer the college gives.
+     */
+    href: '/admin/publications',
+    label: 'Publish results',
+    icon: FileCheck2,
+    permissions: ['examinations:read', 'examinations:write'],
   },
   {
     href: '/admin/audit-log',

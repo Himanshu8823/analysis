@@ -148,6 +148,20 @@ export class AuditInterceptor implements NestInterceptor {
       }
     }
 
+    /**
+     * The reason for the change.
+     *
+     * A destructive operation that someone will have to explain later must
+     * record *why*. The field is read from the request body — the same place
+     * every "why did you do this?" question is asked — and copied under the
+     * key `reason` so the audit screen can show it beside the change.
+     */
+    const reasonField = options.reasonField ?? 'reason';
+    const reason = (req.body as Record<string, unknown> | undefined)?.[reasonField];
+    if (typeof reason === 'string' && reason.trim().length > 0) {
+      details.reason = reason.trim();
+    }
+
     return {
       userId: req.user?.sub ?? null,
       action: descriptor.action,

@@ -11,10 +11,18 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { MarksService } from './marks.service';
-import { CreateMarkDto, BulkCreateMarksDto, UpdateMarkDto } from './dto';
-import { Permissions, CurrentUser, Audited, AuditAction, AuditResource } from '@/common/decorators';
-import { ScopeService } from '@/common/services/scope.service';
+import { MarksScopeService } from './marks-scope.service';
+import { CreateMarkDto, BulkCreateMarksDto, UpdateMarkDto, CorrectMarkDto } from './dto';
+import {
+  AnyPermission,
+  Permissions,
+  CurrentUser,
+  Audited,
+  AuditAction,
+  AuditResource,
+} from '@/common/decorators';
 import { parseOptionalInt, parseOptionalString } from '@/common/utils/query-params';
+import { RequestTimeout } from '@/common/interceptors/timeout.interceptor';
 import type { JwtPayload } from '@/common/types';
 
 @ApiTags('Marks')
@@ -23,11 +31,11 @@ import type { JwtPayload } from '@/common/types';
 export class MarksController {
   constructor(
     private readonly service: MarksService,
-    private readonly scope: ScopeService
+    private readonly scope: MarksScopeService
   ) {}
 
   @Post()
-  @Permissions('marks:enter_own_subject')
+  @AnyPermission('marks:enter_own_subject', 'marks:write')
   @Audited(AuditResource.MARK, AuditAction.CREATE, {
     resourceIdSource: 'response',
     detailsFromBody: {
@@ -43,7 +51,18 @@ export class MarksController {
   }
 
   @Post('bulk')
-  @Permissions('marks:enter_own_subject')
+  @AnyPermission('marks:enter_own_subject', 'marks:write')
+  /**
+   * A whole class is one request: a teacher's sheet for forty students
+   * across eight subjects is three hundred and twenty rows, and each one is
+   * an upsert. That is real work, and the default thirty-second timeout
+   * would cut it off halfway — which would leave the member unable to tell
+   * which rows were saved.
+   *
+   * The timeout is longer, and the write is still **whole**: a refused
+   * batch writes nothing at all.
+   */
+  @RequestTimeout(120_000)
   @Audited(AuditResource.MARK, AuditAction.BULK_IMPORT, {
     resourceIdSource: 'none',
     detailsFromBody: { rowCount: 'marks' },
@@ -53,8 +72,40 @@ export class MarksController {
     return this.service.createBulk(dto, user.sub);
   }
 
+  /**
+   * The exam cell's correction of a mark that a teacher holds.
+   *
+   * A separate route from ordinary mark entry, on purpose: a correction
+   * overwrites work another person is responsible for, so it needs the
+   * exam cell's `marks:write` permission, a written reason, and a distinct
+   * audit action. It is recorded as a correction, never as an ordinary
+   * entry — so "who changed this published score and why" always has an
+   * answer.
+   */
+  @Post('correct')
+  @Permissions('marks:write')
+  @Audited(AuditResource.MARK, AuditAction.CORRECTION, {
+    resourceIdSource: 'none',
+    detailsFromBody: {
+      studentId: 'studentId',
+      subjectOfferingId: 'subjectOfferingId',
+      examType: 'examType',
+      marksObtained: 'marksObtained',
+      reason: 'reason',
+    },
+  })
+  @ApiOperation({
+    summary: 'Correct a mark that a teacher holds (exam cell only, with a reason)',
+  })
+  async correct(@Body() dto: CreateMarkDto & CorrectMarkDto, @CurrentUser() user: JwtPayload) {
+    return this.service.create(dto, user.sub, {
+      isCorrection: true,
+      reason: dto.reason,
+    });
+  }
+
   @Get()
-  @Permissions('marks:read')
+  @AnyPermission('marks:read', 'marks:enter_own_subject')
   @ApiOperation({ summary: 'List marks with optional filters' })
   async findAll(
     @CurrentUser() user: JwtPayload,
@@ -65,27 +116,31 @@ export class MarksController {
     @Query('academicYearId') academicYearId?: string,
     @Query('branchId') branchId?: string
   ) {
-    // A branch-scoped user only ever sees marks of students in their own
-    // branches; asking for a different branch is rejected, not overridden.
-    const effectiveBranchIds = await this.scope.resolveBranchFilter(
-      user.sub,
-      parseOptionalString(branchId)
-    );
+    /**
+     * The scope is resolved from the caller, not from the query. A teacher
+     * asking for the whole branch's marks receives only the subjects they
+     * were allocated.
+     */
+    const scope = await this.scope.resolveMarkScope(user.sub, {
+      branchId: parseOptionalString(branchId),
+      academicYearId: parseOptionalString(academicYearId),
+      subjectOfferingId: parseOptionalString(subjectOfferingId),
+    });
 
     return this.service.findAll({
       studentId: parseOptionalString(studentId),
       subjectId: parseOptionalString(subjectId),
-      subjectOfferingId: parseOptionalString(subjectOfferingId),
+      subjectOfferingId: scope.subjectOfferingId,
       examType: parseOptionalString(examType),
       academicYearId: parseOptionalString(academicYearId),
-      branchId: effectiveBranchIds,
+      branchId: scope.branchId,
     });
   }
 
   // Static segments are declared before `@Get(':id')` so the literal paths win
   // over the parameter route.
   @Get('calculate/class')
-  @Permissions('marks:read')
+  @AnyPermission('marks:read', 'marks:enter_own_subject')
   @ApiOperation({
     summary: 'Calculate every student in a class (branch+scheme+semester+academicYear)',
   })
@@ -96,20 +151,33 @@ export class MarksController {
     @Query('semester') semester: string,
     @Query('academicYearId') academicYearId: string
   ) {
-    // The class belongs to exactly one branch, so a branch-scoped caller may
-    // only ask for their own; a different branch is rejected.
-    const effectiveBranchId = await this.scope.resolveBranchScope(user.sub, branchId);
+    const semesterNumber = parseOptionalInt(semester);
+    if (semesterNumber === undefined) {
+      throw new NotFoundException('Choose the semester to calculate.');
+    }
+
+    /**
+     * The class must be one the caller may see: their own class, or a class
+     * they teach, or a class in their branch if they hold a branch-wide
+     * read right.
+     */
+    await this.scope.assertMayReadClass(user.sub, {
+      branchId,
+      semester: semesterNumber,
+      schemeId,
+      academicYearId,
+    });
 
     return this.service.calculateClassResult({
-      branchId: effectiveBranchId ?? branchId,
+      branchId,
       schemeId,
-      semester: parseOptionalInt(semester),
+      semester: semesterNumber,
       academicYearId,
     });
   }
 
   @Get('calculate/:studentId')
-  @Permissions('marks:read')
+  @AnyPermission('marks:read', 'marks:enter_own_subject')
   @ApiOperation({
     summary: 'Calculate student result using scheme-aware calculator (2019/2022/2024)',
   })
@@ -118,39 +186,21 @@ export class MarksController {
     @Param('studentId') studentId: string,
     @Query('academicYearId') academicYearId: string
   ) {
-    // The student must sit in a branch the caller may see.
-    const branchId = await this.service.findBranchIdOfStudent(studentId);
-    if (!branchId) throw new NotFoundException('Student not found');
-    await this.assertBranchVisible(user.sub, branchId);
+    await this.scope.assertMayReadStudent(user.sub, studentId, academicYearId);
 
     return this.service.calculateStudentResult(studentId, academicYearId);
   }
 
   @Get(':id')
-  @Permissions('marks:read')
+  @AnyPermission('marks:read', 'marks:enter_own_subject')
   async findById(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    // A mark has no branch of its own, so the scope is checked against the
-    // branch of the student it belongs to.
-    const branchId = await this.service.findBranchIdOfMark(id);
-    if (!branchId) throw new NotFoundException('Mark not found');
-    await this.assertBranchVisible(user.sub, branchId);
+    await this.scope.assertMayReadMark(user.sub, id);
 
     return this.service.findById(id);
   }
 
-  /**
-   * Rejects the read when the record's branch is outside the caller's scope.
-   *
-   * A college-scoped caller may see any branch. A branch-scoped caller may
-   * only see their own; `resolveBranchScope` with the record's branch throws
-   * when the two do not match.
-   */
-  private async assertBranchVisible(userId: string, recordBranchId: string): Promise<void> {
-    await this.scope.resolveBranchScope(userId, recordBranchId);
-  }
-
   @Put(':id')
-  @Permissions('marks:enter_own_subject')
+  @AnyPermission('marks:enter_own_subject', 'marks:write')
   @Audited(AuditResource.MARK, AuditAction.UPDATE, {
     resourceIdSource: 'param',
     detailsFromBody: { marksObtained: 'marksObtained' },
@@ -164,9 +214,9 @@ export class MarksController {
   }
 
   @Delete(':id')
-  @Permissions('marks:enter_own_subject')
+  @AnyPermission('marks:enter_own_subject', 'marks:write')
   @Audited(AuditResource.MARK, AuditAction.DELETE, { resourceIdSource: 'param' })
-  async delete(@Param('id') id: string): Promise<void> {
-    return this.service.delete(id);
+  async delete(@Param('id') id: string, @CurrentUser() user: JwtPayload): Promise<void> {
+    return this.service.delete(id, user.sub);
   }
 }

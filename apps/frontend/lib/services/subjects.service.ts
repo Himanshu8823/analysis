@@ -25,7 +25,7 @@ import type { ExamType } from '@result-analysis/shared-types';
  * *written* to `POST /subjects` / `PUT /subjects/:id`.
  *
  * To move back to the old shape, the only edits needed are:
- *   1. `SubjectPayload` — add the branch/semester/scheme/year fields back.
+ *   1. `SubjectPayload` — add the branch/semester/scheme fields back.
  *   2. `buildSubjectPayload` — copy them into the body.
  *   3. `listOfferings` — read `GET /subjects` instead of
  *      `GET /subject-offerings` (the fallback path already does this).
@@ -93,7 +93,6 @@ export interface Subject {
   branchId?: string;
   schemeId?: string;
   semester?: number;
-  year?: number;
 }
 
 /**
@@ -136,8 +135,10 @@ export interface SubjectOffering {
   branchId: string;
   semester: number;
   schemeId: string;
-  /** The curriculum year the offering belongs to. */
-  year: number;
+  /**
+   * The curriculum year is not stored — it follows from the semester
+   * (semesters 1–2 are year 1, 3–4 are year 2, and so on).
+   */
   academicYearId: string;
   isActive?: boolean;
   /** Joined for display — the backend may or may not include these. */
@@ -160,7 +161,6 @@ export interface SubjectOfferingPayload {
   branchId: string;
   semester: number;
   schemeId: string;
-  year: number;
   academicYearId: string;
 }
 
@@ -314,7 +314,6 @@ export const subjectsService = {
           branchId: subject.branchId,
           semester: subject.semester,
           schemeId: subject.schemeId,
-          year: subject.year ?? 1,
           academicYearId: subject.academicYearId ?? '',
           subject: {
             id: subject.id,

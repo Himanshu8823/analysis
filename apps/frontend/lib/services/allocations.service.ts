@@ -74,6 +74,23 @@ export interface ClassTeacherAssignmentFilters {
   academicYearId?: string;
 }
 
+/**
+ * A class that has students but no class teacher.
+ *
+ * This is the "class teacher required" state. It is a real state rather than
+ * a missing row, so the college can see the gap and fill it.
+ */
+export interface ClassNeedingTeacher {
+  branchId: string;
+  branchName: string;
+  semester: number;
+  schemeId: string;
+  schemeName: string;
+  academicYearId: string;
+  studentCount: number;
+  subjectCount: number;
+}
+
 /** The body `POST /class-teacher-assignments` accepts. */
 export interface CreateClassTeacherAssignmentPayload {
   teacherId: string;
@@ -81,6 +98,14 @@ export interface CreateClassTeacherAssignmentPayload {
   semester: number;
   schemeId: string;
   academicYearId: string;
+  /**
+   * Confirms that replacing an existing class teacher is intended.
+   *
+   * A class has exactly one class teacher. Replacing one ends the previous
+   * teacher's access to the class's statistics, so it must be confirmed
+   * knowingly — the server refuses an unconfirmed replacement.
+   */
+  replacesExisting?: boolean;
 }
 
 export const allocationsService = {
@@ -144,5 +169,19 @@ export const allocationsService = {
 
   deleteClassTeacherAssignment: async (id: string): Promise<void> => {
     await apiClient.delete(ENDPOINTS.CLASS_TEACHER_ASSIGNMENTS.DELETE(id));
+  },
+
+  /**
+   * Lists the classes that have students but no class teacher.
+   *
+   * The backend returns a plain array (no pagination).
+   */
+  listClassesNeedingTeacher: async (
+    filters?: ClassTeacherAssignmentFilters,
+  ): Promise<ClassNeedingTeacher[]> => {
+    const res = await apiClient.get(ENDPOINTS.CLASS_TEACHER_ASSIGNMENTS.NEEDS_TEACHER, {
+      params: filters,
+    });
+    return res.data.data;
   },
 };

@@ -67,9 +67,9 @@ export class AnalyticsService {
 
   /**
    * Resolves the academic year to analyse. An explicit `academicYearId` always
-   * wins; otherwise the active year (or the most recent one) is used, so every
-   * analytics screen reports on the same year without the client having to
-   * pass one.
+   * wins; otherwise the **running** year — the one whose dates contain today
+   * — is used, so every analytics screen reports on the same year without the
+   * client having to pass one.
    */
   private async resolveYearId(params: AnalyticsParams): Promise<string | undefined> {
     if (params.academicYearId) return params.academicYearId;

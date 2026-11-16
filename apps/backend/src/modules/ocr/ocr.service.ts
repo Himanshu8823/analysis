@@ -206,8 +206,33 @@ export class OcrService {
   /**
    * Get job status; returns null if the job has been deleted.
    */
-  async getJobStatus(jobId: string): Promise<unknown> {
-    return this.prisma.uploadJob.findUnique({ where: { id: jobId } });
+  /**
+   * The status of an upload job.
+   *
+   * The job carries the marks that were read out of the file — students'
+   * names, roll numbers and their marks. That is the same data the marks
+   * screen holds, so the same rule applies: a member sees the jobs they
+   * raised, and a member who holds `upload:read` for the whole college
+   * sees all of them.
+   *
+   * A job that is not theirs is reported as *not found* rather than as
+   * *forbidden*. "Not found" says there is nothing here for you, and it
+   * does not tell the caller whether the id they guessed is a real one —
+   * which is what would let them keep guessing.
+   */
+  async getJobStatus(jobId: string, requestedBy?: string, canReadAll = false): Promise<unknown> {
+    const job = await this.prisma.uploadJob.findUnique({
+      where: { id: jobId },
+      include: { uploadedByUser: { select: { id: true, name: true, email: true } } },
+    });
+
+    if (!job) return null;
+
+    if (!canReadAll && requestedBy && job.uploadedBy !== requestedBy) {
+      return null;
+    }
+
+    return job;
   }
 
   private async markJobFailed(jobId: string | null, message: string): Promise<void> {

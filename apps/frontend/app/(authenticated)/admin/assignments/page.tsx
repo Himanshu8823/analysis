@@ -28,6 +28,7 @@ import { EmptyState } from '@/components/feedback/EmptyState';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
 import {
   useAssignableTeachers,
+  useClassesNeedingTeacher,
   useClassTeacherAssignments,
   useCreateClassTeacherAssignment,
   useCreateTeacherAllocation,
@@ -36,11 +37,12 @@ import {
   useSubjectOfferings,
   useTeacherAllocations,
 } from '@/hooks/useAllocations';
-import { useAcademicYears } from '@/hooks/useAcademic';
+import { useAcademicYears, useRunningYear } from '@/hooks/useAcademic';
 import { useBranches } from '@/hooks/useBranches';
 import { useCurrentUser } from '@/hooks/useAuth';
 import { useSchemes } from '@/hooks/useSchemes';
 import { useTablePagination } from '@/hooks/useTablePagination';
+import { useClassContext } from '@/lib/context/class-context';
 import type {
   ClassTeacherAssignment,
   TeacherAllocation,
@@ -72,59 +74,75 @@ export default function AdminAssignmentsPage() {
   const sessionBranchId = user?.branchId ?? '';
   const isBranchFixed = !!sessionBranchId;
 
-  const [branchFilter, setBranchFilter] = useState<string>('all');
-  const [semester, setSemester] = useState<string>('');
-  const [academicYearId, setAcademicYearId] = useState<string>('');
-  const [schemeId, setSchemeId] = useState<string>('');
+  /**
+   * The class comes from the shared context.
+   *
+   * Allocating a teacher to a subject is work *about* one class, so this
+   * screen follows the same class the member is working on everywhere else
+   * rather than keeping its own copy of it. The dropdowns below still let
+   * them change it, and changing it here changes it everywhere — which is
+   * the point: a member who allocates a teacher for Semester 5 and then
+   * opens the marks screen should land on Semester 5.
+   */
+  const { context: classContext, setPart: setClassPart } = useClassContext();
 
   const { data: branchesData } = useBranches();
   const { data: schemesData } = useSchemes();
   const { data: academicYears } = useAcademicYears();
+  const runningYear = useRunningYear();
 
   const branches = branchesData ?? [];
   const schemes = schemesData ?? [];
   const years = academicYears ?? [];
 
   /**
+   * The **running** academic year is the default — the one the calendar's
+   * dates say is running today, which is what the backend defaults its
+   * reports to.
+   */
+  const activeYear = runningYear.year ?? years[0];
+
+  /**
    * The branch the page is scoped to.
    *
-   * For an HOD this is their own branch, always. For a college-wide user it
-   * is whichever branch they picked — and when they have not picked one, no
-   * allocation is listed at all, because an unscoped list would mix every
-   * branch's teaching staff together.
+   * For an HOD this is their own branch, always — the shared context cannot
+   * move it, because an HOD does not allocate outside their branch. For a
+   * college-wide user it is the shared class's branch.
    */
-  const branchId = isBranchFixed
-    ? sessionBranchId
-    : branchFilter === 'all'
-      ? ''
-      : branchFilter;
+  const branchId = isBranchFixed ? sessionBranchId : classContext.branchId;
 
   const branch = branches.find((b) => b.id === branchId);
-  const activeYear = years.find((y) => y.isActive) ?? years[0];
 
   /**
    * The academic year falls back to the active one.
    *
    * A Radix select never fires `onValueChange` for the value that is already
-   * selected, so leaving the state empty would keep the scope unresolved on
+   * selected, so leaving the context empty would keep the scope unresolved on
    * a college with a single academic year.
    */
-  const effectiveAcademicYearId = academicYearId || activeYear?.id || '';
+  const effectiveAcademicYearId = classContext.academicYearId || activeYear?.id || '';
 
   const scopeFilters = useMemo(
     () => ({
       branchId: branchId || undefined,
-      semester: semester ? Number(semester) : undefined,
+      semester: classContext.semester || undefined,
       academicYearId: effectiveAcademicYearId || undefined,
     }),
-    [branchId, semester, effectiveAcademicYearId],
+    [branchId, classContext.semester, effectiveAcademicYearId],
   );
 
   const allocationsQuery = useTeacherAllocations(scopeFilters);
   const classTeachersQuery = useClassTeacherAssignments(scopeFilters);
 
-  const hasActiveFilters =
-    !isBranchFixed && branchFilter !== 'all' ? true : !!semester || !!academicYearId || !!schemeId;
+  /**
+   * The classes with students but no class teacher.
+   *
+   * This is the gap a revocation leaves behind, and it is a different
+   * question from "who is the class teacher" — so it is a separate query.
+   */
+  const needsTeacherQuery = useClassesNeedingTeacher(scopeFilters);
+
+  const hasActiveFilters = !!classContext.branchId || !!classContext.academicYearId;
 
   /**
    * The rows carry ids, not names — the branch, semester and scheme a class
@@ -144,10 +162,10 @@ export default function AdminAssignmentsPage() {
   }, [schemes]);
 
   const clearFilters = () => {
-    if (!isBranchFixed) setBranchFilter('all');
-    setSemester('');
-    setAcademicYearId('');
-    setSchemeId('');
+    if (!isBranchFixed) setClassPart('branchId', '');
+    setClassPart('semester', 1);
+    setClassPart('academicYearId', '');
+    setClassPart('schemeId', '');
   };
 
   return (
@@ -217,7 +235,12 @@ export default function AdminAssignmentsPage() {
             </SelectContent>
           </FilterSelect>
         ) : (
-          <FilterSelect value={branchFilter} onValueChange={setBranchFilter}>
+          <FilterSelect
+            value={classContext.branchId || 'all'}
+            onValueChange={(value) =>
+              setClassPart('branchId', value === 'all' ? '' : value)
+            }
+          >
             <SelectTrigger className="w-full md:w-56" aria-label="Filter by branch">
               <SelectValue placeholder="Select a branch" />
             </SelectTrigger>
@@ -232,12 +255,14 @@ export default function AdminAssignmentsPage() {
           </FilterSelect>
         )}
 
-        <FilterSelect value={semester} onValueChange={setSemester}>
+        <FilterSelect
+          value={String(classContext.semester)}
+          onValueChange={(value) => setClassPart('semester', Number(value))}
+        >
           <SelectTrigger className="w-full md:w-40" aria-label="Filter by semester">
             <SelectValue placeholder="All semesters" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All semesters</SelectItem>
             {SEMESTERS.map((n) => (
               <SelectItem key={n} value={String(n)}>
                 Semester {n}
@@ -246,7 +271,12 @@ export default function AdminAssignmentsPage() {
           </SelectContent>
         </FilterSelect>
 
-        <FilterSelect value={schemeId} onValueChange={setSchemeId}>
+        <FilterSelect
+          value={classContext.schemeId || 'all'}
+          onValueChange={(value) =>
+            setClassPart('schemeId', value === 'all' ? '' : value)
+          }
+        >
           <SelectTrigger className="w-full md:w-40" aria-label="Filter by scheme">
             <SelectValue placeholder="All schemes" />
           </SelectTrigger>
@@ -260,7 +290,12 @@ export default function AdminAssignmentsPage() {
           </SelectContent>
         </FilterSelect>
 
-        <FilterSelect value={academicYearId} onValueChange={setAcademicYearId}>
+        <FilterSelect
+          value={classContext.academicYearId || 'all'}
+          onValueChange={(value) =>
+            setClassPart('academicYearId', value === 'all' ? '' : value)
+          }
+        >
           <SelectTrigger className="w-full md:w-40" aria-label="Filter by academic year">
             <SelectValue placeholder="All academic years" />
           </SelectTrigger>
@@ -278,8 +313,8 @@ export default function AdminAssignmentsPage() {
       {tab === 'subjects' ? (
         <SubjectAllocationsTab
           branchId={branchId}
-          semester={semester ? Number(semester) : undefined}
-          schemeId={schemeId === 'all' ? undefined : schemeId}
+          semester={classContext.semester || undefined}
+          schemeId={classContext.schemeId || undefined}
           academicYearId={effectiveAcademicYearId}
           query={allocationsQuery}
           academicYearLabels={academicYearLabels}
@@ -289,10 +324,11 @@ export default function AdminAssignmentsPage() {
       {tab === 'classTeachers' ? (
         <ClassTeachersTab
           branchId={branchId}
-          semester={semester ? Number(semester) : undefined}
-          schemeId={schemeId === 'all' ? undefined : schemeId}
+          semester={classContext.semester || undefined}
+          schemeId={classContext.schemeId || undefined}
           academicYearId={effectiveAcademicYearId}
           query={classTeachersQuery}
+          needsTeacherQuery={needsTeacherQuery}
           academicYearLabels={academicYearLabels}
           schemeLabels={schemeLabels}
         />
@@ -478,6 +514,14 @@ interface ClassTeachersTabProps {
   schemeId?: string;
   academicYearId: string;
   query: ReturnType<typeof useClassTeacherAssignments>;
+  /**
+   * The classes that have students but no class teacher.
+   *
+   * A separate query from the assignment list, because it answers a
+   * different question — and because the two can disagree: a class can be
+   * listed here while the assignment list shows nothing for it.
+   */
+  needsTeacherQuery: ReturnType<typeof useClassesNeedingTeacher>;
   /** Academic year id → year label. */
   academicYearLabels: Map<string, string>;
   /** Scheme id → scheme name. */
@@ -490,6 +534,7 @@ function ClassTeachersTab({
   schemeId,
   academicYearId,
   query,
+  needsTeacherQuery,
   academicYearLabels,
   schemeLabels,
 }: ClassTeachersTabProps) {
@@ -605,6 +650,65 @@ function ClassTeachersTab({
           message="Could not load class teacher assignments."
           retry={() => query.refetch()}
         />
+      ) : null}
+
+      {/*
+       * The classes that have nobody looking after them.
+       *
+       * This is the gap left behind when a member is revoked. It is shown
+       * above the list rather than buried in it, because a class without a
+       * class teacher is a class whose statistics nobody can see.
+       */}
+      {needsTeacherQuery.data && needsTeacherQuery.data.length > 0 ? (
+        <article
+          className="cb-surface-card border-l-4 border-l-semantic-down p-base"
+          aria-labelledby="needs-teacher-title"
+        >
+          <header className="mb-sm">
+            <h3 id="needs-teacher-title" className="font-display text-title-sm text-ink">
+              {needsTeacherQuery.data.length} class
+              {needsTeacherQuery.data.length === 1 ? '' : 'es'} need a class teacher
+            </h3>
+            <p className="mt-xs text-body-sm text-muted">
+              These classes have students, but nobody is looking after them. Assign a class
+              teacher so the class's results and statistics can be seen.
+            </p>
+          </header>
+
+          <ul className="flex flex-col gap-xs">
+            {needsTeacherQuery.data.map((row) => (
+              <li
+                key={`${row.branchId}|${row.semester}|${row.schemeId}|${row.academicYearId}`}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-surface-soft px-base py-sm"
+              >
+                <span className="text-body-sm text-ink">
+                  <span className="font-semibold">{row.branchName}</span>
+                  {' · '}
+                  Semester {row.semester}
+                  {' · '}
+                  {row.schemeName}
+                  {' · '}
+                  {academicYearLabels.get(row.academicYearId) ?? 'this year'}
+                  <span className="ml-2 text-caption text-muted">
+                    {row.studentCount} student{row.studentCount === 1 ? '' : 's'} ·{' '}
+                    {row.subjectCount} subject{row.subjectCount === 1 ? '' : 's'}
+                  </span>
+                </span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setEditing(null);
+                    setAssignOpen(true);
+                  }}
+                >
+                  <UserCheck aria-hidden />
+                  Assign
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </article>
       ) : null}
 
       <DataTable
@@ -901,6 +1005,16 @@ function AssignClassTeacherSheet({
   const [targetAcademicYearId, setTargetAcademicYearId] = useState(academicYearId);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Whether the administrator has confirmed the replacement.
+   *
+   * Replacing a class teacher takes away somebody's access to a class, so
+   * it is confirmed knowingly — the checkbox says who is being replaced and
+   * what ends. The server refuses an unconfirmed replacement, so the two
+   * sides agree.
+   */
+  const [confirmReplacement, setConfirmReplacement] = useState(false);
+
   const teachersQuery = useAssignableTeachers(branchId);
   const { data: schemesData } = useSchemes();
   const { data: academicYears } = useAcademicYears();
@@ -908,7 +1022,6 @@ function AssignClassTeacherSheet({
   const years = academicYears ?? [];
 
   const createAssignment = useCreateClassTeacherAssignment();
-  const deleteAssignment = useDeleteClassTeacherAssignment();
 
   const teachers = teachersQuery.data ?? [];
 
@@ -918,6 +1031,7 @@ function AssignClassTeacherSheet({
     // carries over into the next assignment.
     setTargetAcademicYearId(academicYearId);
     setError(null);
+    setConfirmReplacement(false);
   };
 
   const handleOpenChange = (next: boolean) => {
@@ -952,6 +1066,24 @@ function AssignClassTeacherSheet({
 
     setError(null);
 
+    /**
+     * A replacement must be confirmed before it is sent. The checkbox is
+     * the confirmation; the server checks the flag it carries.
+     */
+    const isReplacingThisClass =
+      !!existing &&
+      existing.branchId === branchId &&
+      existing.semester === sem &&
+      existing.schemeId === scheme &&
+      existing.academicYearId === targetAcademicYearId;
+
+    if (isReplacingThisClass && !confirmReplacement) {
+      setError(
+        'Confirm the replacement before saving. This ends the current class teacher’s access to the class.'
+      );
+      return;
+    }
+
     const payload = {
       teacherId,
       branchId,
@@ -960,32 +1092,25 @@ function AssignClassTeacherSheet({
       academicYearId: targetAcademicYearId,
     };
 
-    // Replacing: the class teacher is unique per class, so the old row has to
-    // go before the new one can be created.
-    if (!existing) {
-      createAssignment.mutate(payload, {
+    /**
+     * A replacement is confirmed on the server. The flag says the
+     * administrator has been shown who is being replaced and has gone
+     * ahead — the server refuses a replacement that was not confirmed, so a
+     * replacement can never be an accidental overwrite.
+     */
+    createAssignment.mutate(
+      { ...payload, replacesExisting: isReplacingThisClass },
+      {
         onSuccess: () => {
           reset();
           onOpenChange(false);
         },
-      });
-      return;
-    }
-
-    deleteAssignment.mutate(existing.id, {
-      onSuccess: () => {
-        createAssignment.mutate(payload, {
-          onSuccess: () => {
-            reset();
-            onOpenChange(false);
-          },
-        });
       },
-    });
+    );
   };
 
   const isReplace = !!existing;
-  const pending = createAssignment.isPending || deleteAssignment.isPending;
+  const pending = createAssignment.isPending;
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
@@ -1067,10 +1192,24 @@ function AssignClassTeacherSheet({
           </Select>
 
           {existing ? (
-            <p className="text-caption text-muted">
-              Replacing {existing.teacherName}. The previous assignment is
-              removed when the new one is saved.
-            </p>
+            <div className="flex flex-col gap-sm rounded-md border border-hairline bg-surface-soft p-base">
+              <p className="text-body-sm text-ink">
+                <strong>{existing.teacherName}</strong> is already the class teacher of this
+                class. Replacing them ends their access to this class&apos;s statistics.
+              </p>
+              <label className="flex items-start gap-xs text-body-sm text-body">
+                <input
+                  type="checkbox"
+                  checked={confirmReplacement}
+                  onChange={(e) => setConfirmReplacement(e.target.checked)}
+                  className="mt-0.5 size-5"
+                />
+                <span>
+                  I understand this replaces {existing.teacherName} as the class teacher of this
+                  class.
+                </span>
+              </label>
+            </div>
           ) : (
             <p className="text-caption text-muted">
               The class is your branch, the semester, scheme and academic year
@@ -1096,7 +1235,7 @@ function AssignClassTeacherSheet({
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={pending}
+            disabled={pending || (isReplace && !confirmReplacement)}
             className="cb-btn-primary w-full md:w-auto"
           >
             {pending
@@ -1114,16 +1253,14 @@ function AssignClassTeacherSheet({
 /**
  * The label of a subject offering — code, name and the semester it runs in.
  *
- * The semester and scheme are optional on the offering (the split `Subject`
- * model does not carry them, only the offering does), so they are shown only
- * when they are known.
+ * The semester is optional on the offering (the split `Subject` model does not
+ * carry it, only the offering does), so it is shown only when it is known.
  */
 function offeringLabel(offering: SubjectOfferingOption): string {
   const parts = [offering.code, offering.name];
-  const context = [
-    offering.semester !== undefined ? `Sem ${offering.semester}` : null,
-    offering.year !== undefined ? `Year ${offering.year}` : null,
-  ].filter(Boolean);
+  const context = [offering.semester !== undefined ? `Sem ${offering.semester}` : null].filter(
+    Boolean,
+  );
   return [...parts, ...(context.length > 0 ? [`(${context.join(' · ')})`] : [])].join(' · ');
 }
 

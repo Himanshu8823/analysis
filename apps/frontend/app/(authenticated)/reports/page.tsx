@@ -1,22 +1,28 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Download, FileSpreadsheet, Loader2, FileCheck2, AlertCircle, Clock } from 'lucide-react';
+import { Download, FileSpreadsheet, Loader2, FileCheck2, AlertCircle, Clock, Archive } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/forms/DataTable';
 import { Pagination } from '@/components/forms/Pagination';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
+import {
+  ArchiveReportDialog,
+  type ArchiveReportTarget,
+} from '@/components/feedback/ArchiveReportDialog';
 import { Select } from '@/components/forms/Select';
+import { ClassContextBar } from '@/components/context/ClassContextBar';
 import {
   useGenerateReport,
   useReports,
+  useArchiveReport,
   useDownloadReport,
   useReportReadiness,
 } from '@/hooks/useReports';
-import { useBranches } from '@/hooks/useBranches';
-import { useSchemes } from '@/hooks/useSchemes';
 import { useAcademicYears } from '@/hooks/useAcademic';
+import { useCurrentUser } from '@/hooks/useAuth';
+import { useClassContext } from '@/lib/context/class-context';
 import { formatters } from '@/lib/utils/formatters';
 import type { Report, ReportType, ReportReadiness } from '@/lib/services/reports.service';
 
@@ -53,16 +59,21 @@ const STATUS_TONE: Record<Report['status'], string> = {
 };
 
 export default function ReportsPage() {
-  const [branchId, setBranchId] = useState('');
-  const [schemeId, setSchemeId] = useState('');
-  const [semester, setSemester] = useState(1);
-  const [academicYearId, setAcademicYearId] = useState('');
+  /**
+   * The class comes from the shared context, so the report is generated for
+   * the same class the marks were entered for — chosen once, on whichever
+   * screen the member happened to be on.
+   */
+  const { context: classContext } = useClassContext();
+  const branchId = classContext.branchId;
+  const schemeId = classContext.schemeId;
+  const semester = classContext.semester;
+  const effectiveAcademicYearId = classContext.academicYearId;
+
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [reportType, setReportType] = useState<ReportType>('STUDENT_WISE');
 
-  const { data: branchesData } = useBranches();
-  const { data: schemesData } = useSchemes();
   const { data: academicYears } = useAcademicYears();
 
   const { mutate: generate, isPending: generating } = useGenerateReport();
@@ -72,8 +83,25 @@ export default function ReportsPage() {
   });
   const { mutate: download, isPending: downloading } = useDownloadReport();
 
-  const branches = branchesData ?? [];
-  const schemes = schemesData ?? [];
+  /**
+   * Whether this member may generate — and therefore archive — a report.
+   *
+   * The archive button is gated on the same permission the server checks, so
+   * a member who may only read reports is never shown a button that would
+   * be refused.
+   */
+  const { data: user } = useCurrentUser();
+  const canManageReports = (user?.permissions ?? []).includes('reports:generate');
+
+  /**
+   * Archiving a report.
+   *
+   * The report is not deleted — it is a statement about a class's results,
+   * and the record is kept. The confirmation says so, and asks for a reason.
+   */
+  const [archiveTarget, setArchiveTarget] = useState<ArchiveReportTarget | null>(null);
+  const { mutate: archiveReport, isPending: archiving } = useArchiveReport();
+
   const years = academicYears ?? [];
   const reports = reportsData?.items ?? [];
   const meta = reportsData?.meta;
@@ -83,10 +111,6 @@ export default function ReportsPage() {
       setPage(meta.totalPages);
     }
   }, [meta, page]);
-
-  // The backend requires an academic year for every report scope.
-  const activeYear = years.find((y) => y.isActive) ?? years[0];
-  const effectiveAcademicYearId = academicYearId || activeYear?.id || '';
 
   const scopeReady = !!branchId && !!schemeId && !!effectiveAcademicYearId && semester > 0;
 
@@ -174,14 +198,35 @@ export default function ReportsPage() {
       header: 'Actions',
       className: 'text-right',
       render: (row) => (
-        <button
-          type="button"
-          onClick={() => download(row.id)}
-          disabled={row.status !== 'COMPLETED' || downloading}
-          className="cb-btn-tertiary h-11 px-sm disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Download className="mr-1 h-4 w-4" aria-hidden /> Download
-        </button>
+        <div className="flex items-center justify-end gap-xs">
+          <button
+            type="button"
+            onClick={() => download(row.id)}
+            disabled={row.status !== 'COMPLETED' || downloading}
+            className="cb-btn-tertiary h-11 px-sm disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download className="mr-1 h-4 w-4" aria-hidden /> Download
+          </button>
+          {/*
+           * Archiving is offered only to a member who may generate reports —
+           * the same permission that guards the server route.
+           */}
+          {canManageReports ? (
+            <button
+              type="button"
+              onClick={() =>
+                setArchiveTarget({
+                  id: row.id,
+                  label: `${TYPE_LABEL[row.type] ?? 'Report'} — ${formatters.date(row.createdAt, 'long')}`,
+                })
+              }
+              aria-label={`Archive ${TYPE_LABEL[row.type] ?? 'report'}`}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-strong hover:text-ink"
+            >
+              <Archive className="h-4 w-4" aria-hidden />
+            </button>
+          ) : null}
+        </div>
       ),
     },
   ];
@@ -193,6 +238,9 @@ export default function ReportsPage() {
         description="Generate multi-sheet Excel reports scoped to a branch, scheme, and semester."
       />
 
+      {/* The class — shared with every other class-scoped screen. */}
+      <ClassContextBar />
+
       <article className="cb-surface-card" aria-labelledby="report-config-title">
         <header className="mb-base flex items-center gap-sm">
           <FileSpreadsheet className="h-5 w-5 text-primary" aria-hidden />
@@ -201,55 +249,6 @@ export default function ReportsPage() {
           </h2>
         </header>
         <div className="grid grid-cols-1 gap-base md:grid-cols-2 lg:grid-cols-4">
-          <Select
-            label="Branch"
-            value={branchId}
-            onChange={(e) => setBranchId(e.target.value)}
-          >
-            <option value="">Select branch</option>
-            {branches.map((branch) => (
-              <option key={branch.id} value={branch.id}>
-                {branch.code} · {branch.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            label="Scheme"
-            value={schemeId}
-            onChange={(e) => setSchemeId(e.target.value)}
-          >
-            <option value="">Select scheme</option>
-            {schemes.map((scheme) => (
-              <option key={scheme.id} value={scheme.id}>
-                {scheme.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            label="Semester"
-            value={String(semester)}
-            onChange={(e) => setSemester(Number(e.target.value))}
-          >
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-              <option key={n} value={n}>
-                Semester {n}
-              </option>
-            ))}
-          </Select>
-          <Select
-            label="Academic year"
-            value={effectiveAcademicYearId}
-            onChange={(e) => setAcademicYearId(e.target.value)}
-          >
-            {years.length === 0 ? (
-              <option value="">No academic years</option>
-            ) : null}
-            {years.map((year) => (
-              <option key={year.id} value={year.id}>
-                {year.year}
-              </option>
-            ))}
-          </Select>
           <Select
             label="Report type"
             value={reportType}
@@ -338,6 +337,22 @@ export default function ReportsPage() {
           </div>
         ) : null}
       </section>
+
+      {/*
+       * The archive confirmation. It says plainly what archiving does — the
+       * file is released, the record is kept — and asks for a reason.
+       */}
+      <ArchiveReportDialog
+        target={archiveTarget}
+        isSubmitting={archiving}
+        onClose={() => setArchiveTarget(null)}
+        onConfirm={(reportId, reason) =>
+          archiveReport(
+            { id: reportId, reason },
+            { onSuccess: () => setArchiveTarget(null) },
+          )
+        }
+      />
     </section>
   );
 }

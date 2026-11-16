@@ -5,10 +5,13 @@ import { usePathname, useRouter } from 'next/navigation';
 
 import { AppHeader } from '@/components/layout/AppHeader';
 import { AppSidebar } from '@/components/layout/AppSidebar';
+import { NoAccess } from '@/components/feedback/NoAccess';
 import { Spinner } from '@/components/feedback/Spinner';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { useCurrentUser } from '@/hooks/useAuth';
 import { getSession } from '@/lib/auth/session-client';
+import { canOpenScreen } from '@/lib/auth/screen-capabilities';
+import { ClassContextProvider } from '@/lib/context/class-context';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -89,6 +92,23 @@ export function AppShell({ children }: AppShellProps) {
     );
   }
 
+  /**
+   * The screen the member is on, and whether they may open it.
+   *
+   * The guard lives here, in the shell, rather than in each page. A guard
+   * that each page has to remember to apply is a guard that some page will
+   * forget — and a forgotten guard is a screen a member without the right
+   * can open. The catalogue is shared with the backend, so this check and
+   * the server's answer cannot drift apart.
+   *
+   * A path the catalogue does not name is left alone. The catalogue covers
+   * the screens that carry data; the ones it does not name have no rule to
+   * enforce, so the guard does not invent one.
+   */
+  const held = user?.permissions ?? [];
+  const resolved = canOpenScreen(pathname, held);
+  const refused = resolved.screen.known && !resolved.allowed;
+
   return (
     <SidebarProvider>
       {/* The navigation gates on the member's effective permissions — the
@@ -96,9 +116,26 @@ export function AppShell({ children }: AppShellProps) {
       <AppSidebar permissions={user?.permissions} />
       <SidebarInset className="min-w-0">
         <AppHeader />
-        <div className="flex-1 px-4 py-6 md:px-6 md:py-8 lg:px-8">
-          <div className="mx-auto w-full max-w-[1200px]">{children}</div>
-        </div>
+        {/* The class the member is working on is held above every screen, so
+            the branch, scheme, semester and academic year are chosen once
+            and are the same everywhere. */}
+        <ClassContextProvider>
+          <div className="flex-1 px-4 py-6 md:px-6 md:py-8 lg:px-8">
+            <div className="mx-auto w-full max-w-[1200px]">
+              {refused ? (
+                /**
+                 * The refusal replaces the screen rather than redirecting
+                 * away from it. The member asked for this path; answering
+                 * them on this path — with an explanation and a way back —
+                 * is the difference between a decision and a dead end.
+                 */
+                <NoAccess screenLabel={resolved.screen.label} reason="role" />
+              ) : (
+                children
+              )}
+            </div>
+          </div>
+        </ClassContextProvider>
       </SidebarInset>
     </SidebarProvider>
   );

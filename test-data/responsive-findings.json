@@ -1,0 +1,532 @@
+[
+  {
+    "role": "STUDENT",
+    "screen": "/dashboard",
+    "size": "mobile",
+    "notes": [
+      "1 touch target(s) under 44px"
+    ],
+    "measurement": {
+      "scrollWidth": 360,
+      "clientWidth": 360,
+      "bodyScrollWidth": 360,
+      "widest": "div.group/sidebar-wrapper.flex.min-h-svh",
+      "widestWidth": 360,
+      "smallTargets": [
+        {
+          "tag": "button",
+          "text": "Open Tanstack query devtools",
+          "w": 40,
+          "h": 40
+        }
+      ],
+      "smallTargetCount": 1,
+      "title": "Resultiq"
+    }
+  },
+  {
+    "role": "STUDENT",
+    "screen": "/my-result",
+    "size": "mobile",
+    "notes": [
+      "11 touch target(s) under 44px"
+    ],
+    "measurement": {
+      "scrollWidth": 360,
+      "clientWidth": 360,
+      "bodyScrollWidth": 360,
+      "widest": "table.w-full.text-body-sm",
+      "widestWidth": 409,
+      "smallTargets": [
+        {
+          "tag": "button",
+          "text": "10",
+          "w": 68,
+          "h": 32
+        },
+        {
+          "tag": "button",
+          "text": "First page",
+          "w": 32,
+          "h": 32
+        },
+        {
+          "tag": "button",
+          "text": "Previous page",
+          "w": 32,
+          "h": 32
+        },
+        {
+          "tag": "button",
+          "text": "Next page",
+          "w": 32,
+          "h": 32
+        },
+        {
+          "tag": "button",
+          "text": "Last page",
+          "w": 32,
+          "h": 32
+        },
+        {
+          "tag": "button",
+          "text": "10",
+          "w": 68,
+          "h": 32
+        },
+        {
+          "tag": "button",
+          "text": "First page",
+          "w": 32,
+          "h": 32
+        },
+        {
+          "tag": "button",
+          "text": "Previous page",
+          "w": 32,
+          "h": 32
+        },
+        {
+          "tag": "button",
+          "text": "Next page",
+          "w": 32,
+          "h": 32
+        },
+        {
+          "tag": "button",
+          "text": "Last page",
+          "w": 32,
+          "h": 32
+        },
+        {
+          "tag": "button",
+          "text": "Open Tanstack query devtools",
+          "w": 40,
+          "h": 40
+        }
+      ],
+      "smallTargetCount": 11,
+      "title": "Resultiq"
+    }
+  },
+  {
+    "role": "STUDENT",
+    "screen": "/toppers",
+    "size": "mobile",
+    "notes": [
+      "2 touch target(s) under 44px"
+    ],
+    "measurement": {
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "bodyScrollWidth": 375,
+      "widest": "main.flex.min-h-screen.flex-col",
+      "widestWidth": 375,
+      "smallTargets": [
+        {
+          "tag": "a",
+          "text": "Resultiq",
+          "w": 102,
+          "h": 32
+        },
+        {
+          "tag": "button",
+          "text": "Open Tanstack query devtools",
+          "w": 40,
+          "h": 40
+        }
+      ],
+      "smallTargetCount": 2,
+      "title": "Resultiq"
+    }
+  },
+  {
+    "role": "TEACHER",
+    "screen": "/marks",
+    "size": "mobile",
+    "notes": [
+      "1 touch target(s) under 44px"
+    ],
+    "measurement": {
+      "scrollWidth": 360,
+      "clientWidth": 360,
+      "bodyScrollWidth": 360,
+      "widest": "div.group/sidebar-wrapper.flex.min-h-svh",
+      "widestWidth": 360,
+      "smallTargets": [
+        {
+          "tag": "button",
+          "text": "Open Tanstack query devtools",
+          "w": 40,
+          "h": 40
+        }
+      ],
+      "smallTargetCount": 1,
+      "title": "Resultiq"
+    }
+  },
+  {
+    "role": "TEACHER",
+    "screen": "/students",
+    "size": "mobile",
+    "notes": [
+      "16 touch target(s) under 44px"
+    ],
+    "measurement": {
+      "scrollWidth": 360,
+      "clientWidth": 360,
+      "bodyScrollWidth": 360,
+      "widest": "div.group/sidebar-wrapper.flex.min-h-svh",
+      "widestWidth": 360,
+      "smallTargets": [
+        {
+          "tag": "a",
+          "text": "Aarav Sharma",
+          "w": 85,
+          "h": 18
+        },
+        {
+          "tag": "a",
+          "text": "Priya Patil",
+          "w": 60,
+          "h": 18
+        },
+        {
+          "tag": "a",
+          "text": "Rohan Deshmukh",
+          "w": 109,
+          "h": 18
+        },
+        {
+          "tag": "a",
+          "text": "Ananya Iyer",
+          "w": 72,
+          "h": 18
+        },
+        {
+          "tag": "a",
+          "text": "Kunal Mehta",
+          "w": 78,
+          "h": 18
+        },
+        {
+          "tag": "a",
+          "text": "Sneha Kulkarni",
+          "w": 91,
+          "h": 18
+        },
+        {
+          "tag": "a",
+          "text": "Aditya Joshi",
+          "w": 74,
+          "h": 18
+        },
+        {
+          "tag": "a",
+          "text": "Ishita Nair",
+          "w": 63,
+          "h": 18
+        },
+        {
+          "tag": "a",
+          "text": "Karan Malhotra",
+          "w": 95,
+          "h": 18
+        },
+        {
+          "tag": "a",
+          "text": "Divya Menon",
+          "w": 82,
+          "h": 18
+        },
+        {
+          "tag": "button",
+          "text": "10",
+          "w": 68,
+          "h": 32
+        },
+        {
+          "tag": "button",
+          "text": "First page",
+          "w": 32,
+          "h": 32
+        }
+      ],
+      "smallTargetCount": 16,
+      "title": "Resultiq"
+    }
+  },
+  {
+    "role": "TEACHER",
+    "screen": "/analytics",
+    "size": "mobile",
+    "notes": [
+      "2 touch target(s) under 44px"
+    ],
+    "measurement": {
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "bodyScrollWidth": 375,
+      "widest": "main.flex.min-h-screen.flex-col",
+      "widestWidth": 375,
+      "smallTargets": [
+        {
+          "tag": "a",
+          "text": "Resultiq",
+          "w": 102,
+          "h": 32
+        },
+        {
+          "tag": "button",
+          "text": "Open Tanstack query devtools",
+          "w": 40,
+          "h": 40
+        }
+      ],
+      "smallTargetCount": 2,
+      "title": "Resultiq"
+    }
+  },
+  {
+    "role": "TEACHER",
+    "screen": "/class-overview",
+    "size": "mobile",
+    "notes": [
+      "1 touch target(s) under 44px"
+    ],
+    "measurement": {
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "bodyScrollWidth": 375,
+      "widest": "div.group/sidebar-wrapper.flex.min-h-svh",
+      "widestWidth": 375,
+      "smallTargets": [
+        {
+          "tag": "button",
+          "text": "Open Tanstack query devtools",
+          "w": 40,
+          "h": 40
+        }
+      ],
+      "smallTargetCount": 1,
+      "title": "Resultiq"
+    }
+  },
+  {
+    "role": "HOD",
+    "screen": "/admin/assignments",
+    "size": "mobile",
+    "notes": [
+      "2 touch target(s) under 44px"
+    ],
+    "measurement": {
+      "scrollWidth": 360,
+      "clientWidth": 360,
+      "bodyScrollWidth": 360,
+      "widest": "div.group/sidebar-wrapper.flex.min-h-svh",
+      "widestWidth": 360,
+      "smallTargets": [
+        {
+          "tag": "button",
+          "text": "Clear filters",
+          "w": 115,
+          "h": 36
+        },
+        {
+          "tag": "button",
+          "text": "Open Tanstack query devtools",
+          "w": 40,
+          "h": 40
+        }
+      ],
+      "smallTargetCount": 2,
+      "title": "Resultiq"
+    }
+  },
+  {
+    "role": "HOD",
+    "screen": "/admin/assignments",
+    "size": "tablet",
+    "notes": [
+      "scrolls sideways by 72px (widest: div.group/sidebar-wrapper.flex.min-h-svh at 805px)"
+    ],
+    "measurement": {
+      "scrollWidth": 877,
+      "clientWidth": 805,
+      "bodyScrollWidth": 876,
+      "widest": "div.group/sidebar-wrapper.flex.min-h-svh",
+      "widestWidth": 805,
+      "smallTargets": [
+        {
+          "tag": "button",
+          "text": "Toggle Sidebar",
+          "w": 16,
+          "h": 1180
+        },
+        {
+          "tag": "button",
+          "text": "Clear filters",
+          "w": 115,
+          "h": 36
+        },
+        {
+          "tag": "button",
+          "text": "Open Tanstack query devtools",
+          "w": 40,
+          "h": 40
+        }
+      ],
+      "smallTargetCount": 3,
+      "title": "Resultiq"
+    }
+  },
+  {
+    "role": "HOD",
+    "screen": "/reports",
+    "size": "mobile",
+    "notes": [
+      "1 touch target(s) under 44px"
+    ],
+    "measurement": {
+      "scrollWidth": 360,
+      "clientWidth": 360,
+      "bodyScrollWidth": 360,
+      "widest": "div.group/sidebar-wrapper.flex.min-h-svh",
+      "widestWidth": 360,
+      "smallTargets": [
+        {
+          "tag": "button",
+          "text": "Open Tanstack query devtools",
+          "w": 40,
+          "h": 40
+        }
+      ],
+      "smallTargetCount": 1,
+      "title": "Resultiq"
+    }
+  },
+  {
+    "role": "ADMIN",
+    "screen": "/students",
+    "size": "mobile",
+    "notes": [
+      "2 touch target(s) under 44px"
+    ],
+    "measurement": {
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "bodyScrollWidth": 375,
+      "widest": "main.flex.min-h-screen.flex-col",
+      "widestWidth": 375,
+      "smallTargets": [
+        {
+          "tag": "a",
+          "text": "Resultiq",
+          "w": 102,
+          "h": 32
+        },
+        {
+          "tag": "button",
+          "text": "Open Tanstack query devtools",
+          "w": 40,
+          "h": 40
+        }
+      ],
+      "smallTargetCount": 2,
+      "title": "Resultiq"
+    }
+  },
+  {
+    "role": "ADMIN",
+    "screen": "/admin/publications",
+    "size": "mobile",
+    "notes": [
+      "1 touch target(s) under 44px"
+    ],
+    "measurement": {
+      "scrollWidth": 360,
+      "clientWidth": 360,
+      "bodyScrollWidth": 360,
+      "widest": "div.group/sidebar-wrapper.flex.min-h-svh",
+      "widestWidth": 360,
+      "smallTargets": [
+        {
+          "tag": "button",
+          "text": "Open Tanstack query devtools",
+          "w": 40,
+          "h": 40
+        }
+      ],
+      "smallTargetCount": 1,
+      "title": "Resultiq"
+    }
+  },
+  {
+    "role": "ADMIN",
+    "screen": "/upload",
+    "size": "mobile",
+    "notes": [
+      "3 touch target(s) under 44px"
+    ],
+    "measurement": {
+      "scrollWidth": 360,
+      "clientWidth": 360,
+      "bodyScrollWidth": 360,
+      "widest": "div.group/sidebar-wrapper.flex.min-h-svh",
+      "widestWidth": 360,
+      "smallTargets": [
+        {
+          "tag": "input",
+          "text": "Upload file",
+          "w": 1,
+          "h": 1
+        },
+        {
+          "tag": "button",
+          "text": "Click to upload",
+          "w": 109,
+          "h": 24
+        },
+        {
+          "tag": "button",
+          "text": "Open Tanstack query devtools",
+          "w": 40,
+          "h": 40
+        }
+      ],
+      "smallTargetCount": 3,
+      "title": "Resultiq"
+    }
+  },
+  {
+    "role": "ADMIN",
+    "screen": "/reports",
+    "size": "mobile",
+    "notes": [
+      "2 touch target(s) under 44px"
+    ],
+    "measurement": {
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "bodyScrollWidth": 375,
+      "widest": "main.flex.min-h-screen.flex-col",
+      "widestWidth": 375,
+      "smallTargets": [
+        {
+          "tag": "a",
+          "text": "Resultiq",
+          "w": 102,
+          "h": 32
+        },
+        {
+          "tag": "button",
+          "text": "Open Tanstack query devtools",
+          "w": 40,
+          "h": 40
+        }
+      ],
+      "smallTargetCount": 2,
+      "title": "Resultiq"
+    }
+  }
+]

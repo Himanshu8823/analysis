@@ -33,12 +33,48 @@ describe('parseDbatuStatementLines', () => {
 
     expect(first).toEqual(
       expect.arrayContaining([
-        { rollNo: '225171126001', subjectCode: 'BTCOM701', examType: 'CA1', marksObtained: 16, maxMarks: 20 },
-        { rollNo: '225171126001', subjectCode: 'BTCOM701', examType: 'CA2', marksObtained: 17, maxMarks: 20 },
-        { rollNo: '225171126001', subjectCode: 'BTCOM701', examType: 'MID_SEM', marksObtained: 24, maxMarks: 30 },
-        { rollNo: '225171126001', subjectCode: 'BTCOM701', examType: 'WRITTEN', marksObtained: 53, maxMarks: 100 },
-        { rollNo: '225171126001', subjectCode: 'BTCOM702', examType: 'CA1', marksObtained: 18, maxMarks: 20 },
-        { rollNo: '225171126001', subjectCode: 'BTCOM702', examType: 'WRITTEN', marksObtained: 57, maxMarks: 100 },
+        {
+          rollNo: '225171126001',
+          subjectCode: 'BTCOM701',
+          examType: 'CA1',
+          marksObtained: 16,
+          maxMarks: 20,
+        },
+        {
+          rollNo: '225171126001',
+          subjectCode: 'BTCOM701',
+          examType: 'CA2',
+          marksObtained: 17,
+          maxMarks: 20,
+        },
+        {
+          rollNo: '225171126001',
+          subjectCode: 'BTCOM701',
+          examType: 'MID_SEM',
+          marksObtained: 24,
+          maxMarks: 30,
+        },
+        {
+          rollNo: '225171126001',
+          subjectCode: 'BTCOM701',
+          examType: 'WRITTEN',
+          marksObtained: 53,
+          maxMarks: 100,
+        },
+        {
+          rollNo: '225171126001',
+          subjectCode: 'BTCOM702',
+          examType: 'CA1',
+          marksObtained: 18,
+          maxMarks: 20,
+        },
+        {
+          rollNo: '225171126001',
+          subjectCode: 'BTCOM702',
+          examType: 'WRITTEN',
+          marksObtained: 57,
+          maxMarks: 100,
+        },
       ])
     );
   });
@@ -82,8 +118,20 @@ describe('parseDbatuStatementLines', () => {
     expect(second).toHaveLength(12);
     expect(second).toEqual(
       expect.arrayContaining([
-        { rollNo: '225171126002', subjectCode: 'BTCOM701', examType: 'CA1', marksObtained: 12, maxMarks: 20 },
-        { rollNo: '225171126002', subjectCode: 'BTCOM702', examType: 'WRITTEN', marksObtained: 54, maxMarks: 100 },
+        {
+          rollNo: '225171126002',
+          subjectCode: 'BTCOM701',
+          examType: 'CA1',
+          marksObtained: 12,
+          maxMarks: 20,
+        },
+        {
+          rollNo: '225171126002',
+          subjectCode: 'BTCOM702',
+          examType: 'WRITTEN',
+          marksObtained: 54,
+          maxMarks: 100,
+        },
       ])
     );
   });
@@ -133,16 +181,24 @@ describe('parseDbatuStatementLines', () => {
     ).toThrow(/does not look like a printed result statement/);
   });
 
-  it('rejects a mark that exceeds the component maximum', () => {
+  it('keeps a mark that is above the default maximum, for the confirm step to check', () => {
     const { rows, errors } = parseDbatuStatementLines([
       'Roll  PRN No        Name        BTCOM701:INT',
       'No                           CA1 CA2 MID WR',
       '1    225171126007   SOME STUDENT   45  11  12  13',
     ]);
 
-    // The bad cell is reported and skipped; the good ones still land.
-    expect(errors.some((e) => e.error.includes('exceeds the maximum'))).toBe(true);
-    expect(rows.some((r) => r.marksObtained === 45)).toBe(false);
+    /**
+     * The statement prints the marks only — never the maximum. The maximum
+     * the parser knows is a *default*, and the real one comes from the
+     * subject's own component configuration when the upload is confirmed.
+     *
+     * Dropping the mark here would lose a valid mark for a subject whose
+     * scheme splits it differently, so the mark is kept and the confirm
+     * step — which knows the real maximum — is the one that reports it.
+     */
+    expect(errors.some((e) => e.error.includes('exceeds the maximum'))).toBe(false);
+    expect(rows.some((r) => r.marksObtained === 45)).toBe(true);
     expect(rows.some((r) => r.marksObtained === 11)).toBe(true);
   });
 });

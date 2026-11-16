@@ -96,6 +96,10 @@ export class ScopeService {
    * caller named no branch: a user scoped to two branches must still not see
    * a third one. {@link resolveBranchScope} cannot express that, because it
    * returns a single id.
+   *
+   * A college-wide member who names a branch is narrowed to that branch,
+   * exactly as the single-id resolver narrows them. The branch they picked
+   * on the screen is the branch they meant.
    */
   async resolveBranchFilter(
     userId: string,
@@ -103,8 +107,11 @@ export class ScopeService {
   ): Promise<string[] | undefined> {
     const scope = await this.branchScope(userId);
 
-    // College-scoped: no branch filter at all.
-    if (scope.length === 0) return undefined;
+    /**
+     * College-scoped: no branch filter at all — unless the caller named a
+     * branch, in which case that branch is what they asked for.
+     */
+    if (scope.length === 0) return requestedBranchId ? [requestedBranchId] : undefined;
 
     // A request for a branch outside the user's scope is refused.
     if (requestedBranchId && !scope.includes(requestedBranchId)) {

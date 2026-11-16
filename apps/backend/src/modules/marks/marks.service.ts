@@ -7,6 +7,7 @@ import {
 import { PrismaClient } from '@prisma/client';
 import type { Mark, Subject } from '@prisma/client';
 import { MarksRepository } from './marks.repository';
+import { MarksAuthorisationService } from './marks.authorisation.service';
 import { CalculatorFactory } from './calculator';
 import { CreateMarkDto, BulkCreateMarksDto, UpdateMarkDto } from './dto';
 import type { StudentCalculationResult, SubjectOfferingContext } from './calculator';
@@ -25,25 +26,216 @@ export interface ClassStudentResult {
   result: StudentCalculationResult;
 }
 
+/**
+ * The marks service.
+ *
+ * Every authorisation decision lives here, in the service layer — not only in
+ * the controller's `@Permissions()` decorator. A decorator alone is bypassable
+ * by any code path that calls the service directly, and the rule being
+ * enforced here ("only for the subjects you were allocated") is one a
+ * decorator cannot express at all.
+ *
+ * The single write gate is {@link MarksAuthorisationService.assertMayWrite}.
+ * Every write path — single create, bulk create, update, delete — goes
+ * through it, so no path can drift from the others.
+ */
 @Injectable()
 export class MarksService {
   constructor(
     private readonly repository: MarksRepository,
     private readonly factory: CalculatorFactory,
-    private readonly prisma: PrismaClient
+    private readonly prisma: PrismaClient,
+    private readonly authorisation: MarksAuthorisationService
   ) {}
 
-  async create(dto: CreateMarkDto, createdBy: string): Promise<Mark> {
+  // ---------------------------------------------------------------------
+  // Writes
+  // ---------------------------------------------------------------------
+
+  /**
+   * Writes one mark.
+   *
+   * The caller must be allocated to the offering, unless they are the exam
+   * cell acting on an offering no teacher holds. A write over a teacher's
+   * subject is a *correction*: it needs the `marks:write` permission, a
+   * reason, and it is recorded differently in the audit trail.
+   */
+  async create(
+    dto: CreateMarkDto,
+    createdBy: string,
+    options: { isCorrection?: boolean; reason?: string } = {}
+  ): Promise<Mark> {
+    const { overriddenTeacher } = await this.authorisation.assertMayWrite(
+      createdBy,
+      dto.subjectOfferingId,
+      dto.academicYearId,
+      options
+    );
+    await this.assertStudentInOfferingBranch(dto.studentId, dto.subjectOfferingId);
+
+    /**
+     * A correction is a different operation from an ordinary entry, so it is
+     * written differently: the value it replaces is kept, the teacher whose
+     * work it replaces is named, and the reason is stored with it.
+     */
+    if (options.isCorrection) {
+      const reason = this.requireReason(options.reason);
+      return this.repository.createAsCorrection(dto, createdBy, {
+        reason,
+        overriddenTeacherId: overriddenTeacher?.id ?? null,
+        overriddenTeacherName: overriddenTeacher?.name ?? null,
+      });
+    }
+
     return this.repository.create(dto, createdBy);
   }
 
-  async createBulk(dto: BulkCreateMarksDto, createdBy: string): Promise<Mark[]> {
+  /**
+   * A correction without a reason is not a correction — it is an ordinary
+   * write that happens to have found a way around the rule. The reason is
+   * what makes the change explainable to whoever looks at it later.
+   */
+  private requireReason(reason: string | undefined): string {
+    const trimmed = reason?.trim();
+    if (!trimmed) {
+      throw new BadRequestException(
+        'Give a reason for the correction. It is recorded against your name and shown to the teacher whose mark was changed.'
+      );
+    }
+    return trimmed;
+  }
+
+  /**
+   * Writes many marks.
+   *
+   * The batch is refused as a whole if any row fails the check. A partial
+   * write would leave the member unable to tell which rows were saved.
+   */
+  async createBulk(
+    dto: BulkCreateMarksDto,
+    createdBy: string,
+    options: { isCorrection?: boolean; reason?: string } = {}
+  ): Promise<Mark[]> {
+    await this.authorisation.assertMayWriteBulk(
+      createdBy,
+      dto.marks.map((mark) => ({
+        subjectOfferingId: mark.subjectOfferingId,
+        academicYearId: mark.academicYearId,
+      })),
+      options
+    );
+
+    // Every row must also belong to the offering's branch — otherwise a
+    // teacher allocated to Computer Networks could write a mark for a
+    // student in Mechanical Engineering.
+    for (const mark of dto.marks) {
+      await this.assertStudentInOfferingBranch(mark.studentId, mark.subjectOfferingId);
+    }
+
     return this.repository.createBulk(dto, createdBy);
   }
 
+  /**
+   * Changes an existing mark.
+   *
+   * The mark is resolved first — it carries the offering and the academic
+   * year — and the caller is checked against *those*, not against a
+   * parameter they supplied. Before this, any member holding the mark-entry
+   * permission could overwrite any student's mark in the college by id.
+   */
+  async update(
+    id: string,
+    dto: UpdateMarkDto,
+    updatedBy: string,
+    options: { isCorrection?: boolean; reason?: string } = {}
+  ): Promise<Mark> {
+    const mark = await this.repository.findById(id);
+    if (!mark) throw new NotFoundException('This mark entry no longer exists.');
+
+    await this.authorisation.assertMayWrite(
+      updatedBy,
+      mark.subjectOfferingId,
+      mark.academicYearId,
+      options
+    );
+
+    return this.repository.update(id, dto, updatedBy);
+  }
+
+  /**
+   * Removes an existing mark.
+   *
+   * Deleting a mark is a write to the offering it belongs to, so it is
+   * checked the same way — otherwise a teacher could delete another
+   * teacher's work by id.
+   */
+  async delete(
+    id: string,
+    deletedBy: string,
+    options: { isCorrection?: boolean; reason?: string } = {}
+  ): Promise<void> {
+    const mark = await this.repository.findById(id);
+    if (!mark) throw new NotFoundException('This mark entry no longer exists.');
+
+    await this.authorisation.assertMayWrite(
+      deletedBy,
+      mark.subjectOfferingId,
+      mark.academicYearId,
+      options
+    );
+
+    await this.repository.delete(id);
+  }
+
+  /**
+   * Refuses a write whose student is not in the offering's branch.
+   *
+   * The offering belongs to one branch and the mark must belong to the same
+   * class. Without this, an allocated teacher could reach a student in
+   * another branch by naming them in the request body.
+   */
+  private async assertStudentInOfferingBranch(
+    studentId: string,
+    subjectOfferingId: string
+  ): Promise<void> {
+    const offering = await this.prisma.subjectOffering.findUnique({
+      where: { id: subjectOfferingId },
+      select: { branchId: true },
+    });
+    if (!offering) {
+      throw new NotFoundException('That subject offering no longer exists.');
+    }
+
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      select: { branchId: true },
+    });
+    if (!student) {
+      throw new NotFoundException('That student no longer exists.');
+    }
+
+    if (student.branchId !== offering.branchId) {
+      throw new ForbiddenException(
+        'That student is not in the class this subject is taught to, so their mark cannot be entered here.'
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Reads
+  // ---------------------------------------------------------------------
+
+  /**
+   * Lists marks.
+   *
+   * The scope filter is applied by the caller — see
+   * {@link resolveReadScope} — and passed in already narrowed. This method
+   * does not re-derive it, so the same filtered set cannot be widened by a
+   * second code path.
+   */
   async findAll(params: {
     studentId?: string;
-    subjectOfferingId?: string;
+    subjectOfferingId?: string | string[];
     subjectId?: string;
     examType?: string;
     academicYearId?: string;
@@ -54,7 +246,7 @@ export class MarksService {
 
   async findById(id: string): Promise<Mark> {
     const mark = await this.repository.findById(id);
-    if (!mark) throw new NotFoundException('Mark not found');
+    if (!mark) throw new NotFoundException('This mark entry no longer exists.');
     return mark;
   }
 
@@ -78,14 +270,6 @@ export class MarksService {
       select: { branchId: true },
     });
     return student?.branchId ?? null;
-  }
-
-  async update(id: string, dto: UpdateMarkDto, updatedBy: string): Promise<Mark> {
-    return this.repository.update(id, dto, updatedBy);
-  }
-
-  async delete(id: string): Promise<void> {
-    return this.repository.delete(id);
   }
 
   /**
@@ -128,17 +312,17 @@ export class MarksService {
     academicYearId: string
   ): Promise<StudentCalculationResult> {
     if (!academicYearId) {
-      throw new BadRequestException('academicYearId is required');
+      throw new BadRequestException('Choose the academic year to calculate.');
     }
     const student = await this.prisma.student.findUnique({
       where: { id: studentId },
       include: { scheme: true },
     });
-    if (!student) throw new NotFoundException(`Student ${studentId} not found`);
+    if (!student) throw new NotFoundException('That student no longer exists.');
 
     const scheme = student.scheme;
     if (!scheme) {
-      throw new NotFoundException(`Scheme for student ${studentId} could not be resolved`);
+      throw new NotFoundException('The scheme for this student could not be resolved.');
     }
 
     const offerings = await this.offeringsForClass({
@@ -162,13 +346,13 @@ export class MarksService {
     filters: ClassCalculationFilter
   ): Promise<{ schemeName: string; results: ClassStudentResult[] }> {
     if (!filters.academicYearId) {
-      throw new BadRequestException('academicYearId is required');
+      throw new BadRequestException('Choose the academic year to calculate.');
     }
     const scheme = await this.prisma.scheme.findUnique({
       where: { id: filters.schemeId },
     });
     if (!scheme) {
-      throw new NotFoundException(`Scheme ${filters.schemeId} not found`);
+      throw new NotFoundException('That scheme no longer exists.');
     }
     const calc = this.factory.fromScheme(scheme);
 
@@ -225,64 +409,27 @@ export class MarksService {
     return { schemeName: scheme.name, results };
   }
 
-  // ---------------------------------------------------------------------
-  // Teacher allocation scoping
-  // ---------------------------------------------------------------------
-
   /**
-   * Checks that the given teacher is allocated to the subject offering.
-   *
-   * A teacher may only enter marks for subjects the HOD has allocated to
-   * them. Being the class teacher of a class does not by itself allow marks
-   * entry — that right comes only from a subject allocation.
+   * The subject offering a mark belongs to, with the fields a write check
+   * needs.
    */
-  async assertTeacherAllocated(
-    teacherId: string,
-    subjectOfferingId: string,
-    academicYearId: string
-  ): Promise<void> {
-    const allocation = await this.prisma.teacherSubject.findFirst({
-      where: {
-        teacherId,
-        subjectOfferingId,
-        academicYearId,
+  async findOfferingOfMark(
+    id: string
+  ): Promise<{ subjectOfferingId: string; academicYearId: string; branchId: string } | null> {
+    const mark = await this.prisma.mark.findUnique({
+      where: { id },
+      select: {
+        subjectOfferingId: true,
+        academicYearId: true,
+        subjectOffering: { select: { branchId: true } },
       },
-      select: { id: true },
     });
-    if (!allocation) {
-      throw new ForbiddenException(
-        'You are not allocated to this subject, so you cannot enter marks for it.'
-      );
-    }
-  }
-
-  /**
-   * Checks every mark in a bulk write against the teacher's allocations.
-   *
-   * A bulk write is rejected as a whole rather than partially applied, so a
-   * teacher never ends up with half a spreadsheet saved.
-   */
-  async assertTeacherAllocatedBulk(teacherId: string, marks: CreateMarkDto[]): Promise<void> {
-    const offeringIds = [...new Set(marks.map((m) => m.subjectOfferingId))];
-    if (offeringIds.length === 0) return;
-
-    const yearIds = [...new Set(marks.map((m) => m.academicYearId))];
-    const allocations = await this.prisma.teacherSubject.findMany({
-      where: {
-        teacherId,
-        subjectOfferingId: { in: offeringIds },
-        academicYearId: { in: yearIds },
-      },
-      select: { subjectOfferingId: true, academicYearId: true },
-    });
-
-    const allowed = new Set(allocations.map((a) => `${a.subjectOfferingId}:${a.academicYearId}`));
-    const offending = marks.find((m) => !allowed.has(`${m.subjectOfferingId}:${m.academicYearId}`));
-    if (offending) {
-      throw new ForbiddenException(
-        'One or more subjects in this request are not allocated to you, so nothing was saved.'
-      );
-    }
+    if (!mark) return null;
+    return {
+      subjectOfferingId: mark.subjectOfferingId,
+      academicYearId: mark.academicYearId,
+      branchId: mark.subjectOffering.branchId,
+    };
   }
 
   /** Expose the calculator factory for cross-module reuse (reports, etc). */

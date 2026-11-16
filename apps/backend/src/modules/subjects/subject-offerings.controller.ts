@@ -2,8 +2,17 @@ import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { SubjectsService } from './subjects.service';
 import { CreateSubjectOfferingDto } from './dto';
-import { Permissions, Audited, AuditAction, AuditResource } from '@/common/decorators';
+import {
+  AnyPermission,
+  Permissions,
+  Audited,
+  AuditAction,
+  AuditResource,
+  CurrentUser,
+} from '@/common/decorators';
+import { ScopeService } from '@/common/services/scope.service';
 import { parseOptionalInt, parseOptionalString } from '@/common/utils/query-params';
+import type { JwtPayload } from '@/common/types';
 
 /**
  * Subject offerings — "which subject runs in which branch, semester and scheme".
@@ -17,10 +26,13 @@ import { parseOptionalInt, parseOptionalString } from '@/common/utils/query-para
 @ApiBearerAuth()
 @Controller('subject-offerings')
 export class SubjectOfferingsController {
-  constructor(private readonly service: SubjectsService) {}
+  constructor(
+    private readonly service: SubjectsService,
+    private readonly scope: ScopeService
+  ) {}
 
   @Post()
-  @Permissions('subjects:write')
+  @Permissions('subject_offerings:write')
   @Audited(AuditResource.SUBJECT_OFFERING, AuditAction.CREATE, {
     resourceIdSource: 'response',
     detailsFromBody: {
@@ -36,7 +48,7 @@ export class SubjectOfferingsController {
   }
 
   @Get()
-  @Permissions('subjects:read')
+  @Permissions('subject_offerings:read', 'subjects:read')
   @ApiOperation({ summary: 'List subject offerings' })
   @ApiQuery({ name: 'subjectId', required: false })
   @ApiQuery({ name: 'branchId', required: false })
@@ -45,6 +57,7 @@ export class SubjectOfferingsController {
   @ApiQuery({ name: 'semester', required: false })
   @ApiQuery({ name: 'isActive', required: false })
   async findAll(
+    @CurrentUser() user: JwtPayload,
     @Query('subjectId') subjectId?: string,
     @Query('branchId') branchId?: string,
     @Query('schemeId') schemeId?: string,
@@ -52,9 +65,17 @@ export class SubjectOfferingsController {
     @Query('semester') semester?: string,
     @Query('isActive') isActive?: string
   ) {
+    /**
+     * An offering is the teaching plan of one branch, so it is read under
+     * the branch scope. A branch-scoped member sees their own branch's
+     * offerings and no others; asking for another branch is refused rather
+     * than quietly redirected.
+     */
+    const branchIds = await this.scope.resolveBranchFilter(user.sub, parseOptionalString(branchId));
+
     return this.service.findOfferings({
       subjectId: parseOptionalString(subjectId),
-      branchId: parseOptionalString(branchId),
+      branchIds,
       schemeId: parseOptionalString(schemeId),
       academicYearId: parseOptionalString(academicYearId),
       semester: parseOptionalInt(semester),
@@ -63,29 +84,62 @@ export class SubjectOfferingsController {
   }
 
   @Get(':id')
-  @Permissions('subjects:read')
+  @Permissions('subject_offerings:read', 'subjects:read')
   @ApiOperation({ summary: 'Get one subject offering' })
-  async findById(@Param('id') id: string) {
-    return this.service.findOfferingById(id);
+  async findById(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    const offering = await this.service.findOfferingById(id);
+    if (!offering) return null;
+
+    /**
+     * An offering belongs to a branch. A member who does not work in that
+     * branch may not read it — an offering says which subjects that branch
+     * teaches and in which semester, which is that branch's teaching plan.
+     */
+    const branchIds = await this.scope.resolveBranchFilter(user.sub, offering.branchId);
+    if (branchIds && !branchIds.includes(offering.branchId)) {
+      return null;
+    }
+
+    return offering;
   }
 
   @Put(':id')
-  @Permissions('subjects:write')
+  @Permissions('subject_offerings:write')
   @Audited(AuditResource.SUBJECT_OFFERING, AuditAction.UPDATE, {
     resourceIdSource: 'param',
   })
   @ApiOperation({ summary: 'Update subject offering' })
-  async update(@Param('id') id: string, @Body() dto: Partial<CreateSubjectOfferingDto>) {
+  async update(
+    @Param('id') id: string,
+    @Body() dto: Partial<CreateSubjectOfferingDto>,
+    @CurrentUser() user: JwtPayload
+  ) {
+    const offering = await this.service.findOfferingById(id);
+    if (!offering) return null;
+
+    const branchIds = await this.scope.resolveBranchFilter(user.sub, offering.branchId);
+    if (branchIds && !branchIds.includes(offering.branchId)) {
+      return null;
+    }
+
     return this.service.updateOffering(id, dto);
   }
 
   @Delete(':id')
-  @Permissions('subjects:delete')
+  @AnyPermission('subject_offerings:write', 'subjects:delete')
   @Audited(AuditResource.SUBJECT_OFFERING, AuditAction.DELETE, {
     resourceIdSource: 'param',
   })
   @ApiOperation({ summary: 'Deactivate subject offering' })
-  async delete(@Param('id') id: string): Promise<void> {
+  async delete(@Param('id') id: string, @CurrentUser() user: JwtPayload): Promise<void> {
+    const offering = await this.service.findOfferingById(id);
+    if (!offering) return;
+
+    const branchIds = await this.scope.resolveBranchFilter(user.sub, offering.branchId);
+    if (branchIds && !branchIds.includes(offering.branchId)) {
+      return;
+    }
+
     return this.service.deleteOffering(id);
   }
 }

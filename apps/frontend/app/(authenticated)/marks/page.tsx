@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { Save, Loader2, ClipboardCheck, AlertCircle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { Save, Loader2, AlertCircle, PencilLine } from 'lucide-react';
 
 import { Select } from '@/components/forms/Select';
 import { Pagination } from '@/components/forms/Pagination';
@@ -9,14 +10,14 @@ import { TableSkeleton } from '@/components/forms/TableSkeleton';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
 import { EmptyState } from '@/components/feedback/EmptyState';
-import { useBranches } from '@/hooks/useBranches';
-import { useSchemes } from '@/hooks/useSchemes';
-import { useAcademicYears } from '@/hooks/useAcademic';
+import { NoAccess } from '@/components/feedback/NoAccess';
+import { ClassContextBar } from '@/components/context/ClassContextBar';
 import { useStudents } from '@/hooks/useStudents';
 import { useSubjectCatalogueOfferings } from '@/hooks/useSubjects';
 import { useCreateBulkMarks, useMarks } from '@/hooks/useMarks';
 import { useTablePagination } from '@/hooks/useTablePagination';
-import { extractErrorMessage } from '@/hooks/useAuth';
+import { extractErrorMessage, useCurrentUser } from '@/hooks/useAuth';
+import { useClassContext } from '@/lib/context/class-context';
 import type { BulkMarkInput, ExamType } from '@/lib/services/marks.service';
 import { cn } from '@/lib/utils';
 
@@ -64,26 +65,78 @@ type RowState = Partial<Record<ExamType, CellState>>;
 type GridState = Record<string, RowState>;
 
 export default function MarksEntryPage() {
-  const [branchId, setBranchId] = useState('');
-  const [schemeId, setSchemeId] = useState('');
-  const [semester, setSemester] = useState(1);
-  const [academicYearId, setAcademicYearId] = useState('');
+  /**
+   * The branch, scheme, semester and academic year come from the shared
+   * class context, so the same class is worked on here, on the report
+   * screen and on the upload screen — chosen once, remembered between
+   * visits.
+   */
+  const { context: classContext } = useClassContext();
+  const branchId = classContext.branchId;
+  const schemeId = classContext.schemeId;
+  const semester = classContext.semester;
+  const effectiveAcademicYearId = classContext.academicYearId;
+
+  /**
+   * Only the examination cell may correct a mark a teacher holds. A teacher
+   * never sees the correction link — the backend would refuse it anyway, and
+   * a link that 403s is a link the member should not have been shown.
+   */
+  const { data: user } = useCurrentUser();
+  const canCorrect = (user?.permissions ?? []).includes('marks:write');
+
+  /**
+   * Whether this member may **write** a mark.
+   *
+   * A member who may only read marks — the Head of Department, the
+   * Principal — still opens this screen, because it is where the marks of a
+   * class are. The grid simply is not editable for them.
+   *
+   * Without this, a member who holds `marks:read` but no write right was
+   * refused the screen altogether: the screen asked for a write permission,
+   * and the member was sent away from the marks they were entitled to see.
+   */
+  const permissions = user?.permissions ?? [];
+  const canWriteMarks =
+    permissions.includes('marks:enter_own_subject') || permissions.includes('marks:write');
+  const canReadMarks = permissions.includes('marks:read') || canWriteMarks;
+
+  /**
+   * A member who may not read marks at all is told so, in the shell's own
+   * words, rather than being shown a grid they cannot use.
+   *
+   * The session takes a moment to resolve, so the check waits for it —
+   * otherwise the screen would flash this before the member's permissions
+   * had arrived.
+   */
+  const sessionResolved = user !== undefined;
+  if (sessionResolved && !canReadMarks) {
+    return (
+      <section className="flex flex-col gap-6 md:gap-8">
+        <PageHeader
+          title="Marks"
+          description="The marks of one subject component across a class."
+        />
+        <NoAccess screenLabel="Marks" />
+      </section>
+    );
+  }
+
   const [offeringId, setOfferingId] = useState('');
   const [examType, setExamType] = useState<ExamType>('CA1');
   const [maxMarks, setMaxMarks] = useState('20');
   const [rows, setRows] = useState<GridState>({});
 
-  const { data: branchesData } = useBranches();
-  const { data: schemesData } = useSchemes();
-  const { data: academicYears } = useAcademicYears();
-
-  const branches = branchesData ?? [];
-  const schemes = schemesData ?? [];
-  const years = academicYears ?? [];
-
-  // The active academic year is the default, so the form works on arrival.
-  const activeYear = years.find((y) => y.isActive) ?? years[0];
-  const effectiveAcademicYearId = academicYearId || activeYear?.id || '';
+  /**
+   * The subject is cleared when the class changes.
+   *
+   * A subject belongs to one class. Keeping the old selection would leave
+   * the grid showing the previous class's students against the new class's
+   * subject — the exact mix-up the shared context exists to prevent.
+   */
+  useEffect(() => {
+    setOfferingId('');
+  }, [branchId, schemeId, semester, effectiveAcademicYearId]);
 
   const offeringsQuery = useSubjectCatalogueOfferings({
     branchId: branchId || undefined,
@@ -236,67 +289,26 @@ export default function MarksEntryPage() {
   return (
     <section className="flex flex-col gap-6 md:gap-8">
       <PageHeader
-        title="Marks Entry"
-        description="Enter the marks for one subject component across a class. Only the cells you edit are saved."
+        title={canWriteMarks ? 'Marks Entry' : 'Marks'}
+        description={
+          canWriteMarks
+            ? 'Enter the marks for one subject component across a class. Only the cells you edit are saved.'
+            : 'The marks of one subject component across a class. You can read them, but not change them.'
+        }
       />
 
-      {/* Scope */}
-      <article className="cb-surface-card" aria-labelledby="marks-scope-title">
-        <header className="mb-base flex items-center gap-sm">
-          <ClipboardCheck className="h-5 w-5 text-primary" aria-hidden />
-          <h2 id="marks-scope-title" className="font-display text-title-md text-ink">
-            Class and subject
+      {/* The class — shared with every other class-scoped screen. */}
+      <ClassContextBar />
+
+      {/* What is specific to this screen: the subject and the component. */}
+      <article className="cb-surface-card" aria-labelledby="marks-subject-title">
+        <header className="mb-base">
+          <h2 id="marks-subject-title" className="font-display text-title-md text-ink">
+            Subject and component
           </h2>
         </header>
 
         <div className="grid grid-cols-1 gap-base md:grid-cols-2 lg:grid-cols-3">
-          <Select
-            label="Branch"
-            value={branchId}
-            onChange={(e) => {
-              setBranchId(e.target.value);
-              setOfferingId('');
-            }}
-          >
-            <option value="">Select branch</option>
-            {branches.map((branch) => (
-              <option key={branch.id} value={branch.id}>
-                {branch.code} · {branch.name}
-              </option>
-            ))}
-          </Select>
-
-          <Select
-            label="Scheme"
-            value={schemeId}
-            onChange={(e) => {
-              setSchemeId(e.target.value);
-              setOfferingId('');
-            }}
-          >
-            <option value="">Select scheme</option>
-            {schemes.map((scheme) => (
-              <option key={scheme.id} value={scheme.id}>
-                {scheme.name}
-              </option>
-            ))}
-          </Select>
-
-          <Select
-            label="Semester"
-            value={String(semester)}
-            onChange={(e) => {
-              setSemester(Number(e.target.value));
-              setOfferingId('');
-            }}
-          >
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-              <option key={n} value={n}>
-                Semester {n}
-              </option>
-            ))}
-          </Select>
-
           <Select
             label="Subject"
             value={offeringId}
@@ -328,36 +340,24 @@ export default function MarksEntryPage() {
             ))}
           </Select>
 
-          <Select
-            label="Academic year"
-            value={effectiveAcademicYearId}
-            onChange={(e) => setAcademicYearId(e.target.value)}
-          >
-            {years.length === 0 ? <option value="">No academic years</option> : null}
-            {years.map((year) => (
-              <option key={year.id} value={year.id}>
-                {year.year}
-              </option>
-            ))}
-          </Select>
-        </div>
-
-        <div className="mt-base">
-          <label
-            htmlFor="max-marks"
-            className="text-caption uppercase tracking-wide text-muted"
-          >
-            Maximum marks for this component
-          </label>
-          <input
-            id="max-marks"
-            type="number"
-            inputMode="numeric"
-            min={1}
-            value={maxMarks}
-            onChange={(e) => setMaxMarks(e.target.value)}
-            className="cb-input mt-1 w-full sm:w-40"
-          />
+          <div className="flex flex-col gap-xs">
+            <label
+              htmlFor="max-marks"
+              className="text-body-sm font-semibold text-ink"
+            >
+              Maximum marks for this component
+            </label>
+            <input
+              id="max-marks"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              value={maxMarks}
+              disabled={!canWriteMarks}
+              onChange={(e) => setMaxMarks(e.target.value)}
+              className="cb-input w-full sm:w-40"
+            />
+          </div>
         </div>
       </article>
 
@@ -381,23 +381,45 @@ export default function MarksEntryPage() {
                 student{students.length === 1 ? '' : 's'}
               </p>
             </div>
-            <button
-              type="button"
-              className="cb-btn-primary w-full sm:w-auto"
-              onClick={onSave}
-              disabled={dirtyRows.length === 0 || createBulk.isPending}
-            >
-              {createBulk.isPending ? (
-                <span className="inline-flex items-center gap-sm">
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Saving
-                </span>
-              ) : (
-                <>
-                  <Save className="mr-1 h-4 w-4" aria-hidden />
-                  Save {dirtyRows.length > 0 ? `${dirtyRows.length} mark${dirtyRows.length === 1 ? '' : 's'}` : ''}
-                </>
-              )}
-            </button>
+            {/*
+             * The save button is offered only to a member who may write.
+             * A member who may only read sees the marks, and nothing that
+             * would fail when they pressed it.
+             */}
+            {canWriteMarks ? (
+              <button
+                type="button"
+                className="cb-btn-primary w-full sm:w-auto"
+                onClick={onSave}
+                disabled={dirtyRows.length === 0 || createBulk.isPending}
+              >
+                {createBulk.isPending ? (
+                  <span className="inline-flex items-center gap-sm">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Saving
+                  </span>
+                ) : (
+                  <>
+                    <Save className="mr-1 h-4 w-4" aria-hidden />
+                    Save {dirtyRows.length > 0 ? `${dirtyRows.length} mark${dirtyRows.length === 1 ? '' : 's'}` : ''}
+                  </>
+                )}
+              </button>
+            ) : null}
+
+            {/*
+             * The correction link goes only to the examination cell, and it
+             * carries the subject and component it was reached from — the
+             * examiner does not have to choose them again.
+             */}
+            {canCorrect && selectedOffering ? (
+              <Link
+                href={`/marks/correct?offeringId=${encodeURIComponent(selectedOffering.id)}&examType=${encodeURIComponent(examType)}`}
+                className="cb-btn-secondary w-full sm:w-auto"
+              >
+                <PencilLine className="mr-1 h-4 w-4" aria-hidden />
+                Correct a mark
+              </Link>
+            ) : null}
           </header>
 
           {studentsQuery.isLoading ? (
@@ -454,7 +476,7 @@ export default function MarksEntryPage() {
                             min={0}
                             max={Number(maxMarks) || undefined}
                             value={value}
-                            disabled={absent}
+                            disabled={absent || !canWriteMarks}
                             onChange={(e) => setCell(student.id, e.target.value)}
                             aria-label={`Marks for ${student.name}, ${student.rollNo}`}
                             className="cb-input num w-24 text-right"
@@ -464,6 +486,7 @@ export default function MarksEntryPage() {
                           <input
                             type="checkbox"
                             checked={absent}
+                            disabled={!canWriteMarks}
                             onChange={() => toggleAbsent(student.id)}
                             aria-label={`Mark ${student.name} absent`}
                             className="size-5"
@@ -499,7 +522,9 @@ export default function MarksEntryPage() {
         <article className="cb-surface-card flex items-start gap-sm p-base" role="status">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted" aria-hidden />
           <p className="text-body-sm text-body">
-            Choose a branch, scheme and subject to start entering marks.
+            {branchId && schemeId
+              ? 'Choose a subject to start entering marks.'
+              : 'Choose a branch and scheme above to start entering marks.'}
           </p>
         </article>
       )}

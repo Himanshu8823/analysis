@@ -6,7 +6,11 @@ import {
   Inject,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
+import {
+  PERMISSIONS_KEY,
+  PERMISSIONS_MODE_KEY,
+  type PermissionsMode,
+} from '../decorators/permissions.decorator';
 import { CACHE_SERVICE } from '../constants/injection-tokens';
 import type { Request } from 'express';
 import type { JwtPayload } from '@/common/types';
@@ -47,9 +51,34 @@ export class PermissionsGuard implements CanActivate {
     }
 
     const userPermissions = await this.resolvePermissions(userId);
-    const hasPermission = requiredPermissions.every((p) => userPermissions.includes(p));
+
+    /**
+     * How the listed permissions are matched.
+     *
+     * The default is `every` — a route that names several permissions
+     * usually means "and". A route marked with `@AnyPermission` means "or":
+     * several roles may use it, each through their own right.
+     */
+    const mode =
+      this.reflector.getAllAndOverride<PermissionsMode>(PERMISSIONS_MODE_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ]) ?? 'every';
+
+    const hasPermission =
+      mode === 'some'
+        ? requiredPermissions.some((p) => userPermissions.includes(p))
+        : requiredPermissions.every((p) => userPermissions.includes(p));
+
     if (!hasPermission) {
-      throw new ForbiddenException('Insufficient permissions');
+      /**
+       * The message is a sentence for the member, not a code. "Insufficient
+       * permissions" is a developer's phrase; a college clerk reads
+       * "you do not have access to this" and knows to ask the administrator.
+       */
+      throw new ForbiddenException(
+        'You do not have access to this. Ask the college administrator if you need it.'
+      );
     }
     return true;
   }

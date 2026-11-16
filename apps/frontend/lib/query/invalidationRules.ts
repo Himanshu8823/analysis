@@ -31,6 +31,19 @@ export const invalidationRules = {
     qc.invalidateQueries({ queryKey: queryKeys.members.all() });
   },
   /**
+   * A member's roles changed — one was handed out or taken back.
+   *
+   * Three things are now stale: the role rows themselves, the member
+   * record (its role chips come from the same rows), and the member list
+   * (its role filter counts and its role column). The role catalogue is
+   * left alone — the *set* of roles did not change, only who holds them.
+   */
+  onMemberRolesChanged: (qc: QueryClient, userId: string) => {
+    qc.invalidateQueries({ queryKey: queryKeys.userRoles.list(userId) });
+    qc.invalidateQueries({ queryKey: queryKeys.members.detail(userId) });
+    qc.invalidateQueries({ queryKey: queryKeys.members.all() });
+  },
+  /**
    * Invalidates everything touched by an RBAC change.
    *
    * A role's permission set changed, so every cached view of that role's
@@ -119,5 +132,12 @@ export const invalidationRules = {
   onClassTeacherAssignmentChanged: (qc: QueryClient) => {
     qc.invalidateQueries({ queryKey: ['class-teacher-assignments', 'list'] });
     qc.invalidateQueries({ queryKey: queryKeys.classTeacherAssignments.all() });
+    /**
+     * The list of classes with no class teacher changes when an assignment
+     * changes — appointing somebody fills a gap, and removing them opens
+     * one. It is named explicitly rather than relying on the prefix match,
+     * so the invalidation survives a change to the key shape.
+     */
+    qc.invalidateQueries({ queryKey: queryKeys.classTeacherAssignments.needsTeacher() });
   },
 };

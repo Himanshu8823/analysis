@@ -41,8 +41,8 @@ export class TeacherAllocationsController {
     },
   })
   @ApiOperation({ summary: 'Allocate a subject offering to a teacher' })
-  async create(@Body() dto: CreateTeacherAllocationDto) {
-    return this.service.createTeacherAllocation(dto);
+  async create(@Body() dto: CreateTeacherAllocationDto, @CurrentUser() user: JwtPayload) {
+    return this.service.createTeacherAllocation(dto, user.sub);
   }
 
   /**
@@ -64,12 +64,12 @@ export class TeacherAllocationsController {
     @CurrentUser() user: JwtPayload,
     @Query('branchId') branchId?: string
   ) {
-    const effectiveBranchId = await this.scope.resolveBranchScope(
+    const effectiveBranchIds = await this.scope.resolveBranchFilter(
       user.sub,
       parseOptionalString(branchId)
     );
 
-    return this.service.findAssignableTeachers(effectiveBranchId);
+    return this.service.findAssignableTeachers(effectiveBranchIds);
   }
 
   @Get()
@@ -88,13 +88,13 @@ export class TeacherAllocationsController {
     @Query('teacherId') teacherId?: string,
     @Query('subjectOfferingId') subjectOfferingId?: string
   ) {
-    const effectiveBranchId = await this.scope.resolveBranchScope(
+    const effectiveBranchIds = await this.scope.resolveBranchFilter(
       user.sub,
       parseOptionalString(branchId)
     );
 
     return this.service.findTeacherAllocations({
-      branchId: effectiveBranchId,
+      branchIds: effectiveBranchIds,
       semester: parseOptionalInt(semester),
       academicYearId: parseOptionalString(academicYearId),
       teacherId: parseOptionalString(teacherId),
@@ -108,8 +108,8 @@ export class TeacherAllocationsController {
     resourceIdSource: 'param',
   })
   @ApiOperation({ summary: 'Remove a teacher allocation' })
-  async delete(@Param('id') id: string): Promise<void> {
-    return this.service.deleteTeacherAllocation(id);
+  async delete(@Param('id') id: string, @CurrentUser() user: JwtPayload): Promise<void> {
+    return this.service.deleteTeacherAllocation(id, user.sub);
   }
 }
 
@@ -136,8 +136,8 @@ export class ClassTeacherAssignmentsController {
   })
   @ApiOperation({ summary: 'Assign the class teacher for a class' })
   async create(@Body() dto: CreateClassTeacherAssignmentDto, @CurrentUser() user: JwtPayload) {
-    // The HOD may only assign within their own branch.
-    await this.scope.resolveBranchScope(user.sub, dto.branchId);
+    // The branch check itself lives in the service, so every code path that
+    // assigns a class teacher is covered — not just this one.
     return this.service.createClassTeacherAssignment(dto, user.sub);
   }
 
@@ -155,16 +155,48 @@ export class ClassTeacherAssignmentsController {
     @Query('academicYearId') academicYearId?: string,
     @Query('teacherId') teacherId?: string
   ) {
-    const effectiveBranchId = await this.scope.resolveBranchScope(
+    const effectiveBranchIds = await this.scope.resolveBranchFilter(
       user.sub,
       parseOptionalString(branchId)
     );
 
     return this.service.findClassTeacherAssignments({
-      branchId: effectiveBranchId,
+      branchIds: effectiveBranchIds,
       semester: parseOptionalInt(semester),
       academicYearId: parseOptionalString(academicYearId),
       teacherId: parseOptionalString(teacherId),
+    });
+  }
+
+  /**
+   * The classes that have students but no class teacher.
+   *
+   * A separate route from the assignment list, because it answers a
+   * different question. The assignment list says who *has* a class; this one
+   * says which classes *do not*, and it is what keeps the gap visible after
+   * a member is revoked.
+   */
+  @Get('needs-teacher')
+  @Permissions('class_teacher_assignments:read')
+  @ApiOperation({ summary: 'List the classes that have no class teacher' })
+  @ApiQuery({ name: 'branchId', required: false })
+  @ApiQuery({ name: 'semester', required: false })
+  @ApiQuery({ name: 'academicYearId', required: false })
+  async findNeedingTeacher(
+    @CurrentUser() user: JwtPayload,
+    @Query('branchId') branchId?: string,
+    @Query('semester') semester?: string,
+    @Query('academicYearId') academicYearId?: string
+  ) {
+    const effectiveBranchIds = await this.scope.resolveBranchFilter(
+      user.sub,
+      parseOptionalString(branchId)
+    );
+
+    return this.service.findClassesNeedingTeacher({
+      branchIds: effectiveBranchIds,
+      semester: parseOptionalInt(semester),
+      academicYearId: parseOptionalString(academicYearId),
     });
   }
 
@@ -174,7 +206,7 @@ export class ClassTeacherAssignmentsController {
     resourceIdSource: 'param',
   })
   @ApiOperation({ summary: 'Remove a class-teacher assignment' })
-  async delete(@Param('id') id: string): Promise<void> {
-    return this.service.deleteClassTeacherAssignment(id);
+  async delete(@Param('id') id: string, @CurrentUser() user: JwtPayload): Promise<void> {
+    return this.service.deleteClassTeacherAssignment(id, user.sub);
   }
 }

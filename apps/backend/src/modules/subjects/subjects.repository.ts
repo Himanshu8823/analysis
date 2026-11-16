@@ -16,7 +16,6 @@ export type SubjectWithOfferings = Subject & {
     branchId: string;
     semester: number;
     schemeId: string;
-    year: number | null;
     academicYearId: string | null;
     isActive: boolean;
   }[];
@@ -56,6 +55,7 @@ export class SubjectsRepository {
    */
   async findAll(params: {
     branchId?: string;
+    branchIds?: string[];
     schemeId?: string;
     semester?: number;
     academicYearId?: string;
@@ -65,12 +65,18 @@ export class SubjectsRepository {
     if (params.isActive !== undefined) where.isActive = params.isActive;
 
     const offeringFilter: Prisma.SubjectOfferingWhereInput = {};
-    if (params.branchId) offeringFilter.branchId = params.branchId;
+    if (params.branchIds && params.branchIds.length > 0) {
+      offeringFilter.branchId = { in: params.branchIds };
+    } else if (params.branchId) {
+      offeringFilter.branchId = params.branchId;
+    }
     if (params.schemeId) offeringFilter.schemeId = params.schemeId;
     if (params.semester !== undefined) offeringFilter.semester = params.semester;
     if (params.academicYearId) offeringFilter.academicYearId = params.academicYearId;
 
-    if (Object.keys(offeringFilter).length > 0) {
+    const isFiltered = Object.keys(offeringFilter).length > 0;
+
+    if (isFiltered) {
       where.offerings = { some: offeringFilter };
     }
 
@@ -84,12 +90,21 @@ export class SubjectsRepository {
             branchId: true,
             semester: true,
             schemeId: true,
-            year: true,
             academicYearId: true,
             isActive: true,
           },
         },
-        _count: { select: { offerings: true } },
+        /**
+         * The count is of the *filtered* offerings, not of all of them.
+         *
+         * An unfiltered count would tell a member looking at Computer
+         * Science that a subject runs in twelve branches when it runs in
+         * one — a number that reads as "how widely this subject is used"
+         * and so has to answer the question the member actually asked.
+         */
+        _count: {
+          select: { offerings: isFiltered ? { where: offeringFilter } : true },
+        },
       },
       orderBy: [{ code: 'asc' }],
     });
@@ -105,7 +120,6 @@ export class SubjectsRepository {
             branchId: true,
             semester: true,
             schemeId: true,
-            year: true,
             academicYearId: true,
             isActive: true,
           },
@@ -157,10 +171,6 @@ export class SubjectsRepository {
         branchId: data.branchId,
         semester: data.semester,
         schemeId: data.schemeId,
-        // The curriculum year (1, 2, 3, 4) is required by the model. A
-        // caller that omits it is offering a subject in the first year of
-        // the scheme, which is the only case where it can be inferred.
-        year: data.year ?? 1,
         academicYearId: data.academicYearId ?? null,
         isActive: true,
       },
@@ -169,7 +179,13 @@ export class SubjectsRepository {
 
   async findOfferings(params: {
     subjectId?: string;
-    branchId?: string;
+    /**
+     * The branches the read may cover.
+     *
+     * `undefined` means college-wide — no branch filter at all. A set of
+     * one or more narrows the read to those branches.
+     */
+    branchIds?: string[];
     schemeId?: string;
     academicYearId?: string;
     semester?: number;
@@ -177,7 +193,9 @@ export class SubjectsRepository {
   }): Promise<SubjectOffering[]> {
     const where: Prisma.SubjectOfferingWhereInput = {};
     if (params.subjectId) where.subjectId = params.subjectId;
-    if (params.branchId) where.branchId = params.branchId;
+    if (params.branchIds && params.branchIds.length > 0) {
+      where.branchId = { in: params.branchIds };
+    }
     if (params.schemeId) where.schemeId = params.schemeId;
     if (params.academicYearId) where.academicYearId = params.academicYearId;
     if (params.semester !== undefined) where.semester = params.semester;
@@ -219,7 +237,6 @@ export class SubjectsRepository {
         ...(data.branchId !== undefined ? { branchId: data.branchId } : {}),
         ...(data.semester !== undefined ? { semester: data.semester } : {}),
         ...(data.schemeId !== undefined ? { schemeId: data.schemeId } : {}),
-        ...(data.year !== undefined ? { year: data.year } : {}),
         ...(data.academicYearId !== undefined ? { academicYearId: data.academicYearId } : {}),
       },
     });

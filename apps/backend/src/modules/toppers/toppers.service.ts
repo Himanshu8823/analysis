@@ -61,7 +61,8 @@ export class ToppersService {
 
   /**
    * Resolves the academic year to rank against. An explicit `academicYearId`
-   * always wins; otherwise the active year (or the most recent one) is used.
+   * always wins; otherwise the **running** year — the one whose dates contain
+   * today — is used.
    */
   private async resolveYearId(academicYearId?: string): Promise<string | undefined> {
     if (academicYearId) return academicYearId;

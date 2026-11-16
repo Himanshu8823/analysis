@@ -31,6 +31,13 @@ export class SubjectsService {
 
   async findAll(params: {
     branchId?: string;
+    /**
+     * The branches the read may cover.
+     *
+     * `undefined` means college-wide — no branch filter at all. A set of
+     * one or more narrows the read to those branches.
+     */
+    branchIds?: string[];
     schemeId?: string;
     semester?: number;
     academicYearId?: string;
@@ -94,7 +101,16 @@ export class SubjectsService {
 
   async findOfferings(params: {
     subjectId?: string;
-    branchId?: string;
+    /**
+     * The branches the read may cover.
+     *
+     * `undefined` means college-wide — no branch filter at all. A set of
+     * one or more narrows the read to those branches. The value is a set
+     * rather than a single id because a member may work in several
+     * branches, and a read that named none must still be narrowed to all
+     * of them.
+     */
+    branchIds?: string[];
     schemeId?: string;
     academicYearId?: string;
     semester?: number;
@@ -103,6 +119,14 @@ export class SubjectsService {
     return this.repository.findOfferings(params);
   }
 
+  /**
+   * One offering, read without a branch filter.
+   *
+   * The caller checks the branch afterwards — the offering's branch is
+   * known only once it has been read — so this method answers the question
+   * "does this offering exist", and the caller answers "may this member
+   * see it".
+   */
   async findOfferingById(id: string): Promise<SubjectOffering> {
     const offering = await this.repository.findOfferingById(id);
     if (!offering) throw new NotFoundException('Subject offering not found');

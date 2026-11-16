@@ -422,7 +422,5 @@ function hasSubjectCode(line: string): boolean {
  * later column out of alignment and mis-assign the marks.
  */
 function splitPdfCells(line: string): string[] {
-  return line
-    .split(/\s{2,}/)
-    .map((cell) => cell.trim());
+  return line.split(/\s{2,}/).map((cell) => cell.trim());
 }

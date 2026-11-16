@@ -30,7 +30,6 @@ export interface ClassStudentRow {
   id: string;
   rollNo: string;
   name: string;
-  currentYear: number;
   semester: number;
   /** The sum of the marks obtained across the class's subjects. */
   totalMarks: number;
@@ -181,7 +180,6 @@ export class ClassOverviewRepository {
         id: true,
         rollNo: true,
         name: true,
-        currentYear: true,
         semester: true,
       },
       orderBy: { rollNo: 'asc' },
@@ -256,7 +254,6 @@ export class ClassOverviewRepository {
         id: student.id,
         rollNo: student.rollNo,
         name: student.name,
-        currentYear: student.currentYear,
         semester: student.semester,
         totalMarks: round(totalMarks),
         maxTotalMarks: round(maxTotalMarks),

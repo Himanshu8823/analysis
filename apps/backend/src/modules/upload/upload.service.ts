@@ -12,6 +12,9 @@ import type { Prisma, UploadJob } from '@prisma/client';
 import { UploadRepository } from './upload.repository';
 import { StorageService } from '../storage/storage.service';
 import { PermissionsCacheRepository } from '@/modules/rbac/permissions-cache.repository';
+import { AuthorisationService } from '@/common/services/authorisation.service';
+import { UrlGuardService } from '@/common/services/url-guard.service';
+import { MarksAuthorisationService } from '@/modules/marks/marks.authorisation.service';
 
 export interface CreateUploadJobInput {
   uploadedBy: string;
@@ -51,6 +54,16 @@ export class UploadService {
     private readonly prisma: PrismaClient,
     private readonly storage: StorageService,
     private readonly permissionsRepository: PermissionsCacheRepository,
+    private readonly authorisation: AuthorisationService,
+    private readonly urlGuard: UrlGuardService,
+    /**
+     * The marks authorisation service.
+     *
+     * Confirming an upload writes marks, so it answers the same question
+     * the marks screen does. The rule lives in one place — a second copy of
+     * it here would be a second rule, and two rules drift.
+     */
+    private readonly marksAuthorisation: MarksAuthorisationService,
     @InjectQueue('upload-jobs') private readonly uploadQueue: Queue,
     @InjectQueue('ocr-jobs') private readonly ocrQueue: Queue
   ) {}
@@ -67,6 +80,16 @@ export class UploadService {
     if (!input.fileUrl.startsWith('http')) {
       throw new BadRequestException('fileUrl must be an absolute URL');
     }
+
+    /**
+     * The address the file lives at is checked before anything is written
+     * or queued. The server is going to fetch this URL — from the job
+     * worker, without a user watching — so an address that points at
+     * something only the server can reach would turn this endpoint into a
+     * way of reaching it. The check happens here, before the job exists,
+     * so a refused address leaves nothing behind.
+     */
+    await this.urlGuard.assertFetchable(input.fileUrl);
 
     const job = await this.repository.create(input);
 
@@ -220,6 +243,32 @@ export class UploadService {
     return job;
   }
 
+  /**
+   * A job as the given viewer is allowed to see it.
+   *
+   * The exam cell (`upload:process`) administers every upload in the
+   * college, so it may poll any job. Everyone else may only poll a job
+   * they raised themselves — an upload can carry a result statement, so
+   * reading somebody else's job is reading somebody else's marks before
+   * they have been entered.
+   *
+   * This is the same rule {@link findAll} applies to the list; this is the
+   * single-job version of it.
+   */
+  async findByIdForViewer(id: string, viewerId: string): Promise<UploadJob> {
+    const job = await this.findById(id);
+    const permissions = await this.permissionsRepository.getPermissionsForUser(viewerId);
+    if (permissions.includes('upload:process')) return job;
+
+    if (job.uploadedBy !== viewerId) {
+      // The same answer a caller gets for a job that does not exist at all:
+      // an outsider must not be able to learn that somebody else's upload
+      // exists.
+      throw new NotFoundException('Upload job not found');
+    }
+    return job;
+  }
+
   async updateStatus(
     id: string,
     update: {
@@ -298,6 +347,19 @@ export class UploadService {
       );
     }
 
+    /**
+     * The confirmer must be allowed to write in the branch the extraction
+     * names.
+     *
+     * The branch comes from the upload's metadata, which is caller-supplied
+     * data — it is a *filter*, never a *grant*. Without this check a teacher
+     * scoped to one branch could confirm an extraction whose metadata names
+     * another branch, and the marks would be written there.
+     */
+    if (confirmedBy) {
+      await this.authorisation.assertBranchWritable(confirmedBy, ctx.branchId, 'upload');
+    }
+
     // Resolve the subject offerings for the chosen class.
     //
     // A subject code is not enough on its own — the same code runs in more
@@ -347,11 +409,17 @@ export class UploadService {
     }
 
     // Resolve students by rollNo within the chosen academic year.
+    //
+    // The branch filter is not optional. A roll number is only unique
+    // inside a branch, so without it a row carrying another branch's roll
+    // number could match that branch's student and write a mark onto the
+    // wrong student.
     const rollNos = [...new Set(rows.map((r) => r.rollNo))];
     const students = await this.prisma.student.findMany({
       where: {
         rollNo: { in: rollNos },
         academicYearId: ctx.academicYearId,
+        branchId: ctx.branchId,
       },
       select: { id: true, rollNo: true },
     });
@@ -365,8 +433,7 @@ export class UploadService {
      *
      * The exam cell's `upload:process` covers every offering in the class.
      * A teacher's `upload:process_own_subject` covers only the offerings
-     * the HOD allocated to them for this academic year — so the allowed
-     * set is resolved once, here, and every row below is checked against it.
+     * the HOD allocated to them for this academic year.
      */
     const permissions = confirmedBy
       ? await this.permissionsRepository.getPermissionsForUser(confirmedBy)
@@ -398,6 +465,63 @@ export class UploadService {
         select: { subjectOfferingId: true },
       });
       allowedOfferingIds = new Set(allocations.map((a) => a.subjectOfferingId));
+    }
+
+    /**
+     * The exam cell may not overwrite a subject a teacher holds — not
+     * through this path either.
+     *
+     * The rule is the one the marks screen enforces: a teacher's score is
+     * their responsibility, and the exam cell changes one only through the
+     * deliberate, reasoned, audited correction flow. This path writes marks
+     * like any other, so it asks the same question of the same service —
+     * a second copy of the rule here would be a second rule, and two rules
+     * drift.
+     *
+     * The batch is refused as a whole. "47 of 50 saved" is never a state
+     * the marks screen can be in.
+     */
+    if (canProcessAny && confirmedBy) {
+      const heldOfferings = await this.prisma.teacherSubject.findMany({
+        where: {
+          academicYearId: ctx.academicYearId,
+          subjectOfferingId: { in: [...offeringsByCode.values()].map((o) => o.id) },
+        },
+        select: {
+          subjectOfferingId: true,
+          teacher: { select: { id: true, name: true } },
+        },
+      });
+
+      /**
+       * Only the subjects a *different* teacher holds are a problem. The
+       * exam cell correcting its own allocation is not a correction over
+       * someone else's work.
+       */
+      const heldByOthers = heldOfferings.filter((h) => h.teacher.id !== confirmedBy);
+      if (heldByOthers.length > 0) {
+        const offeringId = heldByOthers[0].subjectOfferingId;
+
+        /**
+         * The rule is enforced by the shared service, so the message is the
+         * same one the marks screen gives.
+         */
+        await this.marksAuthorisation.assertMayWrite(confirmedBy, offeringId, ctx.academicYearId, {
+          isCorrection: false,
+        });
+
+        /**
+         * The shared service refuses the write. The message names the
+         * subject and points at the correction flow, which is exactly what
+         * an exam-cell member needs to read here.
+         */
+        throw new ForbiddenException(
+          `${heldByOthers.length} subject${heldByOthers.length === 1 ? '' : 's'} in this ` +
+            'upload are entered by a teacher. The examination cell cannot overwrite a ' +
+            'teacher’s marks through an upload. Use "Correct marks" on the Marks Entry ' +
+            'screen, and give a reason.'
+        );
+      }
     }
 
     for (const row of rows) {

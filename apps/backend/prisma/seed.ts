@@ -24,6 +24,30 @@ const PERMISSIONS = [
   { name: 'students:read', resource: 'students', action: 'read' },
   { name: 'students:read_own', resource: 'students', action: 'read_own' },
   { name: 'students:write', resource: 'students', action: 'write' },
+  /**
+   * The right to read a student's **sensitive identity** data — the national
+   * identity reference and the blood group.
+   *
+   * Split from `students:read` on purpose: a teacher needs the roster to
+   * enter marks, but a teacher's job gives them no need for a student's
+   * identity number. Only the examination cell and the Super Admin hold it.
+   */
+  { name: 'students:read_sensitive', resource: 'students', action: 'read_sensitive' },
+  /**
+   * The right to read a student's **guardian** details — name, relation,
+   * phone, email, occupation.
+   *
+   * A teacher does not hold it: a guardian's phone number is the parent's
+   * personal contact information and is not part of a mark sheet.
+   */
+  { name: 'students:read_guardian', resource: 'students', action: 'read_guardian' },
+  /**
+   * Provisioning a whole class of student logins in one run.
+   *
+   * Separate from `students:write` because it creates a hundred accounts
+   * at once — a materially larger act than editing one student record.
+   */
+  { name: 'students:bulk_provision', resource: 'students', action: 'bulk_provision' },
   { name: 'marks:read', resource: 'marks', action: 'read' },
   { name: 'marks:read_own', resource: 'marks', action: 'read_own' },
   { name: 'marks:write', resource: 'marks', action: 'write' },
@@ -118,6 +142,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'subjects:read',
     'subject_offerings:read',
     'students:read',
+    'students:read_sensitive',
+    'students:read_guardian',
     'marks:read',
     'reports:read',
     'analytics:read',
@@ -132,6 +158,12 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   ADMIN: [
     'students:read',
     'students:write',
+    // The exam cell records the identity and guardian details in the first
+    // place, so it is the one role that reads them back.
+    'students:read_sensitive',
+    'students:read_guardian',
+    // Provisioning a whole class of logins at once is the exam cell's job.
+    'students:bulk_provision',
     'subjects:read',
     'subjects:write',
     'subjects:delete',
@@ -169,6 +201,10 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
    */
   HOD: [
     'students:read',
+    // The HOD reads the whole branch student, so they may reach a guardian.
+    // The national identity reference is the exam cell's record and is not
+    // granted to a branch head.
+    'students:read_guardian',
     'marks:read',
     'reports:read',
     'reports:generate',
@@ -198,6 +234,10 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
    */
   PRINCIPAL: [
     'students:read',
+    // The Principal sees the academic picture, including a guardian's
+    // contact details. The national identity reference is deliberately
+    // absent: the Principal has no operational need for it.
+    'students:read_guardian',
     'marks:read',
     'reports:read',
     'reports:download',

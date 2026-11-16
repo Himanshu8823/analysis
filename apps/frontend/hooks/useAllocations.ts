@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   allocationsService,
   type AssignableTeacher,
+  type ClassNeedingTeacher,
   type ClassTeacherAssignment,
   type ClassTeacherAssignmentFilters,
   type CreateClassTeacherAssignmentPayload,
@@ -79,6 +80,22 @@ export function useClassTeacherAssignments(filters?: ClassTeacherAssignmentFilte
   return useQuery<ClassTeacherAssignment[]>({
     queryKey: queryKeys.classTeacherAssignments.list(filters),
     queryFn: () => allocationsService.listClassTeacherAssignments(filters),
+    enabled: !!filters?.branchId,
+    staleTime: 60 * 1000,
+  });
+}
+
+/**
+ * The classes that have students but no class teacher.
+ *
+ * This is the "class teacher required" state. It becomes non-empty when a
+ * member who was a class teacher is revoked, and it is what keeps that gap
+ * visible until somebody is appointed.
+ */
+export function useClassesNeedingTeacher(filters?: ClassTeacherAssignmentFilters) {
+  return useQuery<ClassNeedingTeacher[]>({
+    queryKey: queryKeys.classTeacherAssignments.needsTeacher(filters),
+    queryFn: () => allocationsService.listClassesNeedingTeacher(filters),
     enabled: !!filters?.branchId,
     staleTime: 60 * 1000,
   });

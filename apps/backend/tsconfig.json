@@ -28,7 +28,7 @@
       "@config/*": ["src/config/*"],
       "@result-analysis/shared-types": ["../../packages/shared-types/dist/index.d.ts"],
       "@result-analysis/shared-types/*": ["../../packages/shared-types/dist/*"],
-      "@result-analysis/shared-constants": ["../../packages/shared-constants/src/index.ts"]
+      "@result-analysis/shared-constants": ["../../packages/shared-constants/dist/index.d.ts"]
     }
   },
   "include": ["src/**/*"],

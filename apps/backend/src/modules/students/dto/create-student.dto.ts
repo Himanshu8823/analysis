@@ -1,8 +1,9 @@
 import { IsString, IsNotEmpty, IsInt, IsBoolean, IsOptional, IsEmail, Min } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEntityId } from '@/common/validators/is-entity-id.validator';
+import { StudentDetailsDto } from './student-details.dto';
 
-export class CreateStudentDto {
+export class CreateStudentDto extends StudentDetailsDto {
   @ApiProperty({ example: 'CS2022-001' })
   @IsString()
   @IsNotEmpty()
@@ -27,12 +28,11 @@ export class CreateStudentDto {
   @IsEntityId()
   branchId: string;
 
-  @ApiProperty({ example: 2 })
-  @IsInt()
-  @Min(1)
-  currentYear: number;
-
-  @ApiProperty({ example: 4 })
+  @ApiProperty({
+    example: 4,
+    description:
+      'The semester the student is in. The curriculum year follows from it — semesters 1-2 are year 1, 3-4 are year 2, and so on.',
+  })
   @IsInt()
   @Min(1)
   semester: number;

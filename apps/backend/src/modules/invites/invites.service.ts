@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -14,7 +15,12 @@ import { InviteUserDto, ListInvitesDto } from './dto';
 import { EmailService } from '../email/email.service';
 import { renderInviteEmail } from '../email/templates/invite.template';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
-import { BRANCH_SCOPED_ROLES, INVITABLE_ROLES, isUserRole } from '@/common/constants/roles';
+import {
+  BRANCH_SCOPED_ROLES,
+  INVITABLE_ROLES,
+  canGrantRole,
+  isUserRole,
+} from '@/common/constants/roles';
 import type { InviteStatus, UserRole } from '@result-analysis/shared-types';
 import type { Invite } from '@prisma/client';
 
@@ -47,6 +53,39 @@ export class InvitesService {
   }
 
   /**
+   * The role names a member holds.
+   *
+   * Read fresh from the database rather than from the caller's token,
+   * because the token carries a single role while a member may hold several
+   * at once. The union of those roles is what decides what they may grant.
+   */
+  private async rolesHeldBy(userId: string): Promise<string[]> {
+    const assignments = await this.prisma.userRole.findMany({
+      where: { userId },
+      select: { role: { select: { name: true } } },
+    });
+
+    return assignments.map((assignment) => assignment.role.name);
+  }
+
+  /**
+   * The branches a member works in.
+   *
+   * An empty list means the member is college-wide and may invite into any
+   * branch.
+   */
+  private async branchesHeldBy(userId: string): Promise<string[]> {
+    const assignments = await this.prisma.userRole.findMany({
+      where: { userId, branchId: { not: null } },
+      select: { branchId: true },
+    });
+
+    return assignments
+      .map((assignment) => assignment.branchId)
+      .filter((id): id is string => typeof id === 'string');
+  }
+
+  /**
    * Creates an invitation and sends the acceptance email.
    *
    * Returns the invite record together with the accept URL so an administrator
@@ -68,6 +107,26 @@ export class InvitesService {
       throw new BadRequestException('That role cannot be assigned through an invitation');
     }
 
+    /**
+     * A member may invite only into the authority they hold themselves.
+     *
+     * Without this, anybody who can send an invitation could mint a
+     * Principal — or an Admin — and from there reach every branch of the
+     * college. The invitation is a way of creating an account; the role on
+     * that account is the part that carries authority, so the check belongs
+     * on the role.
+     *
+     * The inviter's roles are read from the database rather than from the
+     * token, because the token carries one role and a member may hold
+     * several.
+     */
+    const heldRoles = await this.rolesHeldBy(invitedById);
+    if (!canGrantRole(heldRoles, dto.roleName)) {
+      throw new ForbiddenException(
+        `You cannot invite someone as ${dto.roleName}. You can only invite people into roles below your own.`
+      );
+    }
+
     // A branch-scoped role needs a branch, and a global role must not carry one.
     const isBranchScoped = BRANCH_SCOPED_ROLES.includes(dto.roleName as UserRole);
     if (isBranchScoped && !dto.branchId) {
@@ -75,6 +134,21 @@ export class InvitesService {
     }
     if (!isBranchScoped && dto.branchId) {
       throw new BadRequestException(`The ${dto.roleName} role is not branch-scoped`);
+    }
+
+    /**
+     * A branch-scoped member may not invite someone into another branch.
+     *
+     * A Teacher who works in Computer Science must not be able to appoint a
+     * Principal in Mechanical Engineering. That is authority over a branch
+     * the teacher does not belong to, and it is how a college's branch
+     * boundaries quietly stop meaning anything.
+     */
+    if (dto.branchId) {
+      const inviterBranches = await this.branchesHeldBy(invitedById);
+      if (inviterBranches.length > 0 && !inviterBranches.includes(dto.branchId)) {
+        throw new ForbiddenException('You cannot invite someone into a branch you do not work in.');
+      }
     }
 
     const existingUser = await this.prisma.user.findUnique({
@@ -129,12 +203,23 @@ export class InvitesService {
     return { ...this.toResponse(invite), inviteUrl };
   }
 
-  async findAll(params: ListInvitesDto) {
+  /**
+   * The invitations a member may see.
+   *
+   * The list is narrowed to the branches the member works in, plus the
+   * invitations they raised themselves. Without this, a Computer Science
+   * teacher would see the pending invitations for every other branch —
+   * names, email addresses and roles that are none of their business.
+   */
+  async findAll(params: ListInvitesDto, requestedById: string) {
+    const branchIds = await this.branchesHeldBy(requestedById);
     const result = await this.repository.findAll({
       status: params.status as InviteStatus | undefined,
       search: params.search,
       page: params.page,
       pageSize: params.pageSize,
+      branchIds: branchIds.length > 0 ? branchIds : undefined,
+      requestedBy: requestedById,
     });
 
     return {
@@ -143,8 +228,42 @@ export class InvitesService {
     };
   }
 
-  async countByStatus() {
-    return this.repository.countByStatus();
+  /**
+   * The counters for the invitation tabs.
+   *
+   * They are counted over the same scope as the list, so the number on the
+   * tab always agrees with the number of rows underneath it.
+   */
+  async countByStatus(requestedById: string) {
+    const branchIds = await this.branchesHeldBy(requestedById);
+    return this.repository.countByStatus({
+      branchIds: branchIds.length > 0 ? branchIds : undefined,
+      requestedBy: requestedById,
+    });
+  }
+
+  /**
+   * Whether a member may act on an invitation.
+   *
+   * An invitation belongs to a branch, and it names a person who will join
+   * that branch. A member of another branch has no authority over it: they
+   * cannot see it in the list, and they must not be able to revoke or
+   * reissue it by guessing its id.
+   *
+   * The invitation the member raised themselves is always theirs to manage,
+   * whatever branch it names — a Principal who invited an Admin across the
+   * college must still be able to revoke that invitation.
+   */
+  private async mayManageInvite(
+    invite: { branchId: string | null; invitedById: string },
+    userId: string
+  ): Promise<boolean> {
+    if (invite.invitedById === userId) return true;
+
+    const branches = await this.branchesHeldBy(userId);
+    if (branches.length === 0) return true; // College-wide member.
+
+    return invite.branchId !== null && branches.includes(invite.branchId);
   }
 
   /**
@@ -154,6 +273,9 @@ export class InvitesService {
     const invite = await this.repository.findById(id);
     if (!invite) {
       throw new NotFoundException('Invitation not found');
+    }
+    if (!(await this.mayManageInvite(invite, revokedBy))) {
+      throw new ForbiddenException('You do not have access to this invitation');
     }
     if (invite.status !== 'PENDING') {
       throw new BadRequestException('Only a pending invitation can be revoked');
@@ -183,6 +305,9 @@ export class InvitesService {
     const invite = await this.repository.findById(id);
     if (!invite) {
       throw new NotFoundException('Invitation not found');
+    }
+    if (!(await this.mayManageInvite(invite, invitedById))) {
+      throw new ForbiddenException('You do not have access to this invitation');
     }
     if (invite.status === 'ACCEPTED') {
       throw new BadRequestException('This invitation has already been accepted');

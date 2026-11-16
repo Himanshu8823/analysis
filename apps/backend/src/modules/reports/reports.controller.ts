@@ -1,10 +1,20 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Res } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+  Res,
+} from '@nestjs/common';
 import { Response } from 'express';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { ReportsService } from './reports.service';
-import { CreateReportDto } from './dto';
-import { Permissions, CurrentUser } from '@/common/decorators';
+import { ArchiveReportDto, CreateReportDto } from './dto';
+import { Permissions, CurrentUser, Audited, AuditAction, AuditResource } from '@/common/decorators';
 import { ScopeService } from '@/common/services/scope.service';
 import { parseOptionalInt, parseOptionalString } from '@/common/utils/query-params';
 import type { JwtPayload } from '@/common/types';
@@ -21,6 +31,10 @@ export class ReportsController {
   @Post()
   @Permissions('reports:generate')
   @Throttle({ default: { limit: 5, ttl: 60 * 60 * 1000 } }) // 5/hr/user
+  @Audited(AuditResource.REPORT, AuditAction.CREATE, {
+    resourceIdSource: 'response',
+    detailsFromBody: { reportType: 'reportType', format: 'format' },
+  })
   @ApiOperation({ summary: 'Queue a new report generation job' })
   async create(@Body() dto: CreateReportDto, @CurrentUser() user: JwtPayload) {
     // The branch to report on lives in the filters. A branch-scoped user may
@@ -47,9 +61,14 @@ export class ReportsController {
     @Query('generatedBy') generatedBy?: string,
     @Query('branchId') branchId?: string
   ) {
-    // A branch-scoped user only ever sees reports for their own branch;
+    // A branch-scoped user only ever sees reports for their own branches;
     // asking for a different one is rejected, not overridden.
-    const effectiveBranchId = await this.scope.resolveBranchScope(
+    //
+    // The filter is a *set*, not a single id. A user scoped to two
+    // branches who names neither still sees those two branches and no
+    // others — a single-id scope would drop the filter altogether and
+    // show them the whole college.
+    const effectiveBranchIds = await this.scope.resolveBranchFilter(
       user.sub,
       parseOptionalString(branchId)
     );
@@ -60,7 +79,7 @@ export class ReportsController {
       status: parseOptionalString(status),
       type: parseOptionalString(type),
       generatedBy: parseOptionalString(generatedBy),
-      branchId: effectiveBranchId,
+      branchId: effectiveBranchIds,
     });
   }
 
@@ -83,13 +102,36 @@ export class ReportsController {
     @Query('semester') semester?: string,
     @Query('academicYearId') academicYearId?: string
   ) {
-    const effectiveBranchId = await this.scope.resolveBranchScope(
+    // The readiness check is about *one* class — one branch, one scheme,
+    // one semester. A caller who names no branch has not named a class, so
+    // there is nothing to check. That is different from a caller who names
+    // a branch they do not own: that is a refusal, not an empty answer.
+    //
+    // The scope is resolved as a set because a user scoped to two branches
+    // who names neither has no class to check, and must not be handed the
+    // first branch as though they had asked for it.
+    const effectiveBranchIds = await this.scope.resolveBranchFilter(
       user.sub,
       parseOptionalString(branchId)
     );
 
+    const requestedBranchId = parseOptionalString(branchId);
+
+    if (!requestedBranchId && effectiveBranchIds && effectiveBranchIds.length > 1) {
+      throw new BadRequestException(
+        'Name the branch to check. You have access to more than one branch.'
+      );
+    }
+
+    // A college-scoped caller gets no filter, so it must name a branch.
+    if (!requestedBranchId && (!effectiveBranchIds || effectiveBranchIds.length === 0)) {
+      throw new BadRequestException(
+        'Name the branch, scheme, semester and academic year to check.'
+      );
+    }
+
     return this.service.checkReadiness({
-      branchId: effectiveBranchId ?? '',
+      branchId: requestedBranchId ?? effectiveBranchIds?.[0] ?? '',
       schemeId: parseOptionalString(schemeId) ?? '',
       semester: parseOptionalInt(semester) ?? 0,
       academicYearId: parseOptionalString(academicYearId) ?? '',
@@ -110,8 +152,8 @@ export class ReportsController {
    * Rejects the read when the report's branch is outside the caller's scope.
    *
    * A college-scoped caller may see any report. A branch-scoped caller may
-   * only see reports generated for their own branch; `resolveBranchScope`
-   * throws when the two do not match.
+   * only see reports generated for their own branches; the resolution
+   * throws when the report's branch is not one of them.
    */
   private async assertReportVisible(userId: string, reportId: string): Promise<void> {
     const branchId = await this.service.findBranchIdOfReport(reportId);
@@ -119,7 +161,7 @@ export class ReportsController {
     // visible to everyone.
     if (!branchId) return;
 
-    await this.scope.resolveBranchScope(userId, branchId);
+    await this.scope.resolveBranchFilter(userId, branchId);
   }
 
   @Get(':id/download')
@@ -139,9 +181,33 @@ export class ReportsController {
     res.send(buffer);
   }
 
+  /**
+   * Archives a report.
+   *
+   * The report is not deleted: the row is kept with the reason it was
+   * archived and who archived it, because a report is a statement about a
+   * class's results and a result that vanished cannot be accounted for. The
+   * file is released.
+   *
+   * Archiving is not a lesser act than reading. A branch-scoped user who
+   * may not see a report may not archive it either — otherwise the scope
+   * on the read is theatre, and a report can be removed by someone it
+   * was never meant to reach.
+   */
   @Delete(':id')
   @Permissions('reports:generate')
-  async delete(@Param('id') id: string): Promise<void> {
-    return this.service.delete(id);
+  @Audited(AuditResource.REPORT, AuditAction.DELETE, {
+    resourceIdSource: 'param',
+    detailsFromBody: { reason: 'reason' },
+  })
+  @ApiOperation({ summary: 'Archive a report' })
+  async delete(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: ArchiveReportDto
+  ): Promise<void> {
+    await this.assertReportVisible(user.sub, id);
+
+    return this.service.archive(id, user.sub, dto.reason);
   }
 }

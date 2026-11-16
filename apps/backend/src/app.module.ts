@@ -10,6 +10,7 @@ import authConfig from './config/auth.config';
 import redisConfig from './config/redis.config';
 import storageConfig from './config/storage.config';
 import emailConfig from './config/email.config';
+import aiConfig from './config/ai.config';
 
 import { PrismaModule } from './database/prisma.module';
 
@@ -30,7 +31,9 @@ import { AllocationsModule } from './modules/allocations/allocations.module';
 import { ClassOverviewModule } from './modules/class-overview/class-overview.module';
 import { StudentsModule } from './modules/students/students.module';
 import { MarksModule } from './modules/marks/marks.module';
+import { ExaminationsModule } from './modules/examinations/examinations.module';
 import { UploadModule } from './modules/upload/upload.module';
+import { SchemeReaderModule } from './modules/scheme-reader/scheme-reader.module';
 import { PdfParserModule } from './modules/pdf-parser/pdf-parser.module';
 import { OcrModule } from './modules/ocr/ocr.module';
 import { ReportsModule } from './modules/reports/reports.module';
@@ -51,7 +54,7 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     // Config
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig, authConfig, redisConfig, storageConfig, emailConfig],
+      load: [databaseConfig, authConfig, redisConfig, storageConfig, emailConfig, aiConfig],
       validate: (config: Record<string, unknown>) => config,
     }),
 
@@ -104,7 +107,9 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     ClassOverviewModule,
     StudentsModule,
     MarksModule,
+    ExaminationsModule,
     UploadModule,
+    SchemeReaderModule,
     PdfParserModule,
     OcrModule,
     ReportsModule,

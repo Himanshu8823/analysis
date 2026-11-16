@@ -8,6 +8,27 @@ import { ErrorBanner } from '@/components/feedback/ErrorBanner';
 import { Spinner } from '@/components/feedback/Spinner';
 import { useSchemes } from '@/hooks/useSchemes';
 import { formatters } from '@/lib/utils/formatters';
+import { describeSchemeRules, fromStoredRules } from '@/lib/scheme-rules';
+import type { Scheme } from '@/lib/services/schemes.service';
+
+/**
+ * The scheme's pass rules, in the words the college uses.
+ *
+ * The list shows the same sentence the form shows, generated from the same
+ * numbers — so a clerk reading the list sees exactly what they will get
+ * when they open the scheme.
+ *
+ * A scheme whose stored rules cannot be read — a shape from a newer
+ * version of the app, or a row that was never filled in — gets an honest
+ * sentence rather than a JSON blob and rather than a silent blank.
+ */
+function readSchemeRules(scheme: Scheme): string {
+  const read = fromStoredRules(scheme.name, scheme.rules);
+  if (!read) {
+    return 'These pass rules have not been set up yet. Open the scheme to fill them in.';
+  }
+  return describeSchemeRules(read);
+}
 
 export default function AdminSchemesPage() {
   const { data, isLoading, isError, refetch } = useSchemes();
@@ -91,14 +112,19 @@ export default function AdminSchemesPage() {
                 </div>
               </dl>
 
-              <details className="rounded-md border border-hairline bg-surface-soft p-sm text-caption text-body">
-                <summary className="cursor-pointer text-body-sm font-semibold text-ink">
-                  Rules
-                </summary>
-                <pre className="mt-xs overflow-x-auto whitespace-pre-wrap text-caption">
-                  {JSON.stringify(scheme.rules ?? {}, null, 2)}
-                </pre>
-              </details>
+              {/**
+               * The rules, in words.
+               *
+               * This used to be a JSON blob in a `<pre>`, which no clerk
+               * could read. The summary is generated from the same numbers
+               * the form edits, so the list and the form never disagree.
+               */}
+              <div className="rounded-md border border-hairline bg-surface-soft p-sm text-caption text-body">
+                <p className="text-body-sm font-semibold text-ink">Pass rules</p>
+                <p className="mt-xs">
+                  {readSchemeRules(scheme)}
+                </p>
+              </div>
             </article>
           ))}
         </div>

@@ -1,14 +1,44 @@
 import 'dotenv/config';
-import { Worker, Queue } from 'bullmq';
+import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
+import { readQueueStatus, describeQueueStatus, asQueueReader } from './queue-status';
 
 /**
- * BullMQ worker process.
+ * The queue supervisor.
  *
- * Long-running jobs (report generation, OCR) are queued by the backend and
- * processed here. Registered queue names must match those used by
- * `apps/backend` when it enqueues jobs.
+ * The backend process runs the processors for every queue — `upload-jobs`,
+ * `ocr-jobs`, `reports-jobs` and `email-jobs` — because each processor needs
+ * the backend's own services (the upload parser needs `StorageService`, the
+ * report writer needs Prisma). This process therefore does **not** consume
+ * those queues: a second consumer that acknowledges a job it did not perform
+ * turns a visible failure into invisible data loss.
+ *
+ * What it does instead is answer the question an operator actually has when
+ * results are not appearing: *is the queue backing up, and is the job that
+ * matters stuck?*
+ *
+ * It reports, for each queue:
+ *
+ *  - how many jobs are waiting, active, delayed or failed,
+ *  - how long the oldest waiting job has been waiting,
+ *  - the jobs that have failed, with their error message.
+ *
+ * See `docs/DECISIONS.md` §8 for why the queue is supervised rather than
+ * consumed twice.
  */
+
+/**
+ * The queues this process watches.
+ *
+ * These must match the names the backend enqueues under, or the supervisor
+ * watches a queue that never receives anything.
+ */
+export const WORKER_QUEUES = ['upload-jobs', 'ocr-jobs', 'reports-jobs', 'email-jobs'] as const;
+
+export type QueueName = (typeof WORKER_QUEUES)[number];
+
+/** How often the queues are reported. */
+const REPORT_INTERVAL_MS = Number(process.env.WORKER_REPORT_INTERVAL_MS ?? 60_000);
 
 const REDIS_HOST = process.env.REDIS_HOST ?? 'localhost';
 const REDIS_PORT = parseInt(process.env.REDIS_PORT ?? '6379', 10);
@@ -21,56 +51,61 @@ const redisConnection = new IORedis({
   maxRetriesPerRequest: null,
 });
 
-/** Queue names this worker consumes. Keep in sync with the backend enqueue calls. */
-export const WORKER_QUEUES = ['reports', 'ocr'] as const;
+/**
+ * The queues this process watches.
+ *
+ * BullMQ's `Queue` is used in read-only fashion here: the supervisor counts
+ * jobs and reads their state, and never removes, retries or acknowledges
+ * anything.
+ */
+const queues: Queue[] = WORKER_QUEUES.map(
+  (name) =>
+    new Queue(name, {
+      connection: redisConnection,
+    })
+);
 
-type QueueName = (typeof WORKER_QUEUES)[number];
-
-const workers: Worker[] = [];
+let reportTimer: NodeJS.Timeout | null = null;
 
 /**
- * Placeholder handler for a queue.
+ * Reports the state of every queue.
  *
- * The real processor for each queue is implemented alongside the backend module
- * that enqueues it. Until then the job is acknowledged so the queue does not
- * back up with jobs that will never succeed.
+ * A failure to reach Redis is reported rather than thrown: the supervisor
+ * is a read-only observer, and crashing it would take away the very thing it
+ * is for.
  */
-function createHandler(queueName: QueueName) {
-  return async (job: { id: string | number; name: string; data: unknown }) => {
-    // eslint-disable-next-line no-console
-    console.log(`[worker:${queueName}] processing job ${job.id} (${job.name})`);
-    return { status: 'completed', queue: queueName, jobId: job.id };
-  };
+async function report(): Promise<void> {
+  for (const queue of queues) {
+    try {
+      const status = await readQueueStatus(asQueueReader(queue));
+      // eslint-disable-next-line no-console
+      console.log(describeQueueStatus(status));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown error';
+      // eslint-disable-next-line no-console
+      console.error(`[queue:${queue.name}] could not be read: ${message}`);
+    }
+  }
 }
 
 async function bootstrap(): Promise<void> {
-  for (const queueName of WORKER_QUEUES) {
-    const worker = new Worker(queueName, createHandler(queueName), {
-      connection: redisConnection,
-      concurrency: 5,
-    });
-
-    worker.on('completed', (job) => {
-      // eslint-disable-next-line no-console
-      console.log(`[worker:${queueName}] job ${job.id} completed`);
-    });
-
-    worker.on('failed', (job, err) => {
-      // eslint-disable-next-line no-console
-      console.error(`[worker:${queueName}] job ${job?.id} failed:`, err.message);
-    });
-
-    workers.push(worker);
-  }
-
   // eslint-disable-next-line no-console
-  console.log(`Worker is running. Consuming queues: ${WORKER_QUEUES.join(', ')}`);
+  console.log(
+    `Queue supervisor is running. Watching: ${WORKER_QUEUES.join(', ')}. ` +
+      'Jobs are processed by the backend, not by this process.'
+  );
+
+  await report();
+  reportTimer = setInterval(() => {
+    void report();
+  }, REPORT_INTERVAL_MS);
 }
 
 async function shutdown(signal: string): Promise<void> {
   // eslint-disable-next-line no-console
-  console.log(`\nReceived ${signal}, shutting down worker...`);
-  await Promise.all(workers.map((worker) => worker.close()));
+  console.log(`\nReceived ${signal}, shutting down queue supervisor...`);
+  if (reportTimer) clearInterval(reportTimer);
+  await Promise.all(queues.map((queue) => queue.close()));
   await redisConnection.quit();
   process.exit(0);
 }

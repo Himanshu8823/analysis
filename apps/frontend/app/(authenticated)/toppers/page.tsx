@@ -10,9 +10,12 @@ import { EmptyState } from '@/components/feedback/EmptyState';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
 
 import { useSubjectToppers, useClassToppers } from '@/hooks/useToppers';
+import { useMyToppers } from '@/hooks/useStudentSelf';
 import { useTablePagination } from '@/hooks/useTablePagination';
 import { useBranches } from '@/hooks/useBranches';
 import { useSchemes } from '@/hooks/useSchemes';
+import { useCurrentUser } from '@/hooks/useAuth';
+import { useClassContext } from '@/lib/context/class-context';
 import { formatters } from '@/lib/utils/formatters';
 import type {
   ClassTopperByRule,
@@ -24,14 +27,46 @@ import type {
 type Tab = 'subject' | 'class';
 
 export default function ToppersPage() {
+  /**
+   * The toppers open on the shared class and can widen beyond it.
+   *
+   * The filters here narrow a cohort rather than scoping a class, so they
+   * start from the class the member is working on elsewhere and can still
+   * be widened to the whole college.
+   */
+  const { context: classContext } = useClassContext();
+
   const [tab, setTab] = useState<Tab>('subject');
   const [branchId, setBranchId] = useState('');
   const [schemeId, setSchemeId] = useState('');
-  const [semester, setSemester] = useState(1);
+  const [semester, setSemester] = useState<number | ''>('');
   const [rankingRule, setRankingRule] = useState<RankingRule>('percentage');
 
   const { data: branchesData } = useBranches();
   const { data: schemesData } = useSchemes();
+
+  /**
+   * A student's own class.
+   *
+   * A student may see **their own class's** toppers and nothing else — the
+   * screen is offered to them, so it has to show them something. The
+   * class-wide routes need `toppers:read`, which a student does not hold;
+   * the route that answers a student's question is `/my-toppers`, which
+   * derives the class from their own record.
+   *
+   * Without this the student clicked *Toppers* and was met with a refusal —
+   * the screen was offered and then failed.
+   */
+  const { data: user } = useCurrentUser();
+  const permissions = user?.permissions ?? [];
+  const isStudentOnly =
+    permissions.includes('toppers:read_own_class') && !permissions.includes('toppers:read');
+
+  const myToppersQuery = useMyToppers(20, isStudentOnly);
+
+  const effectiveBranchId = branchId || classContext.branchId;
+  const effectiveSchemeId = schemeId || classContext.schemeId;
+  const effectiveSemester = semester === '' ? classContext.semester : semester;
 
   /**
    * The filters narrow the cohort; they never decide whether the screen
@@ -41,18 +76,96 @@ export default function ToppersPage() {
    * The charts are therefore there on arrival, without a selection step.
    */
   const filters: ClassTopperFilters = {
-    branchId: branchId || undefined,
-    schemeId: schemeId || undefined,
-    semester,
+    branchId: effectiveBranchId || undefined,
+    schemeId: effectiveSchemeId || undefined,
+    semester: effectiveSemester,
   };
 
-  const subjectQuery = useSubjectToppers(filters, tab === 'subject');
-  const classQuery = useClassToppers({ ...filters, rankingRule }, tab === 'class');
+  const subjectQuery = useSubjectToppers(filters, tab === 'subject' && !isStudentOnly);
+  const classQuery = useClassToppers(
+    { ...filters, rankingRule },
+    tab === 'class' && !isStudentOnly
+  );
 
   const branches = branchesData ?? [];
   const schemes = schemesData ?? [];
 
   const activeQuery = tab === 'subject' ? subjectQuery : classQuery;
+
+  /**
+   * The student's own class's leaderboard.
+   */
+  if (isStudentOnly) {
+    return (
+      <section className="flex flex-col gap-6 md:gap-8">
+        <PageHeader
+          title="Toppers"
+          description="The highest achievers in your class."
+        />
+
+        {myToppersQuery.isError ? (
+          <ErrorBanner
+            message="Could not load your class's toppers."
+            retry={() => myToppersQuery.refetch()}
+          />
+        ) : null}
+
+        {myToppersQuery.isLoading ? (
+          <div className="cb-surface-card p-base">
+            <TableSkeleton columns={5} rows={5} bordered={false} />
+          </div>
+        ) : myToppersQuery.data && myToppersQuery.data.toppers.length === 0 ? (
+          <div className="cb-surface-card p-base">
+            <EmptyState
+              variant="plain"
+              title="Your class's results are not in yet"
+              description="The leaderboard appears once your class's marks have been entered and the result published."
+              icon={<Trophy className="h-8 w-8" aria-hidden />}
+            />
+          </div>
+        ) : (
+          <article className="cb-surface-card overflow-hidden rounded-md">
+            <table className="w-full text-body-sm">
+              <thead className="bg-surface-soft">
+                <tr>
+                  <th scope="col" className="px-base py-sm text-left font-semibold text-muted">
+                    Rank
+                  </th>
+                  <th scope="col" className="px-base py-sm text-left font-semibold text-muted">
+                    Roll number
+                  </th>
+                  <th scope="col" className="px-base py-sm text-left font-semibold text-muted">
+                    Name
+                  </th>
+                  <th scope="col" className="px-base py-sm text-right font-semibold text-muted">
+                    Marks
+                  </th>
+                  <th scope="col" className="px-base py-sm text-right font-semibold text-muted">
+                    Percentage
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {(myToppersQuery.data?.toppers ?? []).map((topper) => (
+                  <tr key={topper.studentId} className="border-t border-hairline first:border-t-0">
+                    <td className="num px-base py-sm text-body">{topper.rank}</td>
+                    <td className="num px-base py-sm text-body">{topper.rollNo}</td>
+                    <td className="px-base py-sm text-ink">{topper.name}</td>
+                    <td className="num px-base py-sm text-right text-body">
+                      {topper.totalMarks} / {topper.maxTotalMarks}
+                    </td>
+                    <td className="num px-base py-sm text-right text-body">
+                      {topper.percentage.toFixed(2)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </article>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section className="flex flex-col gap-6 md:gap-8">
@@ -65,7 +178,7 @@ export default function ToppersPage() {
         <div className="grid grid-cols-1 gap-base md:grid-cols-2 lg:grid-cols-4">
           <Select
             label="Branch (optional)"
-            value={branchId}
+            value={effectiveBranchId}
             onChange={(e) => setBranchId(e.target.value)}
           >
             <option value="">All branches in my scope</option>
@@ -77,7 +190,7 @@ export default function ToppersPage() {
           </Select>
           <Select
             label="Scheme (optional)"
-            value={schemeId}
+            value={effectiveSchemeId}
             onChange={(e) => setSchemeId(e.target.value)}
           >
             <option value="">All schemes</option>
@@ -89,8 +202,8 @@ export default function ToppersPage() {
           </Select>
           <Select
             label="Semester"
-            value={String(semester)}
-            onChange={(e) => setSemester(Number(e.target.value))}
+            value={String(effectiveSemester)}
+            onChange={(e) => setSemester(e.target.value === '' ? '' : Number(e.target.value))}
           >
             {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
               <option key={n} value={n}>

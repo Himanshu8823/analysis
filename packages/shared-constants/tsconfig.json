@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "lib": ["ES2020"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*"],
+  /**
+   * The test files are excluded from the published build.
+   *
+   * `dist/` is what the backend and the frontend import at runtime, and a
+   * test file has no business being in a published artefact — it would
+   * need a test runner's type definitions, which the library deliberately
+   * does not depend on. The tests are run by this package's own `test`
+   * script, which compiles them with its own test tsconfig.
+   */
+  "exclude": ["node_modules", "dist", "src/**/*.spec.ts"]
+}

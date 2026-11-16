@@ -2,7 +2,10 @@ import { Controller, Get, NotFoundException, Param, Res, UseGuards } from '@nest
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { StorageService } from './storage.service';
+import { FileAccessService } from './file-access.service';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
+import { CurrentUser } from '@/common/decorators';
+import type { JwtPayload } from '@/common/types';
 
 const CONTENT_TYPES: Record<string, string> = {
   '.pdf': 'application/pdf',
@@ -34,7 +37,10 @@ const CONTENT_TYPES: Record<string, string> = {
 @ApiBearerAuth()
 @Controller('files')
 export class FilesController {
-  constructor(private readonly storage: StorageService) {}
+  constructor(
+    private readonly storage: StorageService,
+    private readonly access: FileAccessService
+  ) {}
 
   /**
    * Serves a stored file by its path below the storage root.
@@ -43,11 +49,19 @@ export class FilesController {
    * segments, because a stored file lives under a folder and a dated
    * sub-folder — `uploads/2026-11-01/<uuid>.csv` — and the shape of that
    * path differs per file type.
+   *
+   * Signing in is not enough to read a file: a result statement and a
+   * member's profile picture are personal, so the reader has to be the
+   * person who owns them or the exam cell that administers them.
    */
   @Get('*')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Download a stored file' })
-  async download(@Param('0') relativePath: string, @Res() response: Response): Promise<void> {
+  async download(
+    @Param('0') relativePath: string,
+    @CurrentUser() user: JwtPayload,
+    @Res() response: Response
+  ): Promise<void> {
     /**
      * The route parameter arrives without its leading slash. A path that
      * tries to climb out of the storage root is rejected by the storage
@@ -57,6 +71,8 @@ export class FilesController {
     if (!normalized) {
       throw new NotFoundException('File not found');
     }
+
+    await this.access.assertMayRead(normalized, user.sub);
 
     let buffer: Buffer;
     try {

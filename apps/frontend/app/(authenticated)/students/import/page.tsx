@@ -9,8 +9,9 @@ import { Button } from '@/components/ui/button';
 import { useImportStudents } from '@/hooks/useStudents';
 import { useBranches } from '@/hooks/useBranches';
 import { useSchemes } from '@/hooks/useSchemes';
-import { useAcademicYears, useBatches } from '@/hooks/useAcademic';
+import { useAcademicYears, useBatches, useRunningYear } from '@/hooks/useAcademic';
 import { extractErrorMessage } from '@/hooks/useAuth';
+import { useClassContext } from '@/lib/context/class-context';
 import { ALL_SEMESTERS, yearForSemester } from '@/lib/academic';
 import type { BulkImportResult, BulkImportScope } from '@/lib/services/students.service';
 
@@ -31,6 +32,7 @@ export default function ImportStudentsPage() {
   const { data: branchesData } = useBranches();
   const { data: schemesData } = useSchemes();
   const { data: academicYears } = useAcademicYears();
+  const runningYear = useRunningYear();
   const { data: batchData } = useBatches();
   const { mutate: importStudents, isPending: importing } = useImportStudents();
 
@@ -38,35 +40,55 @@ export default function ImportStudentsPage() {
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * The class comes from the shared context.
+   *
+   * Importing a sheet files every student in it into one class, so this
+   * screen works on the class the member is already working on elsewhere.
+   * The batch is the one thing that stays here: a batch records the year a
+   * student was admitted, which is a fact about the students being imported
+   * rather than about the class they are joining.
+   */
+  const { context: classContext, setPart: setClassPart } = useClassContext();
+
   const branches = branchesData ?? [];
   const schemes = schemesData ?? [];
   const batches = batchData ?? [];
-  const activeYear = academicYears?.find((y) => y.isActive) ?? academicYears?.[0];
+  /**
+   * The **running** academic year is the default — the one the calendar's
+   * dates say is running today, which is what the backend defaults its
+   * reports to.
+   */
+  const activeYear = runningYear.year ?? academicYears?.[0];
 
-  const [branchId, setBranchId] = useState('');
-  const [schemeId, setSchemeId] = useState('');
   const [batchId, setBatchId] = useState('');
-  const [academicYearId, setAcademicYearId] = useState('');
-  const [currentYear, setCurrentYear] = useState(1);
-  const [semester, setSemester] = useState(1);
+
+  const branchId = classContext.branchId;
+  const schemeId = classContext.schemeId;
+  const semester = classContext.semester;
+
+  /**
+   * The year follows from the semester, so it can never disagree with it.
+   * It is shown for reference but not sent — the server derives it too.
+   */
+  const currentYear = yearForSemester(semester);
 
   /**
    * The academic year falls back to the active one.
    *
-   * The years are fetched asynchronously, so the state starts empty and is
+   * The years are fetched asynchronously, so the context starts empty and is
    * filled in only once the operator picks one — a Radix select never fires
    * `onValueChange` for the value that is already selected, so leaving the
-   * state empty would keep the scope unresolved on a college with a single
+   * context empty would keep the scope unresolved on a college with a single
    * academic year.
    */
-  const effectiveAcademicYearId = academicYearId || activeYear?.id || '';
+  const effectiveAcademicYearId = classContext.academicYearId || activeYear?.id || '';
 
   const scope: BulkImportScope = {
     branchId: branchId || undefined,
     schemeId: schemeId || undefined,
     batchId: batchId || undefined,
     academicYearId: effectiveAcademicYearId || undefined,
-    currentYear,
     semester,
   };
 
@@ -99,7 +121,7 @@ export default function ImportStudentsPage() {
           <Select
             label="Branch"
             value={branchId}
-            onChange={(e) => setBranchId(e.target.value)}
+            onChange={(e) => setClassPart('branchId', e.target.value)}
             required
           >
             <option value="" disabled>
@@ -114,7 +136,7 @@ export default function ImportStudentsPage() {
           <Select
             label="Scheme"
             value={schemeId}
-            onChange={(e) => setSchemeId(e.target.value)}
+            onChange={(e) => setClassPart('schemeId', e.target.value)}
             required
           >
             <option value="" disabled>
@@ -129,7 +151,7 @@ export default function ImportStudentsPage() {
           <Select
             label="Academic year"
             value={effectiveAcademicYearId}
-            onChange={(e) => setAcademicYearId(e.target.value)}
+            onChange={(e) => setClassPart('academicYearId', e.target.value)}
             required
           >
             <option value="" disabled>
@@ -179,11 +201,7 @@ export default function ImportStudentsPage() {
           <Select
             label="Semester"
             value={String(semester)}
-            onChange={(e) => {
-              const next = Number(e.target.value);
-              setSemester(next);
-              setCurrentYear(yearForSemester(next));
-            }}
+            onChange={(e) => setClassPart('semester', Number(e.target.value))}
           >
             {ALL_SEMESTERS.map((n) => (
               <option key={n} value={n}>

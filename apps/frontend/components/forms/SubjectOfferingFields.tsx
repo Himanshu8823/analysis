@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 
 import { Select } from '@/components/forms/Select';
 import { FieldError } from '@/components/feedback/FieldError';
+import { defaultAcademicYear, yearForSemester } from '@/lib/academic';
 import type { SubjectOfferingPayload } from '@/lib/services/subjects.service';
 
 interface SubjectOfferingFieldsProps {
@@ -11,7 +12,21 @@ interface SubjectOfferingFieldsProps {
   id: string;
   branches: Array<{ id: string; code: string; name: string }>;
   schemes: Array<{ id: string; name: string }>;
-  academicYears: Array<{ id: string; year: string; isActive: boolean }>;
+  /**
+   * The academic years the college has.
+   *
+   * The **dates** matter as much as the label: the running year is the one
+   * whose dates contain today, not the one somebody ticked. The form
+   * defaults to that year, so an offering is placed in the year the college
+   * is actually in.
+   */
+  academicYears: Array<{
+    id: string;
+    year: string;
+    startDate: string;
+    endDate: string;
+    isActive: boolean;
+  }>;
   /** The subjects that can be offered. */
   subjects: Array<{ id: string; code: string; name: string }>;
   /** Pre-populated values when editing an existing offering. */
@@ -36,14 +51,19 @@ export function SubjectOfferingFields({
   initial,
   onSubmit,
 }: SubjectOfferingFieldsProps) {
-  const activeYear = academicYears.find((y) => y.isActive) ?? academicYears[0];
+  /**
+   * The **running** academic year is the default — the one whose dates
+   * contain today, which is what the backend defaults its reports to. The
+   * `isActive` flag is not consulted: a flag that contradicts the dates
+   * would place the offering in a year the college has already left.
+   */
+  const activeYear = defaultAcademicYear(academicYears) ?? academicYears[0];
 
   const [form, setForm] = useState<SubjectOfferingPayload>(() => ({
     subjectId: initial?.subjectId ?? subjects[0]?.id ?? '',
     branchId: initial?.branchId ?? branches[0]?.id ?? '',
     semester: initial?.semester ?? 1,
     schemeId: initial?.schemeId ?? schemes[0]?.id ?? '',
-    year: initial?.year ?? 1,
     academicYearId: initial?.academicYearId ?? activeYear?.id ?? '',
   }));
   const [error, setError] = useState<string | null>(null);
@@ -143,12 +163,12 @@ export function SubjectOfferingFields({
           </option>
         ))}
       </Select>
-      <Select
-        label="Curriculum year"
-        required
-        value={String(form.year)}
-        onChange={(e) => setForm({ ...form, year: Number(e.target.value) })}
-      >
+      {/**
+       * The curriculum year follows from the semester — semesters 1 and 2
+       * are year 1, semesters 3 and 4 are year 2, and so on. It is shown
+       * for reference but not chosen, so the two can never disagree.
+       */}
+      <Select label="Curriculum year" value={String(yearForSemester(form.semester))} disabled>
         {[1, 2, 3, 4].map((n) => (
           <option key={n} value={n}>
             Year {n}

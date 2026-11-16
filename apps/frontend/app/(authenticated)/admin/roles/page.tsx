@@ -30,6 +30,7 @@ import {
   useUpdateRole,
 } from '@/hooks/useRolePermissions';
 import type { Permission } from '@/lib/services/roles.service';
+import { roleDisplayName } from '@/lib/utils/role-labels';
 
 /**
  * Which panel the page is showing.
@@ -155,7 +156,7 @@ export default function AdminRolesPage() {
                   <header className="flex items-start justify-between gap-sm">
                     <div className="min-w-0">
                       <h3 id={`role-${role.id}`} className="font-display text-title-md text-ink">
-                        {role.name}
+                        {roleDisplayName(role.name)}
                       </h3>
                       {role.description ? (
                         <p className="text-body-sm text-body">{role.description}</p>
@@ -187,7 +188,7 @@ export default function AdminRolesPage() {
                     </button>
                     <button
                       type="button"
-                      aria-label={`Edit ${role.name}`}
+                      aria-label={`Edit ${roleDisplayName(role.name)}`}
                       title="Edit role"
                       onClick={() => setPanel({ kind: 'edit', id: role.id })}
                       className="inline-flex h-11 w-11 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-strong hover:text-ink"
@@ -196,12 +197,12 @@ export default function AdminRolesPage() {
                     </button>
                     <button
                       type="button"
-                      aria-label={`Deactivate ${role.name}`}
+                      aria-label={`Deactivate ${roleDisplayName(role.name)}`}
                       title="Deactivate role"
                       onClick={() => {
                         if (
                           confirm(
-                            `Deactivate ${role.name}? Members holding this role will lose the access it grants. The role itself is kept and can be reactivated.`,
+                            `Deactivate ${roleDisplayName(role.name)}? Members holding this role will lose the access it grants. The role itself is kept and can be reactivated.`,
                           )
                         ) {
                           deactivateRole(role.id);

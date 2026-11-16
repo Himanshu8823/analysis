@@ -9,15 +9,18 @@ import {
   AllocationsRepository,
   type TeacherAllocationRow,
   type ClassTeacherAssignmentRow,
+  type ClassNeedingTeacherRow,
   type AssignableTeacher,
 } from './allocations.repository';
 import { CreateTeacherAllocationDto, CreateClassTeacherAssignmentDto } from './dto';
+import { AuthorisationService } from '@/common/services/authorisation.service';
 
 @Injectable()
 export class AllocationsService {
   constructor(
     private readonly repository: AllocationsRepository,
-    private readonly prisma: PrismaClient
+    private readonly prisma: PrismaClient,
+    private readonly authorisation: AuthorisationService
   ) {}
 
   // ---------------------------------------------------------------------
@@ -31,13 +34,16 @@ export class AllocationsService {
    * whole college's people — every account, with its roles — and is guarded
    * by `users:read`, which the HOD does not hold. The HOD needs only the
    * teachers of their own branch, so they get exactly that.
+   *
+   * `branchIds` is the caller's whole scope, not one branch of it. A caller
+   * scoped to several branches sees the teachers of all of them.
    */
-  async findAssignableTeachers(branchId?: string): Promise<AssignableTeacher[]> {
-    return this.repository.findAssignableTeachers(branchId);
+  async findAssignableTeachers(branchIds?: string[]): Promise<AssignableTeacher[]> {
+    return this.repository.findAssignableTeachers(branchIds);
   }
 
   async findTeacherAllocations(params: {
-    branchId?: string;
+    branchIds?: string[];
     semester?: number;
     academicYearId?: string;
     teacherId?: string;
@@ -49,7 +55,8 @@ export class AllocationsService {
   /**
    * Allocates a subject offering to a teacher.
    *
-   * Three things are checked before the write:
+   * Four things are checked before the write:
+   *  - the caller may write in the offering's branch,
    *  - the teacher exists and is active,
    *  - the offering exists and is active,
    *  - the pair has not already been allocated for that year.
@@ -58,7 +65,10 @@ export class AllocationsService {
    * one branch cannot be allocated a subject from another — that is what
    * makes the HOD's branch scope meaningful.
    */
-  async createTeacherAllocation(dto: CreateTeacherAllocationDto): Promise<TeacherAllocationRow> {
+  async createTeacherAllocation(
+    dto: CreateTeacherAllocationDto,
+    allocatedBy: string
+  ): Promise<TeacherAllocationRow> {
     const teacher = await this.prisma.user.findUnique({
       where: { id: dto.teacherId },
       select: { id: true, isActive: true, name: true, email: true },
@@ -76,6 +86,18 @@ export class AllocationsService {
     if (!offering.isActive) {
       throw new BadRequestStateException('This subject offering is no longer active');
     }
+
+    /**
+     * The branch is the offering's, not the caller's — it decides whose
+     * students the teacher may mark. The caller must be allowed to allocate
+     * in it, so an HOD of one branch cannot hand a subject of another branch
+     * to one of their own teachers.
+     */
+    await this.authorisation.assertBranchWritable(
+      allocatedBy,
+      offering.branchId,
+      'subject offering'
+    );
 
     const duplicate = await this.prisma.teacherSubject.findFirst({
       where: {
@@ -105,9 +127,28 @@ export class AllocationsService {
     return created;
   }
 
-  async deleteTeacherAllocation(id: string): Promise<void> {
+  /**
+   * Removes a teacher allocation.
+   *
+   * The allocation's branch is resolved from the offering it points at, and
+   * the caller must be allowed to write in it. Without this check an HOD of
+   * one branch could remove another branch's allocation and strip that
+   * branch's teacher of the right to enter marks.
+   */
+  async deleteTeacherAllocation(id: string, deletedBy: string): Promise<void> {
     const existing = await this.repository.findTeacherAllocationById(id);
     if (!existing) throw new NotFoundException('Teacher allocation not found');
+
+    const offering = await this.prisma.subjectOffering.findUnique({
+      where: { id: existing.subjectOfferingId },
+      select: { branchId: true },
+    });
+    await this.authorisation.assertBranchWritable(
+      deletedBy,
+      offering?.branchId,
+      'subject allocation'
+    );
+
     await this.repository.deleteTeacherAllocation(id);
   }
 
@@ -116,12 +157,29 @@ export class AllocationsService {
   // ---------------------------------------------------------------------
 
   async findClassTeacherAssignments(params: {
-    branchId?: string;
+    branchIds?: string[];
     semester?: number;
     academicYearId?: string;
     teacherId?: string;
   }): Promise<ClassTeacherAssignmentRow[]> {
     return this.repository.findClassTeacherAssignments(params);
+  }
+
+  /**
+   * The classes that have students but no class teacher.
+   *
+   * This is the "class teacher required" state. When a member is revoked and
+   * they were the class teacher of a class, the class loses its teacher —
+   * and the college has to see that gap, or the class quietly goes
+   * unmanaged. The revocation screen shows the consequence before the
+   * administrator confirms; this list is where they go afterwards to fix it.
+   */
+  async findClassesNeedingTeacher(params: {
+    branchIds?: string[];
+    semester?: number;
+    academicYearId?: string;
+  }): Promise<ClassNeedingTeacherRow[]> {
+    return this.repository.findClassesNeedingTeacher(params);
   }
 
   /**
@@ -145,6 +203,13 @@ export class AllocationsService {
       throw new BadRequestStateException('This teacher account is deactivated');
     }
 
+    /**
+     * The class belongs to a branch, and only that branch's HOD may put a
+     * class teacher in it. The class-teacher role is what opens the class's
+     * statistics, so assigning one in another branch is a real escalation.
+     */
+    await this.authorisation.assertBranchWritable(assignedBy, dto.branchId, 'class');
+
     const existing = await this.prisma.classTeacherAssignment.findFirst({
       where: {
         branchId: dto.branchId,
@@ -152,10 +217,39 @@ export class AllocationsService {
         schemeId: dto.schemeId,
         academicYearId: dto.academicYearId,
       },
-      select: { id: true },
+      select: { id: true, teacherId: true, teacher: { select: { name: true } } },
     });
 
     if (existing) {
+      /**
+       * A class has exactly one class teacher. Assigning another is a
+       * **replacement**, and the previous teacher's access to the class's
+       * statistics ends with it.
+       *
+       * The request must say that the replacement is intended. Without that,
+       * assigning a class teacher to a class that already has one is an
+       * accidental overwrite — and an accidental overwrite silently takes
+       * away somebody's access to a class.
+       */
+      if (!dto.replacesExisting) {
+        throw new ConflictException(
+          `${existing.teacher.name} is already the class teacher of this class. ` +
+            'Replacing them ends their access to this class’s statistics. Confirm the ' +
+            'replacement to go ahead.'
+        );
+      }
+
+      /**
+       * Replacing a class teacher with the same person is not a change.
+       * It is refused so that the audit trail never records a replacement
+       * that did not happen.
+       */
+      if (existing.teacherId === dto.teacherId) {
+        throw new ConflictException(
+          `${existing.teacher.name} is already the class teacher of this class.`
+        );
+      }
+
       await this.prisma.classTeacherAssignment.update({
         where: { id: existing.id },
         data: { teacherId: dto.teacherId, assignedBy, assignedAt: new Date() },
@@ -165,7 +259,7 @@ export class AllocationsService {
     }
 
     const rows = await this.repository.findClassTeacherAssignments({
-      branchId: dto.branchId,
+      branchIds: [dto.branchId],
       semester: dto.semester,
       academicYearId: dto.academicYearId,
       teacherId: dto.teacherId,
@@ -177,9 +271,17 @@ export class AllocationsService {
     return created;
   }
 
-  async deleteClassTeacherAssignment(id: string): Promise<void> {
+  /**
+   * Removes a class-teacher assignment.
+   *
+   * The caller must be allowed to write in the branch the class belongs to.
+   */
+  async deleteClassTeacherAssignment(id: string, deletedBy: string): Promise<void> {
     const existing = await this.repository.findClassTeacherAssignmentById(id);
     if (!existing) throw new NotFoundException('Class teacher assignment not found');
+
+    await this.authorisation.assertBranchWritable(deletedBy, existing.branchId, 'class');
+
     await this.repository.deleteClassTeacherAssignment(id);
   }
 }

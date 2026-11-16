@@ -14,7 +14,6 @@ import {
   Users,
   MailCheck,
   Pencil,
-  Trash2,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/forms/DataTable';
 import { FilterBar } from '@/components/forms/FilterBar';
@@ -31,12 +30,18 @@ import { EmptyState } from '@/components/feedback/EmptyState';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
 import { Spinner } from '@/components/feedback/Spinner';
 import {
+  RevocationImpactDialog,
+  type RevocationTarget,
+} from '@/components/feedback/RevocationImpactDialog';
+import {
   useInvites,
   useInviteCounts,
   useRevokeInvite,
   useResendInvite,
 } from '@/hooks/useInvites';
-import { useMembers, useRoles, useSetMemberActive, useDeleteMember } from '@/hooks/useMembers';
+import { useMembers, useRoles, useRestoreMember, useRevokeMember } from '@/hooks/useMembers';
+import { useBranches } from '@/hooks/useBranches';
+import { roleDisplayName } from '@/lib/utils/role-labels';
 import { formatters } from '@/lib/utils/formatters';
 import { useToast } from '@/lib/utils/notifications';
 import type { Invite, InviteStatus, Member } from '@result-analysis/shared-types';
@@ -55,6 +60,26 @@ const INVITE_STATUS_STYLES: Record<InviteStatus, string> = {
   REVOKED: 'cb-badge',
   EXPIRED: 'cb-badge',
 };
+
+/**
+ * The invitation status, written as a sentence rather than as the stored
+ * code. `PENDING` on a screen tells a college clerk nothing; "Not yet
+ * accepted" tells them the invitation is still waiting to be used.
+ */
+function inviteStatusLabel(status: InviteStatus): string {
+  switch (status) {
+    case 'PENDING':
+      return 'Not yet accepted';
+    case 'ACCEPTED':
+      return 'Accepted';
+    case 'REVOKED':
+      return 'Withdrawn';
+    case 'EXPIRED':
+      return 'Expired';
+    default:
+      return status;
+  }
+}
 
 export default function AdminMembersPage() {
   const [tab, setTab] = useState<TabKey>('members');
@@ -97,6 +122,11 @@ export default function AdminMembersPage() {
   const invitesQuery = useInvites(inviteFilters);
   const countsQuery = useInviteCounts();
   const rolesQuery = useRoles();
+  // The branch list is needed to say which branch a role belongs to. A role
+  // chip that shows only "Teacher" leaves an administrator guessing whether
+  // the person works in one branch or three.
+  const branchesQuery = useBranches();
+  const branches = branchesQuery.data ?? [];
 
   // A filter is "active" whenever it narrows the list in any way. This drives
   // the conditional "Clear filters" control in the toolbar.
@@ -113,8 +143,18 @@ export default function AdminMembersPage() {
 
   const { mutate: revokeInvite } = useRevokeInvite();
   const { mutate: resendInvite } = useResendInvite();
-  const { mutate: setMemberActive } = useSetMemberActive();
-  const { mutate: deleteMember } = useDeleteMember();
+
+  /**
+   * The revocation confirmation.
+   *
+   * Revoking a member releases their allocations, withdraws their
+   * invitations and removes their roles. The administrator is shown what
+   * that will do — in sentences, naming the subjects and classes — before
+   * they confirm it.
+   */
+  const [revocationTarget, setRevocationTarget] = useState<RevocationTarget | null>(null);
+  const { mutate: revokeMember, isPending: isRevoking } = useRevokeMember();
+  const { mutate: restoreMember, isPending: isRestoring } = useRestoreMember();
 
   const members = membersQuery.data?.items ?? [];
   const invites = invitesQuery.data?.items ?? [];
@@ -181,11 +221,21 @@ export default function AdminMembersPage() {
           {row.roles.length === 0 ? (
             <span className="text-caption text-muted">None</span>
           ) : (
-            row.roles.map((r) => (
-              <span key={`${r.roleName}-${r.branchId ?? 'global'}`} className="cb-badge">
-                {r.roleName}
-              </span>
-            ))
+            row.roles.map((r) => {
+              const branch = r.branchId
+                ? branches.find((b) => b.id === r.branchId)
+                : undefined;
+              return (
+                <span
+                  key={`${r.roleName}-${r.branchId ?? 'global'}`}
+                  className="cb-badge"
+                  title={branch ? `${branch.code} — ${branch.name}` : 'The whole college'}
+                >
+                  {roleDisplayName(r.roleName)}
+                  {branch ? ` · ${branch.code}` : ''}
+                </span>
+              );
+            })
           )}
         </div>
       ),
@@ -227,11 +277,17 @@ export default function AdminMembersPage() {
           >
             <Pencil className="h-4 w-4" aria-hidden />
           </Link>
+          {/*
+           * Revoking a member is a consequential, auditable action, so it
+           * opens the confirmation that spells out what it will release.
+           */}
           <button
             type="button"
-            aria-label={row.isActive ? `Deactivate ${row.name}` : `Activate ${row.name}`}
-            title={row.isActive ? 'Deactivate member' : 'Activate member'}
-            onClick={() => setMemberActive({ id: row.id, isActive: !row.isActive })}
+            aria-label={row.isActive ? `Revoke access for ${row.name}` : `Archive ${row.name}`}
+            title={row.isActive ? 'Revoke access' : 'Archive member'}
+            onClick={() =>
+              setRevocationTarget({ id: row.id, name: row.name, isActive: row.isActive })
+            }
             className="inline-flex h-11 w-11 items-center justify-center rounded-full text-muted hover:bg-surface-strong hover:text-ink"
           >
             {row.isActive ? (
@@ -239,23 +295,6 @@ export default function AdminMembersPage() {
             ) : (
               <UserCheck className="h-4 w-4" aria-hidden />
             )}
-          </button>
-          <button
-            type="button"
-            aria-label={`Remove ${row.name}`}
-            title="Remove member"
-            onClick={() => {
-              if (
-                confirm(
-                  `Remove ${row.name}? This permanently deletes the account and its role assignments.`,
-                )
-              ) {
-                deleteMember(row.id);
-              }
-            }}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-full text-muted hover:bg-surface-strong hover:text-semantic-down"
-          >
-            <Trash2 className="h-4 w-4" aria-hidden />
           </button>
         </div>
       ),
@@ -276,7 +315,7 @@ export default function AdminMembersPage() {
     {
       key: 'role',
       header: 'Role',
-      render: (row) => <span className="cb-badge">{row.roleName}</span>,
+      render: (row) => <span className="cb-badge">{roleDisplayName(row.roleName)}</span>,
     },
     {
       key: 'status',
@@ -284,7 +323,7 @@ export default function AdminMembersPage() {
       render: (row) => (
         <div className="flex flex-col">
           <span className={INVITE_STATUS_STYLES[row.status]}>
-            {row.supersededById ? 'SUPERSEDED' : row.status}
+            {row.supersededById ? 'Replaced' : inviteStatusLabel(row.status)}
           </span>
           {row.supersededById ? (
             <span className="text-caption text-muted">Replaced by a newer invite</span>
@@ -415,7 +454,7 @@ export default function AdminMembersPage() {
                 <FilterSelectItem value="all">All roles</FilterSelectItem>
                 {roles.map((role) => (
                   <FilterSelectItem key={role.id} value={role.name}>
-                    {role.name}
+                    {roleDisplayName(role.name)}
                   </FilterSelectItem>
                 ))}
               </FilterSelectContent>
@@ -593,7 +632,7 @@ export default function AdminMembersPage() {
                         id={`role-${role.id}`}
                         className="font-display text-title-md text-ink"
                       >
-                        {role.name}
+                        {roleDisplayName(role.name)}
                       </h3>
                       {role.description ? (
                         <p className="text-body-sm text-body">{role.description}</p>
@@ -624,6 +663,30 @@ export default function AdminMembersPage() {
           )}
         </>
       ) : null}
+
+      {/*
+       * The revocation confirmation. It is shown before anything is
+       * changed, and it lists what the change will release — the
+       * allocations, the classes that lose their class teacher, the
+       * roles that will be removed.
+       */}
+      <RevocationImpactDialog
+        target={revocationTarget}
+        isSubmitting={isRevoking || isRestoring}
+        onClose={() => setRevocationTarget(null)}
+        onConfirm={(memberId, reason) =>
+          revokeMember(
+            { id: memberId, reason },
+            { onSuccess: () => setRevocationTarget(null) },
+          )
+        }
+        onRestore={(memberId, reason) =>
+          restoreMember(
+            { id: memberId, reason },
+            { onSuccess: () => setRevocationTarget(null) },
+          )
+        }
+      />
     </section>
   );
 }

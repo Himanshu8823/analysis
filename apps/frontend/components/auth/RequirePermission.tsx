@@ -1,10 +1,12 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useEffect, type ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
+import type { ReactNode } from 'react';
 
+import { NoAccess } from '@/components/feedback/NoAccess';
 import { Spinner } from '@/components/feedback/Spinner';
 import { useCurrentUser } from '@/hooks/useAuth';
+import { canOpenScreen } from '@/lib/auth/screen-capabilities';
 
 interface RequirePermissionProps {
   /**
@@ -22,6 +24,14 @@ interface RequirePermissionProps {
    * Defaults to the dashboard, which every member can reach.
    */
   fallbackHref?: string;
+  /**
+   * The name of the screen, shown in the refusal.
+   *
+   * "You do not have access to the Marks Entry screen" answers the member's
+   * question; "You do not have access" leaves them guessing which page the
+   * message belongs to.
+   */
+  screenLabel?: string;
 }
 
 /**
@@ -36,26 +46,26 @@ interface RequirePermissionProps {
  * member cannot use. Every route behind it is guarded server-side too, so
  * the check here is a convenience, not the security boundary.
  *
- * While the session is still resolving the guard renders nothing rather than
- * redirecting — a redirect fired before the permissions are known would send
- * a legitimate member away.
+ * A refusal is a **page**, not a redirect. Redirecting a member who typed a
+ * path they may not use sends them somewhere they did not ask for, without
+ * saying why — the dead end §1.7 rules out. The `NoAccess` page says what
+ * happened and offers a way back.
+ *
+ * While the session is still resolving the guard renders a spinner rather
+ * than refusing: a refusal fired before the permissions are known would turn
+ * away a legitimate member.
  */
 export function RequirePermission({
   permissions,
   children,
   fallbackHref = '/dashboard',
+  screenLabel,
 }: RequirePermissionProps) {
-  const router = useRouter();
+  const pathname = usePathname();
   const { data: user, isLoading } = useCurrentUser();
 
   const held = user?.permissions ?? [];
   const allowed = permissions.some((permission) => held.includes(permission));
-
-  useEffect(() => {
-    if (!isLoading && user && !allowed) {
-      router.replace(fallbackHref);
-    }
-  }, [isLoading, user, allowed, fallbackHref, router]);
 
   if (isLoading || !user) {
     return (
@@ -66,9 +76,33 @@ export function RequirePermission({
   }
 
   if (!allowed) {
-    // The effect above is already redirecting. This branch is what is
-    // painted for the frame in between, so it must not flash the screen.
-    return null;
+    return (
+      <NoAccess
+        screenLabel={screenLabel}
+        homeHref={fallbackHref}
+        reason="role"
+      />
+    );
+  }
+
+  /**
+   * The screen may still name something the catalogue guards differently.
+   *
+   * The explicit `permissions` above are the screen's own rule; the
+   * catalogue is the shared one. When they disagree, the stricter of the two
+   * wins — a member is refused by whichever rule is narrower. This can only
+   * happen if a screen declares its permissions loosely, so it is a signal
+   * worth honouring rather than a branch to expect.
+   */
+  const resolved = canOpenScreen(pathname, held);
+  if (!resolved.allowed) {
+    return (
+      <NoAccess
+        screenLabel={screenLabel ?? resolved.screen.label}
+        homeHref={fallbackHref}
+        reason="role"
+      />
+    );
   }
 
   return <>{children}</>;

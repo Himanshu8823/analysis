@@ -123,6 +123,17 @@ export class StorageService {
   }
 
   /**
+   * The base URL the files are published under.
+   *
+   * It is the system's own address, and it is the only address the server
+   * will fetch a document from when a URL is named in a request — a URL
+   * from anywhere else would let a caller make the server fetch anything.
+   */
+  get publicUrl(): string {
+    return this.publicBaseUrl;
+  }
+
+  /**
    * Writes a buffer to storage and returns the URL it can be fetched from.
    *
    * `folder` groups the files inside the bucket — an upload and a profile

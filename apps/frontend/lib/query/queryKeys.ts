@@ -10,6 +10,26 @@ export const queryKeys = {
     list: (filters?: unknown) => ['members', 'list', filters ?? null] as const,
     detail: (id: string) => ['members', 'detail', id] as const,
     roles: () => ['members', 'roles'] as const,
+    /**
+     * What revoking this member would do.
+     *
+     * A separate key from the member's detail, because it is a *preview* of
+     * a change rather than the member's record — and because it goes stale
+     * as soon as the member's allocations change.
+     */
+    revocationImpact: (id: string) => ['members', 'revocation-impact', id] as const,
+  },
+  /**
+   * The roles a member holds.
+   *
+   * A separate key from `members.detail`: the member record carries the
+   * role names, while this carries the role *rows* — which branch each role
+   * is scoped to, and when it was granted. Invalidating one must not throw
+   * away the other, because they are read by different screens.
+   */
+  userRoles: {
+    all: () => ['user-roles'] as const,
+    list: (userId: string) => ['user-roles', 'list', userId] as const,
   },
   invites: {
     all: () => ['invites'] as const,
@@ -42,6 +62,17 @@ export const queryKeys = {
     all: () => ['schemes'] as const,
     list: () => ['schemes', 'list'] as const,
     detail: (id: string) => ['schemes', 'detail', id] as const,
+  },
+  /**
+   * The scheme reader.
+   *
+   * Only the availability is cached. A *reading* is not: it is a one-off
+   * look at a document, and the review screen holds the corrections to it
+   * in its own state, so a cached reading could only ever be a stale one.
+   */
+  schemeReader: {
+    all: () => ['scheme-reader'] as const,
+    availability: () => ['scheme-reader', 'availability'] as const,
   },
   subjects: {
     all: () => ['subjects'] as const,
@@ -88,11 +119,29 @@ export const queryKeys = {
     all: () => ['class-teacher-assignments'] as const,
     list: (filters?: unknown) =>
       ['class-teacher-assignments', 'list', filters ?? null] as const,
+    /**
+     * The classes that have students but no class teacher.
+     *
+     * A separate key from the assignment list, because it is a different
+     * question — and because invalidating the assignments must also refresh
+     * the gap they leave behind.
+     */
+    needsTeacher: (filters?: unknown) =>
+      ['class-teacher-assignments', 'needs-teacher', filters ?? null] as const,
   },
   students: {
     all: () => ['students'] as const,
     list: (filters?: unknown) => ['students', 'list', filters ?? null] as const,
     detail: (id: string) => ['students', 'detail', id] as const,
+    /**
+     * The student's whole profile.
+     *
+     * It is a separate key from the plain detail because it is a different
+     * payload with a different cache lifetime: the profile carries marks,
+     * results and an audit trail, and it changes far less often than the
+     * roster does.
+     */
+    profile: (id: string) => ['students', 'profile', id] as const,
     /**
      * The signed-in student's own result and class leaderboard.
      *

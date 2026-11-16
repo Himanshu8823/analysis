@@ -252,7 +252,13 @@ const SidebarTrigger = React.forwardRef<React.ElementRef<typeof Button>, React.C
         data-sidebar="trigger"
         variant="ghost"
         size="icon"
-        className={cn('h-10 w-10', className)}
+        /**
+         * The size is the button component's own — `size="icon"` gives a
+         * 44-pixel target, which is what a finger needs on a phone. The
+         * trigger used to set 40 pixels, which is under the minimum on
+         * every screen in the application.
+         */
+        className={cn(className)}
         onClick={(event) => {
           onClick?.(event);
           toggleSidebar();

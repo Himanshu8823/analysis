@@ -33,11 +33,6 @@ import type { ExtractedMark } from './marks-file.parser';
  */
 
 /**
- * The components a theory subject is broken into, in the order they appear.
- */
-const THEORY_COMPONENTS = ['CA1', 'CA2', 'MID_SEM', 'WRITTEN'] as const;
-
-/**
  * The component a practical-only subject is recorded as.
  */
 const PRACTICAL_COMPONENT = 'PRACTICAL';
@@ -49,7 +44,11 @@ const PRACTICAL_COMPONENT = 'PRACTICAL';
  * maximum has to come from the scheme's own rules.
  *
  * These are the maxima the college's own component sheet records:
- * CA1 20, CA2 20, Mid-Sem 30, Written 45, Practical 25.
+ * CA1 20, CA2 20, Mid-Sem 30, Written 100, Practical 25.
+ *
+ * The written paper is out of 100 — the scheme's own pass rule for it is
+ * 45 of 100 (`WRITTEN_MIN` in the 2019 calculator), so a maximum of 45
+ * would refuse every student who scored above it.
  *
  * The values are the *default*. When the upload is confirmed, the maximum
  * is taken from the subject's own component configuration, which is what
@@ -60,7 +59,7 @@ const COMPONENT_MAX: Record<string, number> = {
   CA1: 20,
   CA2: 20,
   MID_SEM: 30,
-  WRITTEN: 45,
+  WRITTEN: 100,
   PRACTICAL: 25,
   // SCHEME_2022 / SCHEME_2024 — internal 40 (CT1 15 + Mid 15 + Quiz 10)
   // and external 60. The printed sheet still labels the theory components
@@ -119,7 +118,9 @@ function normalise(value: unknown): string {
  * `Percentage` and `SGPA` would be read as subject headings, and every
  * column after the first real subject would be shifted out of alignment.
  */
-function readSubjectHeader(cell: unknown): { subjectCode: string; kind: 'theory' | 'practical' } | null {
+function readSubjectHeader(
+  cell: unknown
+): { subjectCode: string; kind: 'theory' | 'practical' } | null {
   const text = String(cell ?? '').trim();
   if (!text) return null;
 
@@ -230,19 +231,13 @@ export function parseDbatuStatementLines(lines: string[]): ParsedStatement {
   const subHeaderLine = lines[headerIndex + 1] ?? '';
 
   /**
-   * The header is one line, but it holds two kinds of content: the identity
-   * columns on the left, and the subject and summary columns on the right.
-   * The right-hand side is delimited by `|`, so it is split out first.
+   * The subject blocks, read from the whole line. The header holds two kinds
+   * of content: the identity columns on the left, and the subject and summary
+   * columns on the right, the latter delimited by `|`.
    *
    * The first subject shares the identity block — it sits after the name
    * column and before the first `|` — so the identity block is cut at the
    * subject rather than at the delimiter.
-   */
-  const pipeIndex = headerLine.indexOf('|');
-
-  /**
-   * The subject blocks, read from the whole line. The first one shares the
-   * identity block, so the search starts at the beginning of the line.
    */
   const subjectBlocks = headerLine
     .split('|')
@@ -261,9 +256,7 @@ export function parseDbatuStatementLines(lines: string[]): ParsedStatement {
    * The identity columns are the cells of the first block before the first
    * subject.
    */
-  const firstBlockCells = splitStatementLine(
-    headerLine.split('|')[0].trim()
-  );
+  const firstBlockCells = splitStatementLine(headerLine.split('|')[0].trim());
   const firstSubjectCell = subjectBlocks.length > 0 ? subjectBlocks[0] : '';
   const firstSubjectIndex = firstBlockCells.indexOf(firstSubjectCell);
   const identityBlock = firstBlockCells
@@ -311,22 +304,66 @@ export function parseDbatuStatementLines(lines: string[]): ParsedStatement {
 
     /**
      * A practical is assessed as *one* mark, and the scheme's pass rule for
-     * it is a single threshold. The statement prints it in a column of its
-     * own, so it is read as one mark.
+     * it is a single threshold.
      *
-     * It is not recorded under the printed component names: a mark is keyed
-     * on the student, the subject and the exam type, so a practical written
-     * as `CA1` would overwrite the theory part's `CA1` of the same student.
+     * The statement prints the practical in a block of its own. That block
+     * may be a single column — a practical paper, marked out of 25 — or it
+     * may be the practical subject's own four-part breakdown, the way the
+     * college prints a subject that carries both a theory paper and a
+     * practical paper.
+     *
+     * Whichever it is, the practical's marks must never be recorded under
+     * the theory's exam types. A mark is keyed on the student, the subject
+     * and the exam type, so a practical recorded as `CA1` would overwrite
+     * the theory part's `CA1` of the same student — the theory's mark would
+     * silently become the practical's mark.
+     *
+     * So the practical's own components are recorded under their own
+     * names, prefixed to keep them apart, and the block's last column —
+     * the practical paper itself — is recorded as the practical.
      */
     if (subject.kind === 'practical') {
-      components.push({
-        subjectCode: subject.subjectCode,
-        examType: PRACTICAL_COMPONENT,
-        maxMarks: COMPONENT_MAX[PRACTICAL_COMPONENT],
-        columnIndex,
-        sourceColumns: [columnIndex],
+      /**
+       * The block is as wide as the sub-header says it is. The columns are
+       * consumed here whether or not they are summed, so that the next
+       * subject's columns line up.
+       */
+      const blockColumns = named.length;
+
+      /**
+       * A single-column block is the practical paper itself.
+       */
+      if (blockColumns === 1) {
+        components.push({
+          subjectCode: subject.subjectCode,
+          examType: PRACTICAL_COMPONENT,
+          maxMarks: COMPONENT_MAX[PRACTICAL_COMPONENT],
+          columnIndex,
+          sourceColumns: [columnIndex],
+        });
+        columnIndex += 1;
+        return;
+      }
+
+      /**
+       * A wider block is the practical subject's own breakdown. Its
+       * components keep their names but are marked as practical parts, and
+       * the last one — the practical paper — is recorded as the practical.
+       */
+      named.forEach((examType, position) => {
+        const isThePracticalPaper = position === named.length - 1;
+
+        components.push({
+          subjectCode: subject.subjectCode,
+          examType: isThePracticalPaper ? PRACTICAL_COMPONENT : `PRACTICAL_${examType}`,
+          maxMarks: isThePracticalPaper
+            ? COMPONENT_MAX[PRACTICAL_COMPONENT]
+            : (COMPONENT_MAX[examType] ?? 0),
+          columnIndex,
+          sourceColumns: [columnIndex],
+        });
+        columnIndex += 1;
       });
-      columnIndex += 1;
       return;
     }
 
@@ -440,14 +477,19 @@ export function parseDbatuStatementLines(lines: string[]): ParsedStatement {
 
       if (unreadable) continue;
 
-      if (obtained > component.maxMarks) {
-        errors.push({
-          row: rowNumber,
-          error: `Mark ${obtained} for ${component.subjectCode} ${component.examType} exceeds the maximum of ${component.maxMarks}`,
-        });
-        continue;
-      }
-
+      /**
+       * The mark is recorded even when it is above the default maximum.
+       *
+       * The maximum the parser knows is a *default* — the statement prints
+       * the marks only, never the maximum, and the real maximum comes from
+       * the subject's own component configuration when the upload is
+       * confirmed. Refusing the mark here would drop a perfectly valid
+       * mark for a subject whose scheme splits it differently, and the
+       * student would silently lose it.
+       *
+       * The mark is checked against the subject's *real* maximum at the
+       * step that knows it, and it is reported there.
+       */
       rows.push({
         rollNo: identifier,
         subjectCode: component.subjectCode,
@@ -483,8 +525,11 @@ function hasSubjectHeader(line: string): boolean {
  * themselves by wide gaps, so each wide-gap-separated cell is one group's
  * component list.
  *
- * The identity cell (`No`) and the summary cell (`Marks`) are not components
- * and are dropped.
+ * The identity cell (`No`) and the summary cell (`Marks`) name no
+ * component, so they are dropped and only the groups that really name
+ * components are returned. That keeps the groups lined up with the subject
+ * blocks of the header — the header's `|`-separated blocks and the
+ * sub-header's groups describe the same subjects in the same order.
  */
 function readSubHeaderGroups(line: string): string[][] {
   if (!line.trim()) return [];
@@ -575,17 +620,6 @@ function isPrnLabel(cell: string): boolean {
 }
 
 /**
- * Whether a header cell names the roll-number column.
- */
-function isRollLabel(cell: string): boolean {
-  const n = normalise(cell);
-  return (
-    n === 'roll' || n === 'roll no' || n === 'roll no.' || n === 'roll number' ||
-    n === 'sr no' || n === 'sno'
-  );
-}
-
-/**
  * Whether a header cell names the student's name column.
  */
 function isNameLabel(cell: string): boolean {
@@ -599,17 +633,39 @@ function isNameLabel(cell: string): boolean {
  * The PRN is preferred — it is the number the college identifies a student
  * by. The roll number is the fallback. Both are read by the column the
  * header gives them.
+ *
+ * A cell that does not hold an identifier is not used as one. A row whose
+ * identifier cell is blank leaves the student unnamed, and the name that
+ * follows it in the same row must not be mistaken for the identifier —
+ * recording every mark of that row against a name would create a student
+ * called "SOME STUDENT".
  */
 function readLineIdentifier(cells: string[], identity: IdentityLayout): string {
   if (identity.prnColumn >= 0) {
     const prn = String(cells[identity.prnColumn] ?? '').trim();
-    if (prn) return prn;
+    if (isIdentifier(prn)) return prn;
   }
 
   const roll = String(cells[identity.rollColumn] ?? '').trim();
-  if (roll) return roll;
+  if (isIdentifier(roll)) return roll;
 
   return '';
+}
+
+/**
+ * Whether a cell holds an identifier.
+ *
+ * A PRN and a roll number are both numbers — a run of digits, with an
+ * optional leading letter for the roll numbers the college prints as
+ * `A12`. A name is not an identifier, and neither is a blank cell.
+ */
+function isIdentifier(cell: string): boolean {
+  if (!cell) return false;
+
+  /**
+   * A number, with an optional letter before it and optional separators.
+   */
+  return /^[A-Za-z]?[\d][\d\-/]*$/.test(cell.replace(/\s+/g, ''));
 }
 
 /**

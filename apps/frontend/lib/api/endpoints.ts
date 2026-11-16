@@ -23,6 +23,21 @@ export const ENDPOINTS = {
     DELETE: (id: string) => `/users/${id}`,
     MEMBERS: '/users/members',
     ROLES: '/users/roles',
+    /**
+     * What revoking this member would do.
+     *
+     * Called before the confirmation is shown, so the administrator sees the
+     * consequences — the allocations released, the classes that lose their
+     * teacher — before committing to the change.
+     */
+    REVOCATION_IMPACT: (id: string) => `/users/${id}/revocation-impact`,
+    /**
+     * Restores a revoked member's account.
+     *
+     * Their allocations and roles are not restored automatically — they were
+     * released deliberately, and the administrator re-applies them by hand.
+     */
+    RESTORE: (id: string) => `/users/${id}/restore`,
   },
   INVITES: {
     LIST: '/invites',
@@ -41,6 +56,19 @@ export const ENDPOINTS = {
     PERMISSIONS: (id: string) => `/roles/${id}/permissions`,
     ASSIGN_PERMISSIONS: (id: string) => `/roles/${id}/permissions`,
   },
+  /**
+   * The roles a member holds.
+   *
+   * Assigning and taking back a role are the most consequential things in
+   * the system, so they go through their own endpoints rather than being
+   * an edit to the member record — the change is audited and the
+   * permission cache is invalidated on the member's very next request.
+   */
+  USER_ROLES: {
+    LIST: (userId: string) => `/user-roles/${userId}`,
+    ASSIGN: '/user-roles',
+    REVOKE: '/user-roles',
+  },
   PERMISSIONS: {
     LIST: '/permissions',
     CREATE: '/permissions',
@@ -55,12 +83,45 @@ export const ENDPOINTS = {
   ACADEMIC: {
     YEARS: '/academic/years',
     BATCHES: '/academic/batches',
+    /**
+     * Creates an academic year.
+     *
+     * The dates are what the system uses to work out which year is running.
+     */
+    CREATE_YEAR: '/academic/years',
+    /**
+     * Makes an academic year the running one.
+     */
+    ACTIVATE_YEAR: (id: string) => `/academic/years/${id}/activate`,
+    /**
+     * The academic structure — branches, years, semesters, subjects,
+     * teachers and how ready each class is.
+     */
+    STRUCTURE: '/academic/structure',
   },
   SCHEMES: {
     LIST: '/schemes',
     CREATE: '/schemes',
     GET: (id: string) => `/schemes/${id}`,
     UPDATE: (id: string) => `/schemes/${id}`,
+  },
+  /**
+   * The scheme reader — reading a syllabus PDF into reviewable subjects.
+   *
+   * The flow is deliberately three steps: read the document, let a human
+   * check what came back, then write it. The sample document is public,
+   * because a reference file cannot be privileged — anyone may look at a
+   * published university syllabus.
+   */
+  SCHEME_READER: {
+    /** Whether automatic reading is available on this system. */
+    AVAILABILITY: '/scheme-reader/availability',
+    /** Uploads a PDF and reads it into courses, in one call. */
+    READ_FILE: '/scheme-reader/read-file',
+    /** Writes the reviewed courses as subjects. */
+    CONFIRM: '/scheme-reader/confirm',
+    /** The sample syllabus PDF — served as a download. */
+    SAMPLE: '/scheme-reader/sample',
   },
   SUBJECTS: {
     LIST: '/subjects',
@@ -104,6 +165,13 @@ export const ENDPOINTS = {
     LIST: '/class-teacher-assignments',
     CREATE: '/class-teacher-assignments',
     DELETE: (id: string) => `/class-teacher-assignments/${id}`,
+    /**
+     * The classes that have students but no class teacher.
+     *
+     * This is the "class teacher required" state — it is what keeps the gap
+     * visible after a member is revoked.
+     */
+    NEEDS_TEACHER: '/class-teacher-assignments/needs-teacher',
   },
   STUDENTS: {
     LIST: '/students',
@@ -118,20 +186,45 @@ export const ENDPOINTS = {
      *
      * These resolve the student from the session, so there is no id in the
      * path and no way to widen the window from the client (§3.7).
+     *
+     * The paths have **no** `/students` prefix: the server's own
+     * `MyResultController` sits at the root, because these routes are the
+     * student's own record rather than a part of the roster. Calling
+     * `/students/my-result` would fall through to the roster's
+     * `GET /students/:id` and be refused — the student's own result would
+     * never load.
      */
-    MY_RESULT: '/students/my-result',
-    MY_TOPPERS: '/students/my-toppers',
-    MY_STUDENT: '/students/my/student',
+    MY_RESULT: '/my-result',
+    MY_TOPPERS: '/my-toppers',
+    MY_STUDENT: '/my/student',
     /**
      * Provisions a login for a student the exam cell has just created.
      */
     PROVISION_LOGIN: (id: string) => `/students/${id}/provision-login`,
+    /**
+     * The student's whole profile.
+     *
+     * The server decides what the caller receives: a section they may not
+     * read is absent from the payload, not present and empty.
+     */
+    PROFILE: (id: string) => `/students/${id}/profile`,
+    /**
+     * Provisions logins for a whole class, or for a selected set.
+     */
+    BULK_PROVISION_LOGINS: '/students/bulk-provision-logins',
   },
   MARKS: {
     LIST: '/marks',
     CREATE_BULK: '/marks/bulk',
     UPDATE: (id: string) => `/marks/${id}`,
     CALCULATE: (studentId: string) => `/marks/calculate/${studentId}`,
+    /**
+     * The examination cell's correction of a mark a teacher holds.
+     *
+     * A correction is a different operation from an ordinary entry: it
+     * needs a reason, and the mark it replaces is kept on record.
+     */
+    CORRECT: '/marks/correct',
   },
   UPLOAD: {
     CREATE: '/upload',
@@ -140,11 +233,33 @@ export const ENDPOINTS = {
     CONFIRM: (jobId: string) => `/upload/jobs/${jobId}/confirm`,
     JOBS: '/upload/jobs',
   },
+  EXAMINATIONS: {
+    LIST: '/examinations',
+    GET: (id: string) => `/examinations/${id}`,
+    CREATE: '/examinations',
+    /**
+     * Publishes a class's result.
+     *
+     * The server refuses it unless every student's result is in.
+     */
+    PUBLISH: (id: string) => `/examinations/${id}/publish`,
+    /**
+     * Returns a published result to being worked on.
+     */
+    UNPUBLISH: (id: string) => `/examinations/${id}/publish`,
+  },
   REPORTS: {
     GENERATE: '/reports',
     LIST: '/reports',
     GET: (id: string) => `/reports/${id}`,
     DOWNLOAD: (id: string) => `/reports/${id}/download`,
+    /**
+     * Archives a report.
+     *
+     * The report is not deleted — it is a statement about a class's results,
+     * and the record is kept with the reason it was archived.
+     */
+    DELETE: (id: string) => `/reports/${id}`,
     /**
      * Whether a class's result is complete enough to report on.
      *

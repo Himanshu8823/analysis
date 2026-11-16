@@ -57,7 +57,10 @@ export default function EditStudentPage() {
       <PageHeader
         title={`Edit ${student.name}`}
         description="Update the student's details, then save your changes."
-        backLink={{ href: '/students', label: 'Back to students' }}
+        backLink={{
+          href: `/students/${student.id}`,
+          label: 'Back to the student’s profile',
+        }}
       />
 
       <div className="rounded-xl border border-hairline bg-card p-4 md:p-6">
@@ -70,14 +73,14 @@ export default function EditStudentPage() {
           onSubmit={(payload) => {
             updateStudent(
               { id: student.id, payload },
-              { onSuccess: () => router.push('/students') },
+              { onSuccess: () => router.push(`/students/${student.id}`) },
             );
           }}
         />
 
         <div className="mt-6 flex flex-col-reverse gap-2 border-t border-hairline pt-4 md:flex-row md:items-center md:justify-end">
           <Button variant="secondary" asChild className="w-full md:w-auto">
-            <a href="/students">Cancel</a>
+            <a href={`/students/${student.id}`}>Cancel</a>
           </Button>
           <Button
             type="submit"

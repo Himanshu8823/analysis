@@ -5,6 +5,7 @@ import { UploadService } from './upload.service';
 import { UploadRepository } from './upload.repository';
 import { UploadProcessor } from './processors/upload.processor';
 import { RbacModule } from '@/modules/rbac/rbac.module';
+import { MarksModule } from '@/modules/marks/marks.module';
 
 @Module({
   imports: [
@@ -13,6 +14,11 @@ import { RbacModule } from '@/modules/rbac/rbac.module';
     // The confirm path resolves the caller's own permissions to decide
     // between the exam cell's reach and the teacher's allocation-limited one.
     RbacModule,
+    // The confirm path writes marks, so it answers the same question the
+    // marks screen does: may this member write this mark? The rule lives in
+    // one place — a second copy of it here would be a second rule, and two
+    // rules drift.
+    MarksModule,
   ],
   controllers: [UploadController],
   providers: [UploadService, UploadRepository, UploadProcessor],

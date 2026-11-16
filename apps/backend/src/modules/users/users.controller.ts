@@ -1,8 +1,8 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { CreateUserDto, ListMembersDto, UpdateUserDto } from './dto';
-import { CurrentUser, Permissions } from '@/common/decorators';
+import { CreateUserDto, ListMembersDto, UpdateUserDto, RevokeMemberDto } from './dto';
+import { CurrentUser, Permissions, Audited, AuditAction, AuditResource } from '@/common/decorators';
 import { parseOptionalInt, parseOptionalString } from '@/common/utils/query-params';
 import type { JwtPayload } from '@/common/types';
 
@@ -14,6 +14,10 @@ export class UsersController {
 
   @Post()
   @Permissions('users:write')
+  @Audited(AuditResource.USER, AuditAction.CREATE, {
+    resourceIdSource: 'response',
+    detailsFromBody: { email: 'email', name: 'name' },
+  })
   @ApiOperation({ summary: 'Create new user' })
   async create(@Body() dto: CreateUserDto, @CurrentUser() user: JwtPayload) {
     return this.service.create(dto, user.sub);
@@ -56,6 +60,27 @@ export class UsersController {
     return this.service.findRoles();
   }
 
+  /**
+   * What revoking this member would do.
+   *
+   * The member edit screen calls this before showing the confirmation, so the
+   * administrator sees the consequences — how many allocations, which classes
+   * will lose their teacher — before committing to it.
+   */
+  @Get(':id/revocation-impact')
+  @Permissions('users:write')
+  @ApiOperation({
+    summary: 'Preview what revoking this member would affect',
+    description:
+      'Returns the number of subject allocations and class teacher assignments ' +
+      'that would be released, and the consequences in plain language.',
+  })
+  async revocationImpact(@Param('id') id: string) {
+    const impact = await this.service.revocationPreview(id);
+    const consequences = await this.service.revocationConsequences(id);
+    return { ...impact, consequences };
+  }
+
   @Get(':id')
   @Permissions('users:read')
   async findById(@Param('id') id: string) {
@@ -64,6 +89,10 @@ export class UsersController {
 
   @Put(':id')
   @Permissions('users:write')
+  @Audited(AuditResource.USER, AuditAction.UPDATE, {
+    resourceIdSource: 'param',
+    detailsFromBody: { name: 'name', email: 'email' },
+  })
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateUserDto,
@@ -72,9 +101,45 @@ export class UsersController {
     return this.service.update(id, dto, user.sub);
   }
 
+  /**
+   * Revokes a member's access.
+   *
+   * The full lifecycle runs here: the account is deactivated, every session
+   * is revoked, pending invitations are withdrawn, subject allocations and
+   * class teacher assignments are released, and the roles are removed. A
+   * reason is required and is recorded in the audit trail.
+   */
   @Delete(':id')
   @Permissions('users:write')
-  async delete(@Param('id') id: string, @CurrentUser() user: JwtPayload): Promise<void> {
-    return this.service.delete(id, user.sub);
+  @Audited(AuditResource.USER, AuditAction.DEACTIVATE, {
+    resourceIdSource: 'param',
+    detailsFromBody: { reason: 'reason' },
+  })
+  async delete(
+    @Param('id') id: string,
+    @Body() dto: RevokeMemberDto,
+    @CurrentUser() user: JwtPayload
+  ): Promise<void> {
+    await this.service.delete(id, user.sub, dto.reason);
+  }
+
+  /**
+   * Restores a revoked member's account.
+   *
+   * Their allocations and roles are not restored automatically — they were
+   * released deliberately, and the administrator re-applies them by hand.
+   */
+  @Post(':id/restore')
+  @Permissions('users:write')
+  @Audited(AuditResource.USER, AuditAction.UPDATE, {
+    resourceIdSource: 'param',
+    detailsFromBody: { reason: 'reason' },
+  })
+  async restore(
+    @Param('id') id: string,
+    @Body() dto: RevokeMemberDto,
+    @CurrentUser() user: JwtPayload
+  ): Promise<void> {
+    await this.service.restore(id, user.sub, dto.reason);
   }
 }

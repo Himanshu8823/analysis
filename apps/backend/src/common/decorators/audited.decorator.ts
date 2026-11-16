@@ -19,6 +19,33 @@ export const AuditAction = {
   DELETE: 'DELETE',
   BULK_IMPORT: 'BULK_IMPORT',
   CONFIRM: 'CONFIRM',
+  /**
+   * The exam cell's correction of a mark a teacher holds.
+   *
+   * A correction is not an ordinary entry: it overwrites work another
+   * person is responsible for, so it is recorded under its own action and
+   * always carries the reason it was given.
+   */
+  CORRECTION: 'CORRECTION',
+  /**
+   * A role was granted to a member. Privilege changes are the most
+   * consequential thing this system records, so they have their own action
+   * rather than being filed under a generic update.
+   */
+  GRANT: 'GRANT',
+  /**
+   * A role was taken back from a member.
+   */
+  REVOKE: 'REVOKE',
+  /**
+   * A member's access was revoked — their account deactivated, their
+   * allocations released, their tokens invalidated.
+   */
+  DEACTIVATE: 'DEACTIVATE',
+  /**
+   * A member's record was archived.
+   */
+  ARCHIVE: 'ARCHIVE',
 } as const;
 
 export type AuditActionValue = (typeof AuditAction)[keyof typeof AuditAction];
@@ -40,6 +67,25 @@ export const AuditResource = {
   UPLOAD_JOB: 'upload_job',
   /** A member's own account — the profile screen's changes. */
   USER: 'user',
+  /**
+   * A generated report.
+   *
+   * A report is a statement about a class's results. Generating one and
+   * deleting one are both consequential, so both are recorded — a report
+   * that exists but leaves no trace cannot be accounted for.
+   */
+  REPORT: 'report',
+  /**
+   * An academic year.
+   *
+   * Changing the running year changes what every screen defaults to, so it
+   * is recorded like any other academic change.
+   */
+  ACADEMIC_YEAR: 'academic_year',
+  /**
+   * An examination — the result lifecycle of one class context.
+   */
+  EXAMINATION: 'examination',
 } as const;
 
 export type AuditResourceValue = (typeof AuditResource)[keyof typeof AuditResource];
@@ -79,6 +125,19 @@ export interface AuditedOptions {
    * bulk import of thousands of rows cannot land in the JSON column.
    */
   detailsFromBody?: Record<string, string>;
+  /**
+   * The name of the request body field that carries the **reason** for the
+   * change.
+   *
+   * A destructive or state-changing operation that someone else will have to
+   * explain later must record why. The reason is copied into the audit row's
+   * `details` under the key `reason`, so the audit screen can show it
+   * beside the change.
+   *
+   * Defaults to `reason` when the route does not name one — the field is
+   * called `reason` everywhere in this system.
+   */
+  reasonField?: string;
   /**
    * When true the route is not audited even if a class-level `@Audited`
    * decorator covers it.

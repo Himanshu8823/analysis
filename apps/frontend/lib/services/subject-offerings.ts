@@ -26,8 +26,6 @@ export interface SubjectOfferingOption {
   branchId?: string;
   semester?: number;
   schemeId?: string;
-  /** The curriculum year the offering belongs to (1, 2, 3, 4). */
-  year?: number;
   academicYearId?: string | null;
 }
 
@@ -45,7 +43,6 @@ interface OfferingRow {
   branchId: string;
   semester: number;
   schemeId: string;
-  year?: number;
   academicYearId?: string | null;
   subject?: { id?: string; code?: string; name?: string };
 }
@@ -66,7 +63,6 @@ interface SubjectWithOfferings extends Subject {
     branchId: string;
     semester: number;
     schemeId: string;
-    year?: number;
     academicYearId?: string | null;
     subject?: { id?: string; code: string; name: string };
   }>;
@@ -98,7 +94,6 @@ function toOfferingOptions(subject: SubjectWithOfferings): SubjectOfferingOption
       branchId: offering.branchId,
       semester: offering.semester,
       schemeId: offering.schemeId,
-      year: offering.year,
       academicYearId: offering.academicYearId ?? null,
     }));
   }
@@ -115,7 +110,6 @@ function toOfferingOptions(subject: SubjectWithOfferings): SubjectOfferingOption
       branchId: subject.branchId,
       semester: subject.semester,
       schemeId: subject.schemeId,
-      year: subject.year,
       academicYearId: null,
     },
   ];
@@ -187,7 +181,6 @@ async function listFromOfferingsEndpoint(
       branchId: row.branchId,
       semester: row.semester,
       schemeId: row.schemeId,
-      year: row.year,
       academicYearId: row.academicYearId ?? null,
     }));
   } catch (error) {

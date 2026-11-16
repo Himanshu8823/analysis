@@ -62,9 +62,9 @@ export {
 export {
   useMembers,
   useRoles,
-  useSetMemberActive,
+  useRevocationImpact,
+  useRevokeMember,
   useUpdateMember,
-  useDeleteMember,
 } from './useMembers';
 export {
   useDashboardHeader,
@@ -75,6 +75,7 @@ export {
 export {
   useTeacherAllocations,
   useClassTeacherAssignments,
+  useClassesNeedingTeacher,
   useCreateTeacherAllocation,
   useDeleteTeacherAllocation,
   useCreateClassTeacherAssignment,

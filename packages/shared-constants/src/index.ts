@@ -22,6 +22,34 @@ export const PERMISSIONS = {
   STUDENTS_READ: 'students:read',
   STUDENTS_READ_OWN: 'students:read_own',
   STUDENTS_WRITE: 'students:write',
+  /**
+   * The right to read a student's **sensitive identity** data — the national
+   * identity reference (Aadhaar or equivalent) and the blood group.
+   *
+   * This is separated from `students:read` on purpose. A teacher holds
+   * `students:read` — they need the roster to enter marks — but they have no
+   * business reading a student's identity number or blood group. Only the
+   * examination cell and the Super Admin hold this.
+   */
+  STUDENTS_READ_SENSITIVE: 'students:read_sensitive',
+  /**
+   * The right to read a student's **guardian** details — the name, relation,
+   * phone, email and occupation of the parent or guardian.
+   *
+   * A teacher does not hold it: a guardian's phone number is the parent's
+   * personal contact information, and it is not part of a mark sheet. The
+   * exam cell and the HOD do hold it — a HOD may need to reach a guardian
+   * about a student's attendance, and the exam cell records the details.
+   */
+  STUDENTS_READ_GUARDIAN: 'students:read_guardian',
+  /**
+   * The right to **provision** a whole class of student logins at once.
+   *
+   * Separate from `students:write` because it creates accounts: a bulk
+   * provisioning run creates a hundred logins, and it deserves its own
+   * right rather than riding on the ordinary "edit a student" one.
+   */
+  STUDENTS_BULK_PROVISION: 'students:bulk_provision',
   MARKS_READ: 'marks:read',
   MARKS_READ_OWN: 'marks:read_own',
   MARKS_WRITE: 'marks:write',
@@ -106,6 +134,8 @@ export const ROLE_PERMISSIONS = {
     PERMISSIONS.SUBJECTS_READ,
     PERMISSIONS.SUBJECT_OFFERINGS_READ,
     PERMISSIONS.STUDENTS_READ,
+    PERMISSIONS.STUDENTS_READ_SENSITIVE,
+    PERMISSIONS.STUDENTS_READ_GUARDIAN,
     PERMISSIONS.MARKS_READ,
     PERMISSIONS.REPORTS_READ,
     PERMISSIONS.ANALYTICS_READ,
@@ -117,6 +147,16 @@ export const ROLE_PERMISSIONS = {
   ADMIN: [
     PERMISSIONS.STUDENTS_READ,
     PERMISSIONS.STUDENTS_WRITE,
+    /**
+     * The exam cell records the identity and guardian details in the first
+     * place, so it is the one role that reads them back.
+     */
+    PERMISSIONS.STUDENTS_READ_SENSITIVE,
+    PERMISSIONS.STUDENTS_READ_GUARDIAN,
+    /**
+     * Provisioning a whole class of logins at once is the exam cell's job.
+     */
+    PERMISSIONS.STUDENTS_BULK_PROVISION,
     PERMISSIONS.SUBJECTS_READ,
     PERMISSIONS.SUBJECTS_WRITE,
     PERMISSIONS.SUBJECTS_DELETE,
@@ -148,6 +188,13 @@ export const ROLE_PERMISSIONS = {
   /** The branch-scoped department head who allocates the teaching. */
   HOD: [
     PERMISSIONS.STUDENTS_READ,
+    /**
+     * The HOD reads the whole branch student, so they may reach a guardian
+     * — a HOD may need to talk to a parent about a student's standing. The
+     * national identity reference is *not* granted: it is the exam cell's
+     * record, and a branch head has no operational need for it.
+     */
+    PERMISSIONS.STUDENTS_READ_GUARDIAN,
     PERMISSIONS.MARKS_READ,
     PERMISSIONS.REPORTS_READ,
     PERMISSIONS.REPORTS_GENERATE,
@@ -176,6 +223,13 @@ export const ROLE_PERMISSIONS = {
    */
   PRINCIPAL: [
     PERMISSIONS.STUDENTS_READ,
+    /**
+     * The Principal sees the academic picture. The guardian's contact
+     * details are part of it — a Principal may need to reach a parent — but
+     * the national identity reference is deliberately **not** granted: the
+     * Principal has no operational need for a student's identity number.
+     */
+    PERMISSIONS.STUDENTS_READ_GUARDIAN,
     PERMISSIONS.MARKS_READ,
     PERMISSIONS.REPORTS_READ,
     PERMISSIONS.REPORTS_DOWNLOAD,
@@ -285,3 +339,16 @@ export const RATE_LIMITS = {
   GENERAL_API: { windowMs: 60 * 1000, max: 100 },
   ANALYTICS: { windowMs: 60 * 1000, max: 30 },
 } as const;
+
+// ============================================================================
+// Capability layer & academic derivation
+//
+// Imported by both the backend (to enforce a decision in the service layer)
+// and the frontend (to hide what the member may not use). See the header of
+// each file for the full rationale.
+// ============================================================================
+
+export * from './capabilities';
+export * from './academic';
+export * from './running-year';
+export * from './scheme-rules';

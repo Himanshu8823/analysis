@@ -39,6 +39,98 @@ export class MarksRepository {
     });
   }
 
+  /**
+   * Writes a mark as an explicit correction by the examination cell.
+   *
+   * The value the mark held is kept on a revision row before it is replaced,
+   * so the original entry is never lost — only superseded. The revision also
+   * names the teacher whose work was corrected and the reason it was done.
+   *
+   * The two writes happen in one transaction: a revision without the
+   * correction, or a correction without its revision, would both be wrong.
+   */
+  async createAsCorrection(
+    data: CreateMarkDto,
+    correctedBy: string,
+    revision: {
+      reason: string;
+      overriddenTeacherId: string | null;
+      overriddenTeacherName: string | null;
+    }
+  ): Promise<Mark> {
+    const previous = await this.prisma.mark.findUnique({
+      where: {
+        studentId_subjectOfferingId_examType_academicYearId: {
+          studentId: data.studentId,
+          subjectOfferingId: data.subjectOfferingId,
+          examType: data.examType,
+          academicYearId: data.academicYearId,
+        },
+      },
+    });
+
+    const mark = await this.prisma.mark.upsert({
+      where: {
+        studentId_subjectOfferingId_examType_academicYearId: {
+          studentId: data.studentId,
+          subjectOfferingId: data.subjectOfferingId,
+          examType: data.examType,
+          academicYearId: data.academicYearId,
+        },
+      },
+      create: {
+        studentId: data.studentId,
+        subjectOfferingId: data.subjectOfferingId,
+        examType: data.examType,
+        marksObtained: data.marksObtained,
+        maxMarks: data.maxMarks,
+        isAbsent: data.isAbsent ?? false,
+        isWithheld: data.isWithheld ?? false,
+        academicYearId: data.academicYearId,
+        remarks: data.remarks,
+        createdBy: correctedBy,
+        updatedBy: correctedBy,
+      },
+      update: {
+        marksObtained: data.marksObtained,
+        maxMarks: data.maxMarks,
+        isAbsent: data.isAbsent ?? false,
+        isWithheld: data.isWithheld ?? false,
+        remarks: data.remarks,
+        updatedBy: correctedBy,
+      },
+    });
+
+    /**
+     * A correction over a mark that did not exist yet has no previous value
+     * to preserve, so there is nothing to record — the audit trail still
+     * carries the correction itself.
+     */
+    if (!previous) return mark;
+
+    await this.prisma.markRevision.create({
+      data: {
+        markId: mark.id,
+        previousMarksObtained: previous.marksObtained,
+        previousMaxMarks: previous.maxMarks,
+        previousIsAbsent: previous.isAbsent,
+        previousIsWithheld: previous.isWithheld,
+        previousRemarks: previous.remarks,
+        correctedMarksObtained: data.marksObtained,
+        correctedMaxMarks: data.maxMarks,
+        correctedIsAbsent: data.isAbsent ?? false,
+        correctedIsWithheld: data.isWithheld ?? false,
+        correctedRemarks: data.remarks,
+        correctedBy,
+        overriddenTeacherId: revision.overriddenTeacherId,
+        overriddenTeacherName: revision.overriddenTeacherName,
+        reason: revision.reason,
+      },
+    });
+
+    return mark;
+  }
+
   async createBulk(data: BulkCreateMarksDto, createdBy: string): Promise<Mark[]> {
     const operations = data.marks.map((m) =>
       this.prisma.mark.upsert({
@@ -76,7 +168,7 @@ export class MarksRepository {
 
   async findAll(params: {
     studentId?: string;
-    subjectOfferingId?: string;
+    subjectOfferingId?: string | string[];
     subjectId?: string;
     examType?: string;
     academicYearId?: string;
@@ -84,7 +176,15 @@ export class MarksRepository {
   }) {
     const where: Prisma.MarkWhereInput = {};
     if (params.studentId) where.studentId = params.studentId;
-    if (params.subjectOfferingId) where.subjectOfferingId = params.subjectOfferingId;
+    /**
+     * The offering filter may be a set — a teacher's allocation spans every
+     * subject they hold, so the listing names them all at once.
+     */
+    if (params.subjectOfferingId) {
+      where.subjectOfferingId = Array.isArray(params.subjectOfferingId)
+        ? { in: params.subjectOfferingId }
+        : params.subjectOfferingId;
+    }
     if (params.subjectId) where.subjectOffering = { subjectId: params.subjectId };
     if (params.examType) where.examType = params.examType;
     if (params.academicYearId) where.academicYearId = params.academicYearId;

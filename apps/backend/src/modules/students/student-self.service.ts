@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import type { Mark, Student } from '@prisma/client';
+import { yearForSemester } from '@/common/utils/academic';
 import { MarksService } from '../marks/marks.service';
 import type { StudentCalculationResult, SubjectOfferingContext } from '../marks/calculator';
 
@@ -246,7 +247,7 @@ export class StudentSelfService {
         name: student.name,
         branch: branch?.name ?? '',
         semester: student.semester,
-        year: student.currentYear,
+        year: yearForSemester(student.semester),
         scheme: scheme?.name ?? '',
         academicYear: academicYear?.year ?? '',
       },

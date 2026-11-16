@@ -22,6 +22,36 @@ export interface RoleSummary {
   };
 }
 
+/**
+ * What revoking a member would do.
+ *
+ * The `consequences` are sentences written by the server for a college
+ * administrator — they name branches, subjects and semesters, never ids.
+ */
+export interface RevocationImpact {
+  memberName: string;
+  memberEmail: string;
+  isActive: boolean;
+  subjectAllocations: number;
+  allocatedSubjects: Array<{
+    subjectName: string;
+    subjectCode: string;
+    branchName: string;
+    semester: number;
+  }>;
+  classTeacherAssignments: number;
+  classesLosingTeacher: Array<{
+    branchName: string;
+    semester: number;
+    schemeName: string;
+    academicYear: string;
+  }>;
+  activeSessions: number;
+  pendingInvitations: number;
+  roles: string[];
+  consequences: string[];
+}
+
 export const usersService = {
   /** Lists members with their assigned roles. */
   listMembers: async (filters?: MemberListFilters): Promise<ListResponse<Member>> => {
@@ -46,8 +76,38 @@ export const usersService = {
     const res = await apiClient.put(ENDPOINTS.USERS.UPDATE(id), payload);
     return res.data.data;
   },
-  delete: async (id: string) => {
-    await apiClient.delete(ENDPOINTS.USERS.DELETE(id));
+  /**
+   * Revokes a member's access.
+   *
+   * The whole lifecycle runs server-side: the account is deactivated, every
+   * session is revoked, pending invitations are withdrawn, allocations and
+   * class teacher assignments are released, and the roles are removed. The
+   * reason is required and is recorded in the audit trail.
+   *
+   * The backend exposes this as `DELETE /users/:id` — it is a revocation, not
+   * a hard delete; the member's history is kept.
+   */
+  revoke: async (id: string, reason: string) => {
+    await apiClient.delete(ENDPOINTS.USERS.DELETE(id), { data: { reason } });
+  },
+  /**
+   * What revoking this member would do.
+   *
+   * Read-only. The member's history is never touched by this call.
+   */
+  revocationImpact: async (id: string): Promise<RevocationImpact> => {
+    const res = await apiClient.get(ENDPOINTS.USERS.REVOCATION_IMPACT(id));
+    return res.data.data;
+  },
+  /**
+   * Restores a revoked member's account.
+   *
+   * Their allocations and roles are **not** restored automatically — they
+   * were released deliberately, and the administrator re-applies them by
+   * hand. The reason is required and is recorded in the audit trail.
+   */
+  restore: async (id: string, reason: string) => {
+    await apiClient.post(ENDPOINTS.USERS.RESTORE(id), { reason });
   },
 };
 

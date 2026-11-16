@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Upload, Trash2, Pencil, Users, SearchX, X } from 'lucide-react';
+import { Plus, Upload, Trash2, Pencil, Users, UserRound, KeyRound, SearchX, X } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/forms/DataTable';
 import { FilterBar } from '@/components/forms/FilterBar';
 import { Pagination } from '@/components/forms/Pagination';
@@ -15,11 +15,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
 import { useStudents, useDeleteStudent } from '@/hooks/useStudents';
+import { useCurrentUser } from '@/hooks/useAuth';
 import { useBranches } from '@/hooks/useBranches';
 import { useSchemes } from '@/hooks/useSchemes';
+import { yearForSemester } from '@/lib/academic';
+import { studentStatusLabel } from '@/lib/utils/student-labels';
 import type { Student } from '@/lib/services/students.service';
 
 export default function StudentsPage() {
@@ -31,6 +42,15 @@ export default function StudentsPage() {
   const [schemeFilter, setSchemeFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  /**
+   * The student whose removal is being confirmed.
+   *
+   * Removing a student is a consequential act, so it is confirmed in a
+   * dialog that says what it affects — rather than in a browser prompt
+   * that can only ask a yes-or-no question.
+   */
+  const [studentToRemove, setStudentToRemove] = useState<Student | null>(null);
 
   useEffect(() => {
     setPage(1);
@@ -52,6 +72,17 @@ export default function StudentsPage() {
 
   const { data, isLoading, isError, refetch } = useStudents(filters);
   const { mutate: deleteStudent } = useDeleteStudent();
+
+  /**
+   * The bulk-provisioning button is offered only to a member who holds
+   * the right to run it.
+   *
+   * The permission comes from the session, so the button and the server's
+   * answer come from the same source — a button that is hidden and an
+   * operation that is refused can never disagree.
+   */
+  const { data: user } = useCurrentUser();
+  const canBulkProvision = (user?.permissions ?? []).includes('students:bulk_provision');
 
   const branches = branchesData ?? [];
   const schemes = schemesData ?? [];
@@ -80,7 +111,22 @@ export default function StudentsPage() {
     {
       key: 'name',
       header: 'Name',
-      render: (row) => <span className="text-ink">{row.name}</span>,
+      /**
+       * The name links to the student's profile.
+       *
+       * The profile is the screen a clerk actually wants when they look at
+       * a student — it is where the whole journey is. The edit form is
+       * reached from the profile, not from the roster, because most people
+       * who open a student record want to *read* it rather than change it.
+       */
+      render: (row) => (
+        <Link
+          href={`/students/${row.id}`}
+          className="text-ink underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+        >
+          {row.name}
+        </Link>
+      ),
     },
     {
       key: 'branch',
@@ -99,7 +145,16 @@ export default function StudentsPage() {
     {
       key: 'year',
       header: 'Year / Sem',
-      render: (row) => `Y${row.currentYear} · S${row.semester}`,
+      render: (row) => `Y${yearForSemester(row.semester)} · S${row.semester}`,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (row) => (
+        <span className="text-body-sm text-body">
+          {studentStatusLabel(row.status ?? 'ACTIVE')}
+        </span>
+      ),
     },
     {
       key: 'actions',
@@ -108,21 +163,26 @@ export default function StudentsPage() {
       render: (row) => (
         <div className="flex items-center justify-end gap-xs">
           <Link
+            href={`/students/${row.id}`}
+            aria-label={`Open the profile of ${row.name}`}
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-strong hover:text-ink"
+          >
+            <UserRound aria-hidden className="h-4 w-4" />
+          </Link>
+          <Link
             href={`/students/${row.id}/edit`}
             aria-label={`Edit ${row.name}`}
             className="inline-flex h-11 w-11 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-strong hover:text-ink"
           >
-            <Pencil className="h-4 w-4" aria-hidden />
+            <Pencil aria-hidden className="h-4 w-4" />
           </Link>
           <button
             type="button"
             aria-label={`Delete ${row.name}`}
-            onClick={() => {
-              if (confirm(`Delete ${row.name}?`)) deleteStudent(row.id);
-            }}
+            onClick={() => setStudentToRemove(row)}
             className="inline-flex h-11 w-11 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-strong hover:text-semantic-down"
           >
-            <Trash2 className="h-4 w-4" aria-hidden />
+            <Trash2 aria-hidden className="h-4 w-4" />
           </button>
         </div>
       ),
@@ -136,6 +196,14 @@ export default function StudentsPage() {
         description="Browse, search, import, and edit student records."
         actions={
           <>
+            {canBulkProvision ? (
+              <Button variant="secondary" asChild className="w-full md:w-auto">
+                <Link href="/students/bulk-provision">
+                  <KeyRound aria-hidden />
+                  Give a class its logins
+                </Link>
+              </Button>
+            ) : null}
             <Button variant="secondary" asChild className="w-full md:w-auto">
               <Link href="/students/import">
                 <Upload aria-hidden />
@@ -262,6 +330,67 @@ export default function StudentsPage() {
             ) : undefined
           }
       />
+
+      {/*
+       * The removal confirmation.
+       *
+       * The student is **archived**, not erased: their record and the marks
+       * they were entered for are kept, so a result that was attributed to
+       * them stays attributed to them. The confirmation says so, because
+       * "delete" would suggest otherwise.
+       */}
+      <Sheet
+        open={studentToRemove !== null}
+        onOpenChange={(next) => {
+          if (!next) setStudentToRemove(null);
+        }}
+      >
+        <SheetContent side="dialog">
+          <SheetHeader>
+            <SheetTitle>Remove this student from the roster?</SheetTitle>
+            <SheetDescription>
+              The student is taken off the roster, but their record is kept — along with the
+              marks entered for them, so a result that was attributed to them stays attributed to
+              them. They will not appear on the roster again, and their login will stop working.
+            </SheetDescription>
+          </SheetHeader>
+
+          {studentToRemove ? (
+            <div className="flex flex-col gap-sm py-base">
+              <p className="text-body-sm text-ink">
+                <strong>{studentToRemove.name}</strong>
+              </p>
+              <p className="text-body-sm text-muted">
+                Roll number {studentToRemove.rollNo} ·{' '}
+                {branchName(branchesData ?? [], studentToRemove.branchId)} · Semester{' '}
+                {studentToRemove.semester}
+              </p>
+            </div>
+          ) : null}
+
+          <SheetFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setStudentToRemove(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                if (!studentToRemove) return;
+                deleteStudent(studentToRemove.id, {
+                  onSuccess: () => setStudentToRemove(null),
+                });
+              }}
+            >
+              Remove from the roster
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </section>
   );
 }

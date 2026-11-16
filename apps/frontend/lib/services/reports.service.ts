@@ -22,6 +22,11 @@ export interface Report {
   fileUrl?: string | null;
   status: ReportStatus;
   errorMessage?: string | null;
+  /** Whether the report has been archived. */
+  isArchived?: boolean;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
+  archiveReason?: string | null;
   createdAt: string;
   completedAt?: string | null;
 }
@@ -106,5 +111,18 @@ export const reportsService = {
   checkReadiness: async (scope: ReportScope): Promise<ReportReadiness> => {
     const res = await apiClient.get(ENDPOINTS.REPORTS.READINESS, { params: scope });
     return res.data.data;
+  },
+  /**
+   * Archives a report.
+   *
+   * The report is not deleted: it is a statement about a class's results, so
+   * the record is kept with the reason it was archived and who archived it.
+   * The file is released.
+   *
+   * The reason is required by the server — a report that vanishes without an
+   * explanation cannot be accounted for.
+   */
+  archive: async (id: string, reason: string): Promise<void> => {
+    await apiClient.delete(ENDPOINTS.REPORTS.DELETE(id), { data: { reason } });
   },
 };

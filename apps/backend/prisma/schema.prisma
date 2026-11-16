@@ -163,6 +163,7 @@ model Branch {
   examinations            Examination[]
   classTeacherAssignments ClassTeacherAssignment[]
   students                Student[]
+  enrollments             StudentEnrollment[]
   userRoles               UserRole[]
   invites                 Invite[]
 
@@ -182,6 +183,7 @@ model Scheme {
   examinations            Examination[]
   classTeacherAssignments ClassTeacherAssignment[]
   students                Student[]
+  enrollments             StudentEnrollment[]
 
   @@map("schemes")
 }
@@ -208,13 +210,15 @@ model Subject {
 
 /// A subject's assignment to a class context (branch + semester + scheme).
 /// This is the row marks and teacher allocations hang off.
+///
+/// The curriculum year is not stored: it is derived from the semester, so it
+/// can never contradict it.
 model SubjectOffering {
   id             String   @id @default(uuid())
   subjectId      String   @map("subject_id")
   branchId       String   @map("branch_id")
   semester       Int
   schemeId       String   @map("scheme_id")
-  year           Int // 1, 2, 3, 4
   academicYearId String?  @map("academic_year_id")
   isActive       Boolean  @default(true) @map("is_active")
   createdAt      DateTime @default(now()) @map("created_at")
@@ -312,6 +316,7 @@ model AcademicYear {
 
   batches                 Batch[]
   students                Student[]
+  enrollments             StudentEnrollment[]
   marks                   Mark[]
   teacherSubjects         TeacherSubject[]
   subjectOfferings        SubjectOffering[]
@@ -333,6 +338,92 @@ model Batch {
   @@map("batches")
 }
 
+/// Where a student stands in the course.
+///
+/// The lifecycle replaces the old flat `isActive` flag, which could only say
+/// "in the system" or "not in the system" — it could not say whether a
+/// student had finished the course, left it, or was away for a term. The
+/// reason and the date travel with the status so a clerk can always answer
+/// "why is this student not on the roster?" without digging.
+enum StudentStatus {
+  /// On the roll, studying.
+  ACTIVE
+  /// The course is complete — the student has passed the final semester.
+  GRADUATED
+  /// The student left before completing the course.
+  DROPPED_OUT
+  /// The student is temporarily away — a medical leave, a year abroad.
+  ON_LEAVE
+}
+
+/// The student's gender, as the college records it.
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  /// The college has not recorded it — the default, so a record is never
+  /// rejected for omitting a field the college does not yet hold.
+  NOT_RECORDED
+}
+
+/// The blood group, as recorded on the college's identity card.
+enum BloodGroup {
+  A_POS
+  A_NEG
+  B_POS
+  B_NEG
+  AB_POS
+  AB_NEG
+  O_POS
+  O_NEG
+  /// Not recorded.
+  NOT_RECORDED
+}
+
+/// The reservation category a student falls under.
+///
+/// The values are the ones an Indian college uses: the general category and
+/// the reserved categories named in the statutes.
+enum ReservedCategory {
+  GENERAL
+  SC
+  ST
+  OBC
+  EWS
+  /// Not recorded.
+  NOT_RECORDED
+}
+
+/// The fee category a student is charged under.
+enum FeeCategory {
+  /// The regular fee.
+  REGULAR
+  /// The management quota seat.
+  MANAGEMENT_QUOTA
+  /// The NRI fee.
+  NRI
+  /// A fee concession granted by the college.
+  CONCESSION
+  /// A scholarship seat.
+  SCHOLARSHIP
+  /// Not recorded.
+  NOT_RECORDED
+}
+
+/// How a guardian is related to the student.
+enum GuardianRelation {
+  FATHER
+  MOTHER
+  GRANDFATHER
+  GRANDMOTHER
+  UNCLE
+  AUNT
+  SPOUSE
+  SIBLING
+  /// The student has not recorded the relation.
+  OTHER
+}
+
 model Student {
   id             String   @id @default(uuid())
   rollNo         String   @map("roll_no")
@@ -341,16 +432,92 @@ model Student {
   email          String?  @unique
   userId         String?  @unique @map("user_id")
   branchId       String   @map("branch_id")
-  currentYear    Int      @map("current_year")
   semester       Int
   schemeId       String   @map("scheme_id")
   batchId        String   @map("batch_id")
   academicYearId String   @map("academic_year_id")
+  /// The admission year — the calendar year the student joined the course.
+  admissionYear  Int?     @map("admission_year")
+  /// The section (division) the student studies in, e.g. "A" or "B".
+  section        String? @map("section")
   isActive       Boolean  @default(true) @map("is_active")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
   createdBy      String?  @map("created_by")
   updatedBy      String?  @map("updated_by")
+
+  // -------------------------------------------------------------------------
+  // Personal details
+  // -------------------------------------------------------------------------
+
+  /// Date of birth.
+  dateOfBirth DateTime? @map("date_of_birth")
+  gender      Gender?   @default(NOT_RECORDED) @map("gender")
+
+  // -------------------------------------------------------------------------
+  // Contact details
+  // -------------------------------------------------------------------------
+
+  /// The student's own mobile number.
+  phone          String? @map("phone")
+  /// A second address, for a student who has one.
+  alternateEmail String? @map("alternate_email")
+  address        String?
+  city           String?
+  state          String?
+  pincode        String?
+
+  // -------------------------------------------------------------------------
+  // Identity details — SENSITIVE
+  //
+  // These are the fields the college keeps but does not show to everyone:
+  // a teacher has no business reading a student's identity number, and the
+  // Principal has no business reading it either. They are gated by the
+  // profile service, not by the frontend hiding a column.
+  // -------------------------------------------------------------------------
+
+  /// The student's photograph, as a URL into the object-storage bucket.
+  photoUrl   String?     @map("photo_url")
+  bloodGroup BloodGroup? @default(NOT_RECORDED) @map("blood_group")
+  /// The national identity reference (Aadhaar or equivalent).
+  nationalId String?     @map("national_id")
+
+  // -------------------------------------------------------------------------
+  // Category and quotas
+  // -------------------------------------------------------------------------
+
+  reservedCategory ReservedCategory? @default(NOT_RECORDED) @map("reserved_category")
+  feeCategory      FeeCategory?      @default(NOT_RECORDED) @map("fee_category")
+  /// Whether the student holds a scholarship.
+  scholarshipRecipient Boolean @default(false) @map("scholarship_recipient")
+
+  // -------------------------------------------------------------------------
+  // Guardians — one or both
+  // -------------------------------------------------------------------------
+
+  guardianName       String?           @map("guardian_name")
+  guardianRelation   GuardianRelation? @map("guardian_relation")
+  guardianPhone      String?           @map("guardian_phone")
+  guardianEmail      String?           @map("guardian_email")
+  guardianOccupation String?           @map("guardian_occupation")
+
+  /// The second guardian — set when the college records both.
+  guardian2Name       String?           @map("guardian2_name")
+  guardian2Relation   GuardianRelation? @map("guardian2_relation")
+  guardian2Phone      String?           @map("guardian2_phone")
+  guardian2Email      String?           @map("guardian2_email")
+  guardian2Occupation String?           @map("guardian2_occupation")
+
+  // -------------------------------------------------------------------------
+  // Status lifecycle
+  // -------------------------------------------------------------------------
+
+  /// Where the student stands in the course.
+  status StudentStatus @default(ACTIVE) @map("status")
+  /// Why the status was last changed — "medical leave", "completed the course".
+  statusReason String? @map("status_reason")
+  /// The day the status was last changed.
+  statusDate   DateTime? @map("status_date")
 
   branch       Branch       @relation(fields: [branchId], references: [id])
   scheme       Scheme       @relation(fields: [schemeId], references: [id])
@@ -358,12 +525,50 @@ model Student {
   academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
   user         User?        @relation("StudentUser", fields: [userId], references: [id], onDelete: SetNull)
   marks        Mark[]
+  /// The student's per-semester enrolment history — §2.8.3.
+  enrollments  StudentEnrollment[]
 
   @@unique([rollNo, academicYearId])
   @@index([rollNo])
-  @@index([branchId, currentYear, semester])
+  @@index([branchId, semester])
   @@index([schemeId])
+  @@index([status])
   @@map("students")
+}
+
+/// One semester a student was enrolled in.
+///
+/// The `Student` row records where the student is *now*. This row records
+/// where they *were* — so a Sem 5 student's Sem 1 marks, subjects and result
+/// stay attached to the Sem 1 they were earned in, and the profile screen can
+/// show the whole journey rather than only the current semester.
+///
+/// Without it, advancing a student meant overwriting `semester`, and the
+/// earlier semester's subjects and result fell out of the picture entirely.
+model StudentEnrollment {
+  id             String   @id @default(uuid())
+  studentId      String   @map("student_id")
+  branchId       String   @map("branch_id")
+  schemeId       String   @map("scheme_id")
+  semester       Int
+  academicYearId String   @map("academic_year_id")
+  /// The section the student was in that semester.
+  section        String? @map("section")
+  /// Whether this is the semester the student is currently studying.
+  isCurrent      Boolean  @default(false) @map("is_current")
+  enrolledAt     DateTime @default(now()) @map("enrolled_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  branch       Branch       @relation(fields: [branchId], references: [id])
+  scheme       Scheme       @relation(fields: [schemeId], references: [id])
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+
+  @@unique([studentId, semester, academicYearId])
+  @@index([studentId, academicYearId])
+  @@index([studentId])
+  @@map("student_enrollments")
 }
 
 model Mark {
@@ -385,11 +590,53 @@ model Mark {
   student         Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
   subjectOffering SubjectOffering @relation(fields: [subjectOfferingId], references: [id], onDelete: Cascade)
   academicYear    AcademicYear    @relation(fields: [academicYearId], references: [id])
+  revisions       MarkRevision[]
 
   @@unique([studentId, subjectOfferingId, examType, academicYearId])
   @@index([studentId])
   @@index([subjectOfferingId])
   @@map("marks")
+}
+
+/// A record of a mark being corrected by the examination cell.
+///
+/// A correction overwrites work another person is responsible for, so the
+/// value that was replaced is kept here rather than being lost. The teacher
+/// whose entry was corrected is named on the row, and the reason the exam
+/// cell gave is kept with it — so the question "who changed this score, and
+/// why?" always has an answer, years later.
+///
+/// The row is append-only. Nothing ever updates or deletes it.
+model MarkRevision {
+  id        String   @id @default(uuid())
+  markId    String   @map("mark_id")
+  /// The value the mark held before this correction.
+  previousMarksObtained Float   @map("previous_marks_obtained")
+  previousMaxMarks       Float   @map("previous_max_marks")
+  previousIsAbsent       Boolean @map("previous_is_absent")
+  previousIsWithheld     Boolean @map("previous_is_withheld")
+  previousRemarks        String? @map("previous_remarks")
+  /// The value the mark holds after this correction.
+  correctedMarksObtained Float   @map("corrected_marks_obtained")
+  correctedMaxMarks       Float   @map("corrected_max_marks")
+  correctedIsAbsent       Boolean @map("corrected_is_absent")
+  correctedIsWithheld     Boolean @map("corrected_is_withheld")
+  correctedRemarks        String? @map("corrected_remarks")
+  /// The member who made the correction — the examination cell.
+  correctedBy         String   @map("corrected_by")
+  /// The teacher whose entry was corrected, when there was one.
+  overriddenTeacherId String?  @map("overridden_teacher_id")
+  overriddenTeacherName String? @map("overridden_teacher_name")
+  /// Why the correction was made. Required — a correction is always explained.
+  reason              String
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  mark Mark @relation(fields: [markId], references: [id], onDelete: Cascade)
+
+  @@index([markId])
+  @@index([correctedBy])
+  @@index([overriddenTeacherId])
+  @@map("mark_revisions")
 }
 
 // ============================================================================
@@ -428,6 +675,17 @@ model Report {
   fileUrl      String?   @map("file_url")
   status       String    @default("PENDING")
   errorMessage String?   @map("error_message")
+  /// Whether the report is still live.
+  ///
+  /// A report is never hard-deleted: it is a statement about a class's
+  /// results, and a result that existed and then vanished cannot be
+  /// accounted for. Deleting archives it — the row stays, the file goes,
+  /// and the reason is kept.
+  isArchived   Boolean   @default(false) @map("is_archived")
+  archivedAt   DateTime? @map("archived_at")
+  archivedBy   String?   @map("archived_by")
+  /// Why the report was archived.
+  archiveReason String?  @map("archive_reason")
   createdAt    DateTime  @default(now()) @map("created_at")
   completedAt  DateTime? @map("completed_at")
 
@@ -435,6 +693,7 @@ model Report {
 
   @@index([generatedBy])
   @@index([status])
+  @@index([isArchived])
   @@map("reports")
 }
 

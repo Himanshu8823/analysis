@@ -18,3 +18,6 @@ uploads/
 packages/shared-types/src/*.js
 packages/shared-types/src/*.d.ts
 packages/shared-types/src/*.js.map
+
+# The mail capture — a local postbox for the verification run.
+.mail-capture/

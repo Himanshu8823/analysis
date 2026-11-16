@@ -11,6 +11,37 @@ const ACCEPTED_MIME = [
 ];
 const ACCEPTED_EXT = '.xlsx,.xls,.csv,.pdf';
 
+/**
+ * What the uploader accepts.
+ *
+ * A screen that wants one kind of file says so. The scheme reader takes a
+ * PDF and nothing else, and a drop zone that also advertised Excel would be
+ * inviting the user to upload the wrong thing — a file the server will
+ * refuse with a message they then have to interpret.
+ */
+export interface FileUploaderAccept {
+  /** The extensions, as a comma-separated string — `.pdf`. */
+  extensions: string;
+  /** The MIME types, as a comma-separated string. */
+  mimeTypes: string;
+  /** The label shown under the drop zone — `PDF`. */
+  label: string;
+}
+
+/** The default — the result files the exam cell deals with. */
+const RESULT_FILES: FileUploaderAccept = {
+  extensions: ACCEPTED_EXT,
+  mimeTypes: ACCEPTED_MIME.join(','),
+  label: 'Excel or PDF',
+};
+
+/** A syllabus document — a PDF and nothing else. */
+export const PDF_ONLY: FileUploaderAccept = {
+  extensions: '.pdf',
+  mimeTypes: 'application/pdf',
+  label: 'PDF',
+};
+
 interface FileUploaderProps {
   onFile: (file: File) => void;
   isUploading?: boolean;
@@ -19,6 +50,8 @@ interface FileUploaderProps {
   onReject?: (reason: string) => void;
   /** Blocks the picker entirely — used when the surrounding form is incomplete. */
   disabled?: boolean;
+  /** What the uploader accepts. Defaults to the result-file types. */
+  accept?: FileUploaderAccept;
 }
 
 /**
@@ -28,11 +61,13 @@ interface FileUploaderProps {
  * inconsistent MIME types for CSV (and sometimes for `.xls`). This is a
  * convenience check only — the server re-validates every upload.
  */
-function isAcceptedFile(file: File): boolean {
-  const mimeOk = file.type === '' || ACCEPTED_MIME.includes(file.type);
-  const extOk = ACCEPTED_EXT.split(',').some((ext) =>
-    file.name.toLowerCase().endsWith(ext),
-  );
+function isAcceptedFile(file: File, accept: FileUploaderAccept): boolean {
+  const mimeOk =
+    file.type === '' || accept.mimeTypes.split(',').map((t) => t.trim()).includes(file.type);
+  const extOk = accept.extensions
+    .split(',')
+    .map((ext) => ext.trim())
+    .some((ext) => file.name.toLowerCase().endsWith(ext));
   return mimeOk && extOk;
 }
 
@@ -42,6 +77,7 @@ export function FileUploader({
   hint,
   onReject,
   disabled = false,
+  accept = RESULT_FILES,
 }: FileUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,8 +88,8 @@ export function FileUploader({
     (files: FileList | null) => {
       if (!files || files.length === 0) return;
       const file = files[0];
-      if (!isAcceptedFile(file)) {
-        const reason = 'That file type is not supported. Upload an Excel, CSV, or PDF file.';
+      if (!isAcceptedFile(file, accept)) {
+        const reason = `That file type is not supported here. Upload a ${accept.label} file.`;
         setError(reason);
         onReject?.(reason);
         return;
@@ -61,7 +97,7 @@ export function FileUploader({
       setError(null);
       onFile(file);
     },
-    [onFile, onReject],
+    [onFile, onReject, accept],
   );
 
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
@@ -92,7 +128,7 @@ export function FileUploader({
         <input
           ref={inputRef}
           type="file"
-          accept={ACCEPTED_EXT}
+          accept={accept.extensions}
           onChange={onChange}
           disabled={blocked}
           className="sr-only"
@@ -112,12 +148,18 @@ export function FileUploader({
           </button>{' '}
           or drag &amp; drop
         </p>
-        <p className="mt-xs text-body-sm text-muted">{hint ?? 'Excel (.xlsx, .xls), CSV, or PDF up to 50MB'}</p>
+        <p className="mt-xs text-body-sm text-muted">
+          {hint ?? 'Excel (.xlsx, .xls), CSV, or PDF up to 50MB'}
+        </p>
         <div className="mt-lg flex items-center gap-sm text-body-sm text-muted">
-          <span className="inline-flex items-center gap-1">
-            <FileSpreadsheet className="h-4 w-4" aria-hidden /> Excel
-          </span>
-          <span aria-hidden>·</span>
+          {accept.extensions.includes('.xlsx') ? (
+            <>
+              <span className="inline-flex items-center gap-1">
+                <FileSpreadsheet className="h-4 w-4" aria-hidden /> Excel
+              </span>
+              <span aria-hidden>·</span>
+            </>
+          ) : null}
           <span className="inline-flex items-center gap-1">
             <FileText className="h-4 w-4" aria-hidden /> PDF
           </span>

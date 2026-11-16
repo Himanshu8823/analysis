@@ -5,7 +5,10 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { OcrService } from './ocr.service';
 import { StorageService } from '../storage/storage.service';
 import { OcrRequestDto } from './dto';
-import { Permissions } from '@/common/decorators';
+import { Permissions, CurrentUser } from '@/common/decorators';
+import { ScopeService } from '@/common/services/scope.service';
+import { UrlGuardService } from '@/common/services/url-guard.service';
+import type { JwtPayload } from '@/common/types';
 
 @ApiTags('OCR')
 @ApiBearerAuth()
@@ -14,6 +17,8 @@ export class OcrController {
   constructor(
     private readonly service: OcrService,
     private readonly storage: StorageService,
+    private readonly scope: ScopeService,
+    private readonly urlGuard: UrlGuardService,
     @InjectQueue('ocr-jobs') private readonly ocrQueue: Queue
   ) {}
 
@@ -32,13 +37,17 @@ export class OcrController {
      * A file the backend stored itself is read straight from disk: the
      * `/files` route it was published under is JWT-guarded, so fetching it
      * over HTTP would fail with a 401. Files that live somewhere else (an
-     * external bucket) are still fetched over HTTP.
+     * external bucket) are still fetched over HTTP — but only after the
+     * address has been checked, so that a request cannot make the server
+     * visit an address only it can reach.
      */
     let buffer = await this.storage.readByUrl(dto.fileUrl);
     if (!buffer) {
+      await this.urlGuard.assertFetchable(dto.fileUrl);
+
       const resp = await fetch(dto.fileUrl);
       if (!resp.ok) {
-        throw new Error(`Could not download ${dto.fileUrl}: ${resp.status} ${resp.statusText}`);
+        throw new Error(`Could not download the file: ${resp.status} ${resp.statusText}`);
       }
       buffer = Buffer.from(await resp.arrayBuffer());
     }
@@ -54,8 +63,17 @@ export class OcrController {
   @Post('process/:jobId')
   @Permissions('upload:process')
   @ApiOperation({ summary: 'Re-run OCR for an existing upload job (admin)' })
-  async process(@Param('jobId') jobId: string) {
-    const job = await this.service.getJobStatus(jobId);
+  async process(@Param('jobId') jobId: string, @CurrentUser() user: JwtPayload) {
+    /**
+     * The job carries the marks read out of the file. A member may re-run
+     * OCR for a job they raised; a college-wide member may do so for any
+     * job.
+     */
+    const job = await this.service.getJobStatus(
+      jobId,
+      user.sub,
+      await this.readsEveryUpload(user.sub)
+    );
     if (!job) throw new NotFoundException('Upload job not found');
 
     /**
@@ -75,7 +93,27 @@ export class OcrController {
   @Get('jobs/:jobId/status')
   @Permissions('upload:read')
   @ApiOperation({ summary: 'Get the latest OCR status for a job' })
-  async status(@Param('jobId') jobId: string) {
-    return this.service.getJobStatus(jobId);
+  async status(@Param('jobId') jobId: string, @CurrentUser() user: JwtPayload) {
+    /**
+     * The job carries the marks read out of the file, so it is read under
+     * the same scope as the marks themselves: a member sees the jobs they
+     * raised, and a college-wide member sees all of them.
+     */
+    return this.service.getJobStatus(jobId, user.sub, await this.readsEveryUpload(user.sub));
+  }
+
+  /**
+   * Whether a member may read every upload job, rather than only the ones
+   * they raised.
+   *
+   * The answer comes from the branch scope: a member whose roles all name
+   * no branch works across the whole college and may read every upload; a
+   * branch-scoped member may read only their own. This is the same scope
+   * the rest of the system uses, so a member sees the same boundary on
+   * every screen.
+   */
+  private async readsEveryUpload(userId: string): Promise<boolean> {
+    const branches = await this.scope.branchScope(userId);
+    return branches.length === 0;
   }
 }

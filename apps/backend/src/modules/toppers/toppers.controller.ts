@@ -148,7 +148,12 @@ export class ToppersController {
       }
       return this.service.findClassToppersByRule(
         {
-          branchId: params.branchId ?? '',
+          // The branch filter must stay `undefined` for a college-scoped
+          // caller. Replacing it with an empty string would look like a
+          // branch id to the query builder and silently return no rows,
+          // while the plain path below would return every branch — two
+          // different answers for the same class.
+          branchId: params.branchId,
           schemeId: params.schemeId ?? '',
           semester: params.semester ?? 0,
           academicYearId: params.academicYearId ?? '',

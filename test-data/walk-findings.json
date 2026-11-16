@@ -1,0 +1,99 @@
+[
+  {
+    "role": "SUPER_ADMIN",
+    "screen": "(sign in)",
+    "problem": "could not sign in",
+    "text": "Resultiq | Sign in | Access your result analysis dashboard. | Email | Password | Sign in | Forgot password? | (self.__next_f=self.__next_f||[]).push([0]);self.__next_f.push([2,null]) | self.__next_f.push([1,\"1:HL[\\\"/_next/static/css/app/layout.css?v=1794809881925\\\",\\\"style\\\"]\\n0:D{\\\"name\\\":\\\"r2\\\",\\\"env\\\":\\\"Server\\\"}\\n\"]) | self.__next_f.push([1,\"2:I[\\\"(app-pages-browser)/../../node_modules/.pnpm/next@14.2.18_@babel+core@7.29.7_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/client/components/app-router.js\\\",[\\\"app-pages-internals\\\",\\\"static/chunks/app-pages-internals.js\\\"],\\\"\\\"]\\n4:I[\\\"(app-pages-browser)/../../node_modules/.pnpm/next@14.2.18_@babel+core@7.29.7_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/client/components/client-page.js\\\",[\\\"app-pages-internals\\\",\\\"static/chunks/app-pages-internals.js\\\"],\\\"ClientPageRoot\\\"]\\n5:I[\\\"(app-pages-browser)/./app/(auth)/login/page.tsx\\\",[\\\"app/(auth)/login/page\\\",\\\"static/chunks/app/(auth)/login/page.js\\\"],\\\"default\\\",1]\\n6:I[\\\"(app-pages-browser)/../../node_modules/.pnpm/next@14.2.18_@babel+core@7.29.7_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/client/components/layout-router.js\\\",[\\\"app-pages-internals\\\",\\\"static/chunks/app-pages-internals.js\\\"],\\\"\\\"]\\n7:I[\\\"(app-pages-browser)/../../node_modules/.pnpm/next@14.2.18_@babel+core@7.29.7_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/client/components/render-from-template-context.js\\\",[\\\"app-pages-internals\\\",\\\"static/chunks/app-pages-internals.js\\\"],\\\"\\\"]\\n9:I[\\\"(app-pages-browser)/../../node_modules/.pnpm/next@14.2.18_@babel+core@7.29.7_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/client/image-component.js\\\",[\\\"app/(auth)/layout\\\",\\\"static/chunks/app/(auth)/layout.js\\\"],\\\"Image\\\"]\\na:I[\\\"(app-pages-browser)/../../node_modules/.pnpm/next@14.2.18_@babel+core@7.29.7_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/client/link.js\\\",[\\\"app/(auth)/layout\\\",\\\"static/chunks/app/(auth)/layout.js\\\"],\\\"\\\"]\\nd:I[\\\"(app-pages-browser)/./app/providers.tsx\\\",[\\\"app/layout\\\",\\\"static/chunks/app/layout.js\\\"],\\\"Providers\\\"]\\n15:I[\\\"(app-pages-browser)/../../node_modules/.pnpm/next@14.2.18_@babel+core@7.29.7_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next/dist/client/components/error-boundary.js\\\",[\\\"app-pages-internals\\\",\\\"static/chunks/app-pages-internals.js\\\"],\\\"\\\"]\\n3:D{\\\"name\\\":\\\"\\\",\\\"env\\\":\\\"Server\\\"}\\n8:D{\\\"name\\\":\\\"AuthLayout\"]) | self.__next_f.push([1,\"\\\",\\\"env\\\":\\\"Server\\\"}\\nb:D{\\\"name\\\":\\\"NotFound\\\",\\\"env\\\":\\\"Server\\\"}\\nb:[[\\\"$\\\",\\\"title\\\",null,{\\\"children\\\":\\\"404: This page could not be found.\\\"}],[\\\"$\\\",\\\"div\\\",null,{\\\"style\\\":{\\\"fontFamily\\\":\\\"system-ui,\\\\\\\"Segoe UI\\\\\\\",Roboto,Helvetica,Arial,sans-serif,\\\\\\\"Apple Color Emoji\\\\\\\",\\\\\\\"Segoe UI Emoji\\\\\\\"\\\",\\\"height\\\":\\\"100vh\\\",\\\"textAlign\\\":\\\"center\\\",\\\"display\\\":\\\"flex\\\",\\\"flexDirection\\\":\\\"column\\\",\\\"alignItems\\\":\\\"center\\\",\\\"justifyContent\\\":\\\"center\\\"},\\\"children\\\":[\\\"$\\\",\\\"div\\\",null,{\\\"children\\\":[[\\\"$\\\",\\\"style\\\",null,{\\\"dangerouslySetInnerHTML\\\":{\\\"__html\\\":\\\"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}\\\"}}],[\\\"$\\\",\\\"h1\\\",null,{\\\"className\\\":\\\"next-error-h1\\\",\\\"style\\\":{\\\"display\\\":\\\"inline-block\\\",\\\"margin\\\":\\\"0 20px 0 0\\\",\\\"padding\\\":\\\"0 23px 0 0\\\",\\\"fontSize\\\":24,\\\"fontWeight\\\":500,\\\"verticalAlign\\\":\\\"top\\\",\\\"lineHeight\\\":\\\"49px\\\"},\\\"children\\\":\\\"404\\\"}],[\\\"$\\\",\\\"div\\\",null,{\\\"style\\\":{\\\"display\\\":\\\"inline-block\\\"},\\\"children\\\":[\\\"$\\\",\\\"h2\\\",null,{\\\"style\\\":{\\\"fontSize\\\":14,\\\"fontWeight\\\":400,\\\"lineHeight\\\":\\\"49px\\\",\\\"margin\\\":0},\\\"children\\\":\\\"This page could not be found.\\\"}]}]]}]}]]\\n8:[\\\"$\\\",\\\"main\\\",null,{\\\"className\\\":\\\"flex min-h-screen flex-col bg-canvas text-ink md:flex-row\\\",\\\"children\\\":[[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"relative h-64 w-full overflow-hidden bg-surface-dark md:h-auto md:w-1/2 lg:w-1/2\\\",\\\"children\\\":[\\\"$\\\",\\\"$L9\\\",null,{\\\"src\\\":\\\"/images/books.jpg\\\",\\\"alt\\\":\\\"Student graduating atop a wall of books\\\",\\\"fill\\\":true,\\\"priority\\\":true,\\\"className\\\":\\\"object-cover\\\",\\\"sizes\\\":\\\"(max-width: 767px) 100vw, 50vw\\\"}]}],[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"flex w-full flex-col md:w-1/2 lg:w-1/2\\\",\\\"children\\\":[[\\\"$\\\",\\\"header\\\",null,{\\\"className\\\":\\\"flex h-16 items-center px-base md:px-lg\\\",\\\"children\\\":[\\\"$\\\",\\\"$La\\\",null,{\\\"href\\\":\\\"/\\\",\\\"className\\\":\\\"flex items-center gap-sm text-ink\\\",\\\"aria-label\\\":\\\"Resultiq home\\\",\\\"children\\\":[[\\\"$\\\",\\\"$L9\\\",null,{\\\"src\\\":\\\"/images/logo.png\\\",\\\"alt\\\":\\\"Resultiq logo\\\",\\\"width\\\":32,\\\"height\\\":32,\\\"className\\\":\\\"h-8 w-8 object-contain\\\"}],[\\\"$\\\",\\\"span\\\",null,{\\\"className\\\":\\\"font-display text-title-sm text-ink\\\",\\\"children\\\":\\\"Re\"]) | self.__next_f.push([1,\"sultiq\\\"}]]}]}],[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"flex flex-1 items-center justify-center px-base py-lg md:px-lg\\\",\\\"children\\\":[\\\"$\\\",\\\"div\\\",null,{\\\"className\\\":\\\"w-full max-w-md\\\",\\\"children\\\":[\\\"$\\\",\\\"$L6\\\",null,{\\\"parallelRouterKey\\\":\\\"children\\\",\\\"segmentPath\\\":[\\\"children\\\",\\\"(auth)\\\",\\\"children\\\"],\\\"error\\\":\\\"$undefined\\\",\\\"errorStyles\\\":\\\"$undefined\\\",\\\"errorScripts\\\":\\\"$undefined\\\",\\\"template\\\":[\\\"$\\\",\\\"$L7\\\",null,{}],\\\"templateStyles\\\":\\\"$undefined\\\",\\\"templateScripts\\\":\\\"$undefined\\\",\\\"notFound\\\":\\\"$b\\\",\\\"notFoundStyles\\\":[]}]}]}]]}]]}]\\nc:D{\\\"name\\\":\\\"RootLayout\\\",\\\"env\\\":\\\"Server\\\"}\\ne:D{\\\"name\\\":\\\"NotFound\\\",\\\"env\\\":\\\"Server\\\"}\\nf:{\\\"fontFamily\\\":\\\"system-ui,\\\\\\\"Segoe UI\\\\\\\",Roboto,Helvetica,Arial,sans-serif,\\\\\\\"Apple Color Emoji\\\\\\\",\\\\\\\"Segoe UI Emoji\\\\\\\"\\\",\\\"height\\\":\\\"100vh\\\",\\\"textAlign\\\":\\\"center\\\",\\\"display\\\":\\\"flex\\\",\\\"flexDirection\\\":\\\"column\\\",\\\"alignItems\\\":\\\"center\\\",\\\"justifyContent\\\":\\\"center\\\"}\\n10:{\\\"display\\\":\\\"inline-block\\\",\\\"margin\\\":\\\"0 20px 0 0\\\",\\\"padding\\\":\\\"0 23px 0 0\\\",\\\"fontSize\\\":24,\\\"fontWeight\\\":500,\\\"verticalAlign\\\":\\\"top\\\",\\\"lineHeight\\\":\\\"49px\\\"}\\n11:{\\\"display\\\":\\\"inline-block\\\"}\\n12:{\\\"fontSize\\\":14,\\\"fontWeight\\\":400,\\\"lineHeight\\\":\\\"49px\\\",\\\"margin\\\":0}\\ne:[[\\\"$\\\",\\\"title\\\",null,{\\\"children\\\":\\\"404: This page could not be found.\\\"}],[\\\"$\\\",\\\"div\\\",null,{\\\"style\\\":\\\"$f\\\",\\\"children\\\":[\\\"$\\\",\\\"div\\\",null,{\\\"children\\\":[[\\\"$\\\",\\\"style\\\",null,{\\\"dangerouslySetInnerHTML\\\":{\\\"__html\\\":\\\"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}\\\"}}],[\\\"$\\\",\\\"h1\\\",null,{\\\"className\\\":\\\"next-error-h1\\\",\\\"style\\\":\\\"$10\\\",\\\"children\\\":\\\"404\\\"}],[\\\"$\\\",\\\"div\\\",null,{\\\"style\\\":\\\"$11\\\",\\\"children\\\":[\\\"$\\\",\\\"h2\\\",null,{\\\"style\\\":\\\"$12\\\",\\\"children\\\":\\\"This page could not be found.\\\"}]}]]}]}]]\\nc:[\\\"$\\\",\\\"html\\\",null,{\\\"lang\\\":\\\"en\\\",\\\"suppressHydrationWarning\\\":true,\\\"children\\\":[\\\"$\\\",\\\"body\\\",null,{\\\"className\\\":\\\"min-h-screen bg-canvas text-ink font-sans antialiased\\\",\\\"children\\\":[\\\"$\\\",\\\"$Ld\\\",null,{\\\"children\\\":[\\\"$\\\",\\\"$L6\\\",null,{\\\"parallelRouterKey\\\":\\\"children\\\",\\\"segmentPath\\\":[\\\"children\\\"],\\\"error\\\":\\\"$undefined\\\",\\\"errorStyles\\\":\\\"$undefined\\\",\\\"errorScripts\\\":\\\"$undefined\\\",\\\"template\\\":[\\\"$\"]) | self.__next_f.push([1,\"\\\",\\\"$L7\\\",null,{}],\\\"templateStyles\\\":\\\"$undefined\\\",\\\"templateScripts\\\":\\\"$undefined\\\",\\\"notFound\\\":\\\"$e\\\",\\\"notFoundStyles\\\":[]}]}]}]}]\\n13:D{\\\"name\\\":\\\"rQ\\\",\\\"env\\\":\\\"Server\\\"}\\n13:null\\n14:D{\\\"name\\\":\\\"\\\",\\\"env\\\":\\\"Server\\\"}\\n16:[]\\n0:[\\\"$\\\",\\\"$L2\\\",null,{\\\"buildId\\\":\\\"development\\\",\\\"assetPrefix\\\":\\\"\\\",\\\"urlParts\\\":[\\\"\\\",\\\"login\\\"],\\\"initialTree\\\":[\\\"\\\",{\\\"children\\\":[\\\"(auth)\\\",{\\\"children\\\":[\\\"login\\\",{\\\"children\\\":[\\\"__PAGE__\\\",{}]}]}]},\\\"$undefined\\\",\\\"$undefined\\\",true],\\\"initialSeedData\\\":[\\\"\\\",{\\\"children\\\":[\\\"(auth)\\\",{\\\"children\\\":[\\\"login\\\",{\\\"children\\\":[\\\"__PAGE__\\\",{},[[\\\"$L3\\\",[\\\"$\\\",\\\"$L4\\\",null,{\\\"props\\\":{\\\"params\\\":{},\\\"searchParams\\\":{}},\\\"Component\\\":\\\"$5\\\"}],null],null],null]},[null,[\\\"$\\\",\\\"$L6\\\",null,{\\\"parallelRouterKey\\\":\\\"children\\\",\\\"segmentPath\\\":[\\\"children\\\",\\\"(auth)\\\",\\\"children\\\",\\\"login\\\",\\\"children\\\"],\\\"error\\\":\\\"$undefined\\\",\\\"errorStyles\\\":\\\"$undefined\\\",\\\"errorScripts\\\":\\\"$undefined\\\",\\\"template\\\":[\\\"$\\\",\\\"$L7\\\",null,{}],\\\"templateStyles\\\":\\\"$undefined\\\",\\\"templateScripts\\\":\\\"$undefined\\\",\\\"notFound\\\":\\\"$undefined\\\",\\\"notFoundStyles\\\":\\\"$undefined\\\"}]],null]},[[null,\\\"$8\\\"],null],null]},[[[[\\\"$\\\",\\\"link\\\",\\\"0\\\",{\\\"rel\\\":\\\"stylesheet\\\",\\\"href\\\":\\\"/_next/static/css/app/layout.css?v=1794809881925\\\",\\\"precedence\\\":\\\"next_static/css/app/layout.css\\\",\\\"crossOrigin\\\":\\\"$undefined\\\"}]],\\\"$c\\\"],null],null],\\\"couldBeIntercepted\\\":false,\\\"initialHead\\\":[\\\"$13\\\",\\\"$L14\\\"],\\\"globalErrorComponent\\\":\\\"$15\\\",\\\"missingSlots\\\":\\\"$W16\\\"}]\\n\"]) | self.__next_f.push([1,\"14:[[\\\"$\\\",\\\"meta\\\",\\\"0\\\",{\\\"name\\\":\\\"viewport\\\",\\\"content\\\":\\\"width=device-width, initial-scale=1\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"1\\\",{\\\"charSet\\\":\\\"utf-8\\\"}],[\\\"$\\\",\\\"title\\\",\\\"2\\\",{\\\"children\\\":\\\"Resultiq\\\"}],[\\\"$\\\",\\\"meta\\\",\\\"3\\\",{\\\"name\\\":\\\"description\\\",\\\"content\\\":\\\"Comprehensive result analysis platform for affiliated colleges\\\"}]]\\n3:null\\n\"])"
+  },
+  {
+    "role": "PRINCIPAL",
+    "screen": "/marks",
+    "problem": "a screen that should be refused was opened",
+    "text": "Dashboard | Students | Marks Entry | Subjects | Reports | Toppers | Analytics | Administration | Schemes | Read a Syllabus | Branches | Academic Structure | Audit Log | Toggle Sidebar | Resultiq | P | Principal | Marks | The marks of one subject component across a class. You can read them, but not c"
+  },
+  {
+    "role": "TEACHER",
+    "screen": "/change-password",
+    "problem": "signed out — the screen bounced to the login page",
+    "text": "Resultiq | Sign in | Access your result analysis dashboard. | Email | Password | Sign in | Forgot password? |",
+    "failures": [],
+    "errors": []
+  },
+  {
+    "role": "TEACHER",
+    "screen": "/admin/members",
+    "problem": "a refusal with no way back — a dead end",
+    "text": "Resultiq | Sign in | Access your result analysis dashboard. | Email | Password | Sign in | Forgot password? |"
+  },
+  {
+    "role": "STUDENT",
+    "screen": "/toppers",
+    "problem": "6 failed request(s)",
+    "text": "Dashboard | My Result | Toppers | Toggle Sidebar | Resultiq | S | Student | Toppers | The highest achievers in your class. |",
+    "failures": [
+      {
+        "url": "http://localhost:3001/api/v1/branches",
+        "status": 403
+      },
+      {
+        "url": "http://localhost:3001/api/v1/schemes",
+        "status": 403
+      },
+      {
+        "url": "http://localhost:3001/api/v1/branches",
+        "status": 403
+      },
+      {
+        "url": "http://localhost:3001/api/v1/schemes",
+        "status": 403
+      },
+      {
+        "url": "http://localhost:3001/api/v1/branches",
+        "status": 403
+      },
+      {
+        "url": "http://localhost:3001/api/v1/schemes",
+        "status": 403
+      }
+    ],
+    "errors": []
+  },
+  {
+    "role": "STUDENT",
+    "screen": "/change-password",
+    "problem": "signed out — the screen bounced to the login page",
+    "text": "Resultiq | Sign in | Access your result analysis dashboard. | Email | Password | Sign in | Forgot password? |",
+    "failures": [],
+    "errors": []
+  },
+  {
+    "role": "STUDENT",
+    "screen": "/students",
+    "problem": "a refusal with no way back — a dead end",
+    "text": "Resultiq | Sign in | Access your result analysis dashboard. | Email | Password | Sign in | Forgot password? |"
+  },
+  {
+    "role": "STUDENT",
+    "screen": "/marks",
+    "problem": "a screen that should be refused was opened",
+    "text": "Dashboard | Upload Results | Upload History | Students | Marks Entry | Subjects | Assignments | Class Overview | Reports | Toppers | Analytics | Administration | Schemes | Read a Syllabus | Branches | Academic Structure | Toggle Sidebar | Resultiq | ST | Subject Teacher | Marks Entry | Enter the mar"
+  },
+  {
+    "role": "STUDENT",
+    "screen": "/reports",
+    "problem": "a screen that should be refused was opened",
+    "text": "Dashboard | Upload Results | Upload History | Students | Marks Entry | Subjects | Assignments | Class Overview | Reports | Toppers | Analytics | Administration | Schemes | Read a Syllabus | Branches | Academic Structure | Toggle Sidebar | Resultiq | ST | Subject Teacher | Reports | Generate multi-sh"
+  },
+  {
+    "role": "STUDENT",
+    "screen": "/analytics",
+    "problem": "a refusal with no way back — a dead end",
+    "text": "Resultiq | Sign in | Access your result analysis dashboard. | Email | Password | Sign in | Forgot password? |"
+  },
+  {
+    "role": "STUDENT",
+    "screen": "/admin/members",
+    "problem": "a refusal with no way back — a dead end",
+    "text": "Resultiq | Sign in | Access your result analysis dashboard. | Email | Password | Sign in | Forgot password? |"
+  }
+]

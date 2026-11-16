@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { EditMemberFormFields } from '@/components/forms/MemberFormFields';
+import { MemberRolesPanel } from '@/components/members/MemberRolesPanel';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/feedback/Spinner';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
@@ -15,6 +16,11 @@ import { useMember, useUpdateMember } from '@/hooks/useMembers';
  * Shares `EditMemberFormFields` with nothing else (this page owns editing),
  * but keeps the same shape as the invite page so the two routes feel like
  * one feature: title, description, card, form, actions.
+ *
+ * The member's **roles** are a separate panel below the form. A role is not
+ * a field on the member record — it is its own act, audited on its own and
+ * applied on its own, so it gets its own screen rather than a field in a
+ * form that saves everything at once.
  */
 export default function EditMemberPage() {
   const router = useRouter();
@@ -77,6 +83,8 @@ export default function EditMemberPage() {
           </Button>
         </div>
       </div>
+
+      <MemberRolesPanel memberId={member.id} memberName={member.name} />
     </section>
   );
 }

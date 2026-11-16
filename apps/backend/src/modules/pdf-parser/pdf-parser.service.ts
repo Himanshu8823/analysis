@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { StorageService } from '../storage/storage.service';
+import { UrlGuardService } from '@/common/services/url-guard.service';
 // pdf-parse returns text + per-page metadata
 // We import the underlying library dynamically so tests can stub it out.
 import type { PdfParseResult, PdfPageText } from './pdf-parser.types';
@@ -21,7 +22,8 @@ export class PdfParserService {
 
   constructor(
     private readonly prisma: PrismaClient,
-    private readonly storage: StorageService
+    private readonly storage: StorageService,
+    private readonly urlGuard: UrlGuardService
   ) {}
 
   /**
@@ -123,15 +125,19 @@ export class PdfParserService {
    * A file the backend stored itself is read straight from disk: the `/files`
    * route it was published under is JWT-guarded, so fetching it over HTTP
    * would fail with a 401. Files that live somewhere else (an external
-   * bucket) are still fetched over HTTP.
+   * bucket) are still fetched over HTTP — but only after the address has
+   * been checked, so that a request cannot make the server visit an
+   * address only it can reach.
    */
   private async downloadAsBuffer(fileUrl: string): Promise<Buffer> {
     const stored = await this.storage.readByUrl(fileUrl);
     if (stored) return stored;
 
+    await this.urlGuard.assertFetchable(fileUrl);
+
     const response = await fetch(fileUrl);
     if (!response.ok) {
-      throw new Error(`Could not download ${fileUrl}: ${response.status} ${response.statusText}`);
+      throw new Error(`Could not download the file: ${response.status} ${response.statusText}`);
     }
     const arrayBuffer = await response.arrayBuffer();
     return Buffer.from(arrayBuffer);

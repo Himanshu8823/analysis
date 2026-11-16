@@ -70,3 +70,24 @@ export function useCalculateMarks() {
       marksService.calculate(payload),
   });
 }
+
+/**
+ * The examination cell's correction of a mark a teacher holds.
+ *
+ * A correction is heavier than an ordinary save: it overwrites work another
+ * person is responsible for, so it carries a reason, it keeps the value it
+ * replaced, and it is recorded in the audit trail under its own action.
+ */
+export function useCorrectMark() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  return useMutation({
+    mutationFn: (payload: BulkMarkInput & { reason: string }) => marksService.correct(payload),
+    onSuccess: (_data, variables) => {
+      invalidationRules.onMarksUpdated(qc, variables.studentId);
+      qc.invalidateQueries({ queryKey: queryKeys.marks.all() });
+      toast.success('Mark corrected. The change is recorded with your reason.');
+    },
+    onError: (error: unknown) => toast.error(extractErrorMessage(error)),
+  });
+}

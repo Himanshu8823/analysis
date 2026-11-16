@@ -1,20 +1,18 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Loader2, CheckCircle2, AlertCircle, FileCheck2 } from 'lucide-react';
 import { RequirePermission } from '@/components/auth/RequirePermission';
 import { FileUploader } from '@/components/forms/FileUploader';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Pagination } from '@/components/forms/Pagination';
-import { Select } from '@/components/forms/Select';
 import { Spinner } from '@/components/feedback/Spinner';
 import { ErrorBanner } from '@/components/feedback/ErrorBanner';
+import { ClassContextBar } from '@/components/context/ClassContextBar';
 import { useCreateUploadJob, useUploadJob, useConfirmUpload } from '@/hooks/useUpload';
 import { useCurrentUser } from '@/hooks/useAuth';
-import { useBranches } from '@/hooks/useBranches';
-import { useSchemes } from '@/hooks/useSchemes';
-import { useAcademicYears } from '@/hooks/useAcademic';
 import { useTablePagination } from '@/hooks/useTablePagination';
+import { useClassContext } from '@/lib/context/class-context';
 import { formatters } from '@/lib/utils/formatters';
 import type {
   ExtractedMarkRow,
@@ -61,23 +59,20 @@ export default function UploadPage() {
 }
 
 function UploadResultsScreen() {
-  const [branchId, setBranchId] = useState('');
-  const [schemeId, setSchemeId] = useState('');
-  const [semester, setSemester] = useState(1);
-  const [academicYearId, setAcademicYearId] = useState('');
-
-  const { data: branchesData } = useBranches();
-  const { data: schemesData } = useSchemes();
-  const { data: academicYears } = useAcademicYears();
+  /**
+   * The class comes from the shared context, so the file is uploaded for the
+   * same class the member is working on everywhere else in the system.
+   */
+  const { context: classContext } = useClassContext();
+  const branchId = classContext.branchId;
+  const schemeId = classContext.schemeId;
+  const semester = classContext.semester;
+  const effectiveAcademicYearId = classContext.academicYearId;
 
   const { mutate: createJob, isPending: uploading } = useCreateUploadJob();
   const { data: job, isLoading: jobLoading, isError } = useUploadJob();
   const { mutate: confirm, isPending: confirming } = useConfirmUpload();
   const { data: user } = useCurrentUser();
-
-  const branches = branchesData ?? [];
-  const schemes = schemesData ?? [];
-  const years = academicYears ?? [];
 
   /**
    * Confirming is what turns an extraction into a student's score, so it is
@@ -90,16 +85,6 @@ function UploadResultsScreen() {
   const canConfirm =
     (user?.permissions ?? []).includes('upload:process') ||
     (user?.permissions ?? []).includes('upload:process_own_subject');
-
-  const activeYear = years.find((y) => y.isActive) ?? years[0];
-
-  /**
-   * The academic year falls back to the active one so the scope is usable
-   * without an explicit pick. The state variable alone would stay empty when
-   * there is only one academic year, because a Radix select never fires
-   * `onValueChange` for the value that is already selected.
-   */
-  const effectiveAcademicYearId = academicYearId || activeYear?.id || '';
 
   const scopeReady =
     !!branchId && !!schemeId && !!effectiveAcademicYearId && semester > 0;
@@ -119,62 +104,15 @@ function UploadResultsScreen() {
         description="Drop an Excel or PDF result file. We extract the data, you review and confirm."
       />
 
-      <article className="cb-surface-card" aria-label="Upload scope">
-        <div className="grid grid-cols-1 gap-base md:grid-cols-2 lg:grid-cols-4">
-          <Select
-            label="Branch"
-            value={branchId}
-            onChange={(e) => setBranchId(e.target.value)}
-          >
-            <option value="">Select branch</option>
-            {branches.map((branch) => (
-              <option key={branch.id} value={branch.id}>
-                {branch.code} · {branch.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            label="Scheme"
-            value={schemeId}
-            onChange={(e) => setSchemeId(e.target.value)}
-          >
-            <option value="">Select scheme</option>
-            {schemes.map((scheme) => (
-              <option key={scheme.id} value={scheme.id}>
-                {scheme.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            label="Semester"
-            value={String(semester)}
-            onChange={(e) => setSemester(Number(e.target.value))}
-          >
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-              <option key={n} value={n}>
-                Semester {n}
-              </option>
-            ))}
-          </Select>
-          <Select
-            label="Academic year"
-            value={effectiveAcademicYearId}
-            onChange={(e) => setAcademicYearId(e.target.value)}
-          >
-            {years.map((year) => (
-              <option key={year.id} value={year.id}>
-                {year.year}
-              </option>
-            ))}
-          </Select>
-        </div>
-        {!scopeReady ? (
-          <p className="mt-base text-body-sm text-body">
-            Pick a branch, scheme and academic year before uploading — the extracted
-            rows are matched against that scope.
-          </p>
-        ) : null}
-      </article>
+      {/* The class — shared with every other class-scoped screen. */}
+      <ClassContextBar />
+
+      {!scopeReady ? (
+        <p className="text-body-sm text-body">
+          Pick a branch, scheme and academic year before uploading — the extracted rows are
+          matched against that scope.
+        </p>
+      ) : null}
 
       <FileUploader
         onFile={handleFile}

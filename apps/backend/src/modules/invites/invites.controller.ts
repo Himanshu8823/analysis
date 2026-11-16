@@ -43,18 +43,28 @@ export class InvitesController {
     });
   }
 
-  /** Lists invitations, newest first. */
+  /**
+   * Lists invitations, newest first.
+   *
+   * The list is narrowed to the caller's own branches, so a member never
+   * sees the invitations of a branch they do not work in.
+   */
   @Get()
   @Permissions('invites:read')
-  async findAll(@Query() query: ListInvitesDto) {
-    return this.invitesService.findAll(query);
+  async findAll(@Query() query: ListInvitesDto, @CurrentUser() user: JwtPayload) {
+    return this.invitesService.findAll(query, user.sub);
   }
 
-  /** Counts invitations per status — used for the tab counters. */
+  /**
+   * Counts invitations per status — used for the tab counters.
+   *
+   * Counted over the same scope as the list, so the tab and the rows
+   * beneath it always agree.
+   */
   @Get('counts')
   @Permissions('invites:read')
-  async counts() {
-    return this.invitesService.countByStatus();
+  async counts(@CurrentUser() user: JwtPayload) {
+    return this.invitesService.countByStatus(user.sub);
   }
 
   /**

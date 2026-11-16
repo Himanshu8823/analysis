@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { SidebarTrigger } from '@/components/ui/sidebar';
+import { roleDisplayName } from '@/lib/utils/role-labels';
 import { useCurrentUser, useLogout } from '@/hooks/useAuth';
 
 /**
@@ -38,7 +39,7 @@ export function AppHeader() {
         <SidebarTrigger className="-ml-2 focus-visible:ring-0 focus-visible:ring-offset-0 lg:hidden" />
         <Link
           href="/dashboard"
-          className="flex min-w-0 items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex min-h-11 min-w-0 items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Image
             src="/images/logo.png"
@@ -74,7 +75,7 @@ export function AppHeader() {
                   {user.email}
                 </span>
                 {user.role ? (
-                  <span className="cb-badge mt-2 w-fit">{user.role}</span>
+                  <span className="cb-badge mt-2 w-fit">{roleDisplayName(user.role)}</span>
                 ) : null}
               </DropdownMenuLabel>
               <DropdownMenuSeparator />

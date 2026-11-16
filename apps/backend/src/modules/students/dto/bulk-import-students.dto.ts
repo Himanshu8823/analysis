@@ -40,13 +40,6 @@ export class BulkImportStudentRowDto {
   @IsInt()
   @Min(1)
   @Max(10)
-  currentYear?: number;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(10)
   semester?: number;
 
   @ApiProperty({ required: false })
@@ -96,13 +89,6 @@ export class BulkImportStudentsDto {
   @IsOptional()
   @IsEntityId()
   academicYearId?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(10)
-  currentYear?: number;
 
   @ApiProperty({ required: false })
   @IsOptional()

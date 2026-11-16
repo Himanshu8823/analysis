@@ -97,8 +97,24 @@ export const marksService = {
     const res = await apiClient.get(ENDPOINTS.MARKS.LIST, { params: filters });
     return res.data.data;
   },
+  /**
+   * Writes a batch of marks.
+   *
+   * A whole class is one request — a teacher's sheet for forty students
+   * across eight subjects is three hundred and twenty rows, and each one is
+   * an upsert. The client waits longer than it does for an ordinary call,
+   * because a timeout half-way through would leave the member unable to
+   * tell which rows were saved.
+   *
+   * The server refuses the batch **whole** if any row is not allowed, so a
+   * long wait never ends with a partly-written class.
+   */
   createBulk: async (marks: BulkMarkInput[]) => {
-    const res = await apiClient.post(ENDPOINTS.MARKS.CREATE_BULK, { marks });
+    const res = await apiClient.post(
+      ENDPOINTS.MARKS.CREATE_BULK,
+      { marks },
+      { timeout: 120_000 }
+    );
     return res.data.data;
   },
   /** The backend exposes `PUT /marks/:id`, not `PATCH`. */
@@ -125,6 +141,16 @@ export const marksService = {
     const res = await apiClient.get(ENDPOINTS.MARKS.CALCULATE(params.studentId), {
       params: { academicYearId: params.academicYearId },
     });
+    return res.data.data;
+  },
+  /**
+   * The examination cell's correction of a mark a teacher holds.
+   *
+   * The reason is not optional: the backend refuses a correction without
+   * one, and the reason is what makes the change explainable later.
+   */
+  correct: async (payload: BulkMarkInput & { reason: string }) => {
+    const res = await apiClient.post(ENDPOINTS.MARKS.CORRECT, payload);
     return res.data.data;
   },
 };

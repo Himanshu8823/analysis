@@ -1,0 +1,104 @@
+[
+  {
+    "role": "ADMIN",
+    "screen": "/students",
+    "problem": "the screen does not mention \"roll number\"",
+    "text": "Dashboard | Upload Results | Upload History | Students | Marks Entry | Subjects | Reports | Toppers | Analytics | Administration | Schemes | Read a Syllabus | Branches | Academic Years | Academic Structure | Publish results | Toggle Sidebar | Resulti"
+  },
+  {
+    "role": "ADMIN",
+    "screen": "/students",
+    "problem": "the screen does not mention \"full name\"",
+    "text": "Dashboard | Upload Results | Upload History | Students | Marks Entry | Subjects | Reports | Toppers | Analytics | Administration | Schemes | Read a Syllabus | Branches | Academic Years | Academic Structure | Publish results | Toggle Sidebar | Resulti"
+  },
+  {
+    "role": "ADMIN",
+    "screen": "/admin/subjects",
+    "problem": "there is no button called \"Add subject\"",
+    "text": "Dashboard, Upload Results, Upload History, Students, Marks Entry, Subjects, Reports, Toppers, Analytics, Schemes, Read a Syllabus, Branches, Academic Years, Academic Structure, Publish results, EC\nExam Cell Admin, Offer subject, Create subject, Catal"
+  },
+  {
+    "role": "ADMIN",
+    "screen": "/upload",
+    "problem": "there is no button called \"Upload file\"",
+    "text": "Dashboard, Upload Results, Upload History, Students, Marks Entry, Subjects, Reports, Toppers, Analytics, Schemes, Read a Syllabus, Branches, Academic Years, Academic Structure, Publish results, EC\nExam Cell Admin, Select branch, Select scheme, Semest"
+  },
+  {
+    "role": "SUPER_ADMIN",
+    "screen": "/admin/branches",
+    "problem": "there is no button called \"Add branch\"",
+    "text": "Dashboard, Students, Marks Entry, Subjects, Reports, Toppers, Analytics, Members, Roles & Permissions, Schemes, Read a Syllabus, Branches, Academic Years, Academic Structure, Audit Log, SA\nSystem Administrator, Create branch, Edit Civil Engineering, "
+  },
+  {
+    "role": "SUPER_ADMIN",
+    "screen": "/admin/members",
+    "problem": "the screen does not mention \"email\"",
+    "text": "Dashboard | Students | Marks Entry | Subjects | Reports | Toppers | Analytics | Administration | Members | Roles & Permissions | Schemes | Read a Syllabus | Branches | Academic Years | Academic Structure | Audit Log | Toggle Sidebar | Resultiq | SA |"
+  },
+  {
+    "role": "SUPER_ADMIN",
+    "screen": "/admin/academic-years",
+    "problem": "the screen does not mention \"academic year\"",
+    "text": "Resultiq | Sign in | Access your result analysis dashboard. | Email | Password | Sign in | Forgot password? | "
+  },
+  {
+    "role": "SUPER_ADMIN",
+    "screen": "/admin/academic-years",
+    "problem": "the screen does not mention \"starts on\"",
+    "text": "Resultiq | Sign in | Access your result analysis dashboard. | Email | Password | Sign in | Forgot password? | "
+  },
+  {
+    "role": "SUPER_ADMIN",
+    "screen": "/admin/academic-years",
+    "problem": "the screen does not mention \"ends on\"",
+    "text": "Resultiq | Sign in | Access your result analysis dashboard. | Email | Password | Sign in | Forgot password? | "
+  },
+  {
+    "role": "SUPER_ADMIN",
+    "screen": "/admin/academic-years",
+    "problem": "there is no button called \"Add an academic year\"",
+    "text": "Sign in, Forgot password?"
+  },
+  {
+    "role": "SUPER_ADMIN",
+    "screen": "/admin/schemes",
+    "problem": "the screen does not mention \"scheme\"",
+    "text": "Resultiq | Sign in | Access your result analysis dashboard. | Email | Password | Sign in | Forgot password? | "
+  },
+  {
+    "role": "SUPER_ADMIN",
+    "screen": "/admin/schemes",
+    "problem": "there is no button called \"Add scheme\"",
+    "text": "Sign in, Forgot password?"
+  },
+  {
+    "role": "HOD",
+    "screen": "/admin/assignments",
+    "problem": "the screen does not mention \"teacher\"",
+    "text": "Loading session | "
+  },
+  {
+    "role": "HOD",
+    "screen": "/admin/assignments",
+    "problem": "the screen does not mention \"subject\"",
+    "text": "Loading session | "
+  },
+  {
+    "role": "HOD",
+    "screen": "/admin/assignments",
+    "problem": "there is no button called \"Assign teacher\"",
+    "text": ""
+  },
+  {
+    "role": "TEACHER",
+    "screen": "/my-account",
+    "problem": "the screen does not mention \"account\"",
+    "text": "Loading session | "
+  },
+  {
+    "role": "TEACHER",
+    "screen": "/my-account",
+    "problem": "the screen does not mention \"profile\"",
+    "text": "Loading session | "
+  }
+]

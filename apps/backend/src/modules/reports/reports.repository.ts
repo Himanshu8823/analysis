@@ -25,6 +25,16 @@ export class ReportsRepository {
     generatedBy?: string;
     type?: string;
     branchId?: string | string[];
+    /**
+     * Whether archived reports are included.
+     *
+     * The list a member sees is of **live** reports by default. An archived
+     * report still exists — it is a statement about a class's results, and
+     * the row is kept for the audit trail — but it is not something the
+     * member asked to see, and showing it would leave them wondering why a
+     * report they generated has vanished.
+     */
+    includeArchived?: boolean;
   }) {
     const page = Math.max(1, params.page ?? 1);
     const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 20));
@@ -34,6 +44,7 @@ export class ReportsRepository {
     if (params.status) where.status = params.status;
     if (params.generatedBy) where.generatedBy = params.generatedBy;
     if (params.type) where.type = params.type;
+    if (!params.includeArchived) where.isArchived = false;
     // A report carries no branch column of its own — the branch lives inside
     // the `filters` JSON, so the scope filter has to go through that path.
     // A JSON path filter compares one value, so a scope covering several
@@ -117,7 +128,26 @@ export class ReportsRepository {
     });
   }
 
-  async delete(id: string): Promise<void> {
-    await this.prisma.report.delete({ where: { id } });
+  /**
+   * Archives a report.
+   *
+   * The row is **not** deleted. A report is a statement about a class's
+   * results, and a result that existed and then vanished cannot be
+   * accounted for. The file is released, the report is marked as archived,
+   * and the reason and the person who archived it are kept with it.
+   */
+  async archive(id: string, archivedBy: string, reason: string): Promise<void> {
+    await this.prisma.report.update({
+      where: { id },
+      data: {
+        isArchived: true,
+        archivedAt: new Date(),
+        archivedBy,
+        archiveReason: reason,
+        // The generated file is released with the archive — the row is kept,
+        // the bytes are not.
+        fileUrl: null,
+      },
+    });
   }
 }

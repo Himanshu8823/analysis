@@ -37,6 +37,27 @@ export function useGenerateReport() {
 }
 
 /**
+ * Archives a report.
+ *
+ * The report is not deleted: it is a statement about a class's results, so
+ * the record is kept with the reason it was archived and who archived it.
+ * The file is released.
+ */
+export function useArchiveReport() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      reportsService.archive(id, reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.reports.all() });
+      toast.success('Report archived. Its record has been kept.');
+    },
+    onError: (error: unknown) => toast.error(extractErrorMessage(error)),
+  });
+}
+
+/**
  * Whether the class's result is complete enough to report on.
  *
  * The check runs as soon as the scope is complete, so the operator is told

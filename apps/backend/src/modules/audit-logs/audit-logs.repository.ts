@@ -30,6 +30,15 @@ export interface AuditLogFilters {
   search?: string;
   /** Exact match on the originating IP address. */
   ipAddress?: string;
+  /**
+   * Restricts the trail to entries made by these users.
+   *
+   * The audit log carries no branch of its own, so the branch scope of a
+   * reader is applied through the *actor*: an entry is in a reader's trail
+   * if the member who caused it is in the reader's scope. `undefined` means
+   * no restriction — the reader may see the whole college's trail.
+   */
+  actorIds?: string[];
 }
 
 @Injectable()
@@ -85,22 +94,30 @@ export class AuditLogsRepository {
    * A screen needs these to build its filter dropdowns. Computing them with
    * `groupBy` keeps the cost proportional to the table rather than to the
    * number of rows a screen would otherwise have to fetch to discover them.
+   *
+   * `actorIds` applies the reader's branch scope, so the dropdowns only
+   * offer values the list would actually return.
    */
-  async findFacets() {
+  async findFacets(actorIds?: string[]) {
+    const actorWhere: Prisma.AuditLogWhereInput =
+      actorIds === undefined ? {} : { userId: { in: actorIds } };
+
     const [actions, resources, userIds] = await Promise.all([
       this.prisma.auditLog.groupBy({
         by: ['action'],
         _count: { action: true },
         orderBy: { action: 'asc' },
+        where: actorWhere,
       }),
       this.prisma.auditLog.groupBy({
         by: ['resource'],
         _count: { resource: true },
         orderBy: { resource: 'asc' },
+        where: actorWhere,
       }),
       this.prisma.auditLog.groupBy({
         by: ['userId'],
-        where: { userId: { not: null } },
+        where: { userId: { not: null }, ...actorWhere },
       }),
     ]);
 
@@ -134,12 +151,22 @@ export class AuditLogsRepository {
     };
   }
 
-  async findById(id: string): Promise<AuditLog> {
+  /**
+   * A single entry.
+   *
+   * When `actorIds` is given, an entry made by a member outside the reader's
+   * scope is reported as not found rather than as forbidden — the reader
+   * must not be able to confirm that an entry they may not see exists.
+   */
+  async findById(id: string, actorIds?: string[]): Promise<AuditLog> {
     const log = await this.prisma.auditLog.findUnique({
       where: { id },
       include: { user: { select: { id: true, email: true, name: true } } },
     });
     if (!log) {
+      throw new NotFoundException(`Audit log with id ${id} not found`);
+    }
+    if (actorIds && (!log.userId || !actorIds.includes(log.userId))) {
       throw new NotFoundException(`Audit log with id ${id} not found`);
     }
     return log;
@@ -156,6 +183,28 @@ export class AuditLogsRepository {
 
     if (params.userId) where.userId = params.userId;
     if (params.ipAddress) where.ipAddress = params.ipAddress;
+
+    /**
+     * The branch scope, applied through the actor.
+     *
+     * A reader who is scoped to a branch sees the entries made by the
+     * members of that branch. An entry with no actor — a background job, a
+     * failed sign-in that never resolved to a user — belongs to nobody and
+     * is therefore not shown to a branch-scoped reader, but is shown to a
+     * college-scoped one.
+     */
+    if (params.actorIds) {
+      const requestedUserId = params.userId;
+      if (requestedUserId) {
+        // The caller named a user *and* the scope applies. The named user has
+        // to be inside the scope, or the query matches nothing.
+        where.userId = {
+          in: params.actorIds.includes(requestedUserId) ? [requestedUserId] : [],
+        };
+      } else {
+        where.userId = { in: params.actorIds };
+      }
+    }
 
     if (params.action) {
       const actions = splitFilter(params.action);

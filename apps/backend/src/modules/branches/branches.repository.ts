@@ -17,9 +17,19 @@ export class BranchesRepository {
     });
   }
 
-  async findAll(): Promise<Branch[]> {
+  /**
+   * The active branches a member may see.
+   *
+   * `branchIds` of `undefined` returns every active branch — the
+   * college-wide view. A list narrows the result to those branches, so a
+   * member who works in one branch never sees the others in the picker.
+   */
+  async findAll(branchIds?: string[]): Promise<Branch[]> {
     return this.prisma.branch.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        ...(branchIds && branchIds.length > 0 ? { id: { in: branchIds } } : {}),
+      },
       orderBy: { code: 'asc' },
     });
   }

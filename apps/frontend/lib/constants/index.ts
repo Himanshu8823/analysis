@@ -44,7 +44,18 @@ export const NAV_ITEMS = [
     href: '/marks',
     label: 'Marks Entry',
     icon: 'file',
-    permissions: ['marks:enter_own_subject'],
+    /**
+     * Any of these rights opens the screen.
+     *
+     * `marks:read` is here because the Head of Department and the Principal
+     * may read their branch's marks, and this screen is where the marks of a
+     * class are. Without it they were refused the marks they were entitled
+     * to see — the permission had no screen behind it.
+     *
+     * What a member may *change* is a separate question, and the screen
+     * asks it of the member's permissions rather than of the screen's.
+     */
+    permissions: ['marks:read', 'marks:enter_own_subject', 'marks:write'],
   },
   {
     href: '/admin/subjects',

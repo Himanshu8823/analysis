@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ClassOverviewRepository, MyClassAssignment } from './class-overview.repository';
 import { ScopeService } from '@/common/services/scope.service';
+import { yearForSemester } from '@/common/utils/academic';
 
 /**
  * The class a member is the class teacher of.
@@ -66,6 +67,7 @@ export interface ClassOverview {
     id: string;
     rollNo: string;
     name: string;
+    /** The curriculum year, derived from the semester. */
     currentYear: number;
     semester: number;
     totalMarks: number;
@@ -179,7 +181,7 @@ export class ClassOverviewService {
         id: s.id,
         rollNo: s.rollNo,
         name: s.name,
-        currentYear: s.currentYear,
+        currentYear: yearForSemester(s.semester),
         semester: s.semester,
         totalMarks: s.totalMarks,
         maxTotalMarks: s.maxTotalMarks,

@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { UploadService } from '../upload.service';
 import { StorageService } from '../../storage/storage.service';
+import { UrlGuardService } from '@/common/services/url-guard.service';
 import { parseMarksFile } from '../marks-file.parser';
 
 interface UploadJobData {
@@ -25,7 +26,8 @@ export class UploadProcessor extends WorkerHost {
 
   constructor(
     private readonly uploadService: UploadService,
-    private readonly storage: StorageService
+    private readonly storage: StorageService,
+    private readonly urlGuard: UrlGuardService
   ) {
     super();
   }
@@ -82,10 +84,16 @@ export class UploadProcessor extends WorkerHost {
    * route it was published under is JWT-guarded, so fetching it over HTTP
    * would fail with a 401. Files that live somewhere else (an external
    * bucket) are still fetched over HTTP.
+   *
+   * The address is checked again here, at the point of fetching. The job
+   * row was checked when it was created, but the fetch is where the
+   * server actually visits the address, so it is where the check belongs.
    */
   private async fetchFile(fileUrl: string): Promise<Buffer> {
     const stored = await this.storage.readByUrl(fileUrl);
     if (stored) return stored;
+
+    await this.urlGuard.assertFetchable(fileUrl);
 
     const response = await fetch(fileUrl);
     if (!response.ok) {

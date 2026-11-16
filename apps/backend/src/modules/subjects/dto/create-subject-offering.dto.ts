@@ -27,12 +27,6 @@ export class CreateSubjectOfferingDto {
   @IsEntityId()
   schemeId: string;
 
-  @ApiProperty({ required: false, example: 3 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  year?: number;
-
   @ApiProperty({ required: false, description: 'Academic year the offering belongs to' })
   @IsOptional()
   @IsEntityId()

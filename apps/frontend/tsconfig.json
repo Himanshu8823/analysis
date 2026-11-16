@@ -22,7 +22,9 @@
       "@/lib/*": ["./lib/*"],
       "@/app/*": ["./app/*"],
       "@result-analysis/shared-types": ["../../packages/shared-types/src/index.ts"],
-      "@result-analysis/shared-types/*": ["../../packages/shared-types/src/*"]
+      "@result-analysis/shared-types/*": ["../../packages/shared-types/src/*"],
+      "@result-analysis/shared-constants": ["../../packages/shared-constants/src/index.ts"],
+      "@result-analysis/shared-constants/*": ["../../packages/shared-constants/src/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

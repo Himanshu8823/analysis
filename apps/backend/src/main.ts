@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import type { OpenAPIObject } from '@nestjs/swagger';
 import helmet from 'helmet';
@@ -44,7 +45,10 @@ async function bootstrap(): Promise<void> {
   app.useGlobalInterceptors(
     new LoggingInterceptor(),
     new TransformInterceptor(),
-    new TimeoutInterceptor()
+    // The reflector lets a route declare a longer timeout - reading a
+    // syllabus PDF checks every page and then runs a model over the text,
+    // which takes longer than a normal request.
+    new TimeoutInterceptor(new Reflector())
   );
 
   // Global filter

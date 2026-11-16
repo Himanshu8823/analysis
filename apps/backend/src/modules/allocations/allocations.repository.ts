@@ -24,6 +24,27 @@ export interface TeacherAllocationRow {
 }
 
 /**
+ * A class that has no class teacher.
+ *
+ * This is a real state, not an absence of a row: when a teacher is revoked,
+ * their class loses its teacher, and the college must be able to see that
+ * the class is unassigned rather than infer it from a missing line in a
+ * list.
+ */
+export interface ClassNeedingTeacherRow {
+  branchId: string;
+  branchName: string;
+  semester: number;
+  schemeId: string;
+  schemeName: string;
+  academicYearId: string;
+  /** How many students are in the class — a class with nobody in it needs no teacher. */
+  studentCount: number;
+  /** How many subjects the class is taught. */
+  subjectCount: number;
+}
+
+/**
  * A class-teacher assignment, flattened for the list view.
  */
 export interface ClassTeacherAssignmentRow {
@@ -64,15 +85,24 @@ export class AllocationsRepository {
    *
    * The branch filter is applied on the `UserRole` relation, because the
    * `User` table carries no branch of its own.
+   *
+   * `branchIds` is a *set*, not a single id. A caller scoped to several
+   * branches must see the teachers of all of them and no others, so the
+   * filter has to be able to say "one of these". `undefined` means
+   * college-wide — no filter at all.
    */
-  async findAssignableTeachers(branchId?: string): Promise<AssignableTeacher[]> {
+  async findAssignableTeachers(branchIds?: string[]): Promise<AssignableTeacher[]> {
     const rows = await this.prisma.user.findMany({
       where: {
         isActive: true,
         userRoles: {
           some: {
             role: { name: 'TEACHER' },
-            ...(branchId ? { OR: [{ branchId }, { branchId: null }] } : {}),
+            ...(branchIds
+              ? {
+                  OR: [{ branchId: { in: branchIds } }, { branchId: null }],
+                }
+              : {}),
           },
         },
       },
@@ -85,7 +115,7 @@ export class AllocationsRepository {
   }
 
   async findTeacherAllocations(params: {
-    branchId?: string;
+    branchIds?: string[];
     semester?: number;
     academicYearId?: string;
     teacherId?: string;
@@ -97,7 +127,7 @@ export class AllocationsRepository {
     if (params.subjectOfferingId) where.subjectOfferingId = params.subjectOfferingId;
 
     const offeringFilter: Prisma.SubjectOfferingWhereInput = {};
-    if (params.branchId) offeringFilter.branchId = params.branchId;
+    if (params.branchIds) offeringFilter.branchId = { in: params.branchIds };
     if (params.semester !== undefined) offeringFilter.semester = params.semester;
     if (Object.keys(offeringFilter).length > 0) {
       where.subjectOffering = offeringFilter;
@@ -158,13 +188,13 @@ export class AllocationsRepository {
   }
 
   async findClassTeacherAssignments(params: {
-    branchId?: string;
+    branchIds?: string[];
     semester?: number;
     academicYearId?: string;
     teacherId?: string;
   }): Promise<ClassTeacherAssignmentRow[]> {
     const where: Prisma.ClassTeacherAssignmentWhereInput = {};
-    if (params.branchId) where.branchId = params.branchId;
+    if (params.branchIds) where.branchId = { in: params.branchIds };
     if (params.semester !== undefined) where.semester = params.semester;
     if (params.academicYearId) where.academicYearId = params.academicYearId;
     if (params.teacherId) where.teacherId = params.teacherId;
@@ -190,6 +220,142 @@ export class AllocationsRepository {
 
   async findClassTeacherAssignmentById(id: string): Promise<ClassTeacherAssignment | null> {
     return this.prisma.classTeacherAssignment.findUnique({ where: { id } });
+  }
+
+  /**
+   * The classes that have students but no class teacher.
+   *
+   * A class is identified by its branch, semester, scheme and academic year
+   * — the same four things that make a class-teacher assignment. The list is
+   * built from the **classes that exist** (those with students or subjects)
+   * and then filtered to the ones with no teacher, so the answer is the
+   * classes the college must act on, not every class in the system.
+   *
+   * A class with no students and no subjects is not listed: there is nobody
+   * to teach and nothing to teach.
+   */
+  async findClassesNeedingTeacher(params: {
+    branchIds?: string[];
+    semester?: number;
+    academicYearId?: string;
+  }): Promise<ClassNeedingTeacherRow[]> {
+    const offeringWhere: Prisma.SubjectOfferingWhereInput = {
+      isActive: true,
+      ...(params.branchIds ? { branchId: { in: params.branchIds } } : {}),
+      ...(params.semester !== undefined ? { semester: params.semester } : {}),
+      ...(params.academicYearId ? { academicYearId: params.academicYearId } : {}),
+    };
+
+    /**
+     * The classes that exist. An offering is a class that is actually taught.
+     */
+    const offerings = await this.prisma.subjectOffering.findMany({
+      where: offeringWhere,
+      select: {
+        branchId: true,
+        semester: true,
+        schemeId: true,
+        academicYearId: true,
+        branch: { select: { name: true } },
+        scheme: { select: { name: true } },
+      },
+    });
+
+    /**
+     * The assignments that exist. The list of classes needing a teacher is
+     * the difference between the two.
+     */
+    const assignments = await this.prisma.classTeacherAssignment.findMany({
+      where: {
+        ...(params.branchIds ? { branchId: { in: params.branchIds } } : {}),
+        ...(params.semester !== undefined ? { semester: params.semester } : {}),
+        ...(params.academicYearId ? { academicYearId: params.academicYearId } : {}),
+      },
+      select: { branchId: true, semester: true, schemeId: true, academicYearId: true },
+    });
+
+    const assigned = new Set(
+      assignments.map((a) => `${a.branchId}|${a.semester}|${a.schemeId}|${a.academicYearId}`)
+    );
+
+    /**
+     * Group the offerings into classes. A class may be offered several
+     * subjects, so the offerings are counted rather than listed.
+     */
+    const classes = new Map<
+      string,
+      {
+        branchId: string;
+        branchName: string;
+        semester: number;
+        schemeId: string;
+        schemeName: string;
+        academicYearId: string;
+        subjectCount: number;
+      }
+    >();
+
+    for (const offering of offerings) {
+      /**
+       * An offering with no academic year belongs to no class context — the
+       * class-teacher assignment is made for a year, so it cannot be one.
+       */
+      if (!offering.academicYearId) continue;
+
+      const key = `${offering.branchId}|${offering.semester}|${offering.schemeId}|${offering.academicYearId}`;
+      if (assigned.has(key)) continue;
+
+      const existing = classes.get(key);
+      if (existing) {
+        existing.subjectCount += 1;
+        continue;
+      }
+
+      classes.set(key, {
+        branchId: offering.branchId,
+        branchName: offering.branch.name,
+        semester: offering.semester,
+        schemeId: offering.schemeId,
+        schemeName: offering.scheme.name,
+        academicYearId: offering.academicYearId,
+        subjectCount: 1,
+      });
+    }
+
+    if (classes.size === 0) return [];
+
+    /**
+     * How many students are in each class. A class with no students does not
+     * need a class teacher — there is nobody to look after.
+     */
+    const students = await this.prisma.student.findMany({
+      where: {
+        isActive: true,
+        ...(params.branchIds ? { branchId: { in: params.branchIds } } : {}),
+        ...(params.semester !== undefined ? { semester: params.semester } : {}),
+        ...(params.academicYearId ? { academicYearId: params.academicYearId } : {}),
+      },
+      select: { branchId: true, semester: true, schemeId: true, academicYearId: true },
+    });
+
+    const studentCounts = new Map<string, number>();
+    for (const student of students) {
+      const key = `${student.branchId}|${student.semester}|${student.schemeId}|${student.academicYearId}`;
+      studentCounts.set(key, (studentCounts.get(key) ?? 0) + 1);
+    }
+
+    return Array.from(classes.entries())
+      .map(([key, row]) => ({
+        ...row,
+        studentCount: studentCounts.get(key) ?? 0,
+      }))
+      .filter((row) => row.studentCount > 0)
+      .sort(
+        (a, b) =>
+          a.branchName.localeCompare(b.branchName) ||
+          a.semester - b.semester ||
+          a.schemeName.localeCompare(b.schemeName)
+      );
   }
 
   async createClassTeacherAssignment(data: {

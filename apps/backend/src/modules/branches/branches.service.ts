@@ -11,8 +11,16 @@ export class BranchesService {
     return this.repository.create(dto, userId);
   }
 
-  async findAll(): Promise<Branch[]> {
-    return this.repository.findAll();
+  /**
+   * The branches a member may see.
+   *
+   * `undefined` means college-wide — every branch. A list of one or more
+   * narrows the list to those branches. The list is a *set* rather than a
+   * single id because a member may work in several branches, and a read
+   * that named none must still be narrowed to all of them.
+   */
+  async findAll(branchIds?: string[]): Promise<Branch[]> {
+    return this.repository.findAll(branchIds);
   }
 
   async findById(id: string): Promise<Branch> {

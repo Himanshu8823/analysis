@@ -53,7 +53,6 @@ export class StudentsController {
     @Query('pageSize') pageSize?: string,
     @Query('branchId') branchId?: string,
     @Query('schemeId') schemeId?: string,
-    @Query('currentYear') currentYear?: string,
     @Query('semester') semester?: string,
     @Query('academicYearId') academicYearId?: string,
     @Query('search') search?: string
@@ -70,7 +69,6 @@ export class StudentsController {
       pageSize: parseOptionalInt(pageSize),
       branchId: effectiveBranchIds,
       schemeId: parseOptionalString(schemeId),
-      currentYear: parseOptionalInt(currentYear),
       semester: parseOptionalInt(semester),
       academicYearId: parseOptionalString(academicYearId),
       search: parseOptionalString(search),
@@ -87,8 +85,8 @@ export class StudentsController {
     resourceIdSource: 'none',
   })
   @ApiOperation({ summary: 'Bulk import students from JSON rows' })
-  async bulkImport(@Body() dto: BulkImportStudentsDto) {
-    return this.service.bulkImport(dto);
+  async bulkImport(@Body() dto: BulkImportStudentsDto, @CurrentUser() user: JwtPayload) {
+    return this.service.bulkImport(dto, user.sub);
   }
 
   @Post('bulk-import/file')
@@ -101,15 +99,15 @@ export class StudentsController {
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_UPLOAD_BYTES } }))
   async bulkImportFile(
     @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: JwtPayload,
     @Query('branchId') branchId?: string,
     @Query('schemeId') schemeId?: string,
     @Query('batchId') batchId?: string,
     @Query('academicYearId') academicYearId?: string,
-    @Query('currentYear') currentYear?: string,
     @Query('semester') semester?: string
   ) {
     if (!file) {
-      throw new BadRequestException('A CSV or Excel file is required');
+      throw new BadRequestException('Choose a CSV or Excel file to import.');
     }
     const parsed = await parseStudentFile(file.buffer, file.originalname);
     return this.service.bulkImportFile(
@@ -119,10 +117,10 @@ export class StudentsController {
         schemeId: parseOptionalString(schemeId),
         batchId: parseOptionalString(batchId),
         academicYearId: parseOptionalString(academicYearId),
-        currentYear: parseOptionalInt(currentYear),
         semester: parseOptionalInt(semester),
       },
-      parsed.errors
+      parsed.errors,
+      user.sub
     );
   }
 

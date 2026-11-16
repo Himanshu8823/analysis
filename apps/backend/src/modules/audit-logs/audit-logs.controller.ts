@@ -2,8 +2,9 @@ import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AuditLogsService } from './audit-logs.service';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
-import { Permissions } from '@/common/decorators';
+import { Permissions, CurrentUser } from '@/common/decorators';
 import { parseOptionalInt, parseOptionalString } from '@/common/utils/query-params';
+import type { JwtPayload } from '@/common/types';
 
 @ApiTags('Audit Logs')
 @ApiBearerAuth()
@@ -31,6 +32,7 @@ export class AuditLogsController {
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiQuery({ name: 'ipAddress', required: false, type: String })
   async findAll(
+    @CurrentUser() user: JwtPayload,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('userId') userId?: string,
@@ -46,17 +48,20 @@ export class AuditLogsController {
     const from = fromDate ? new Date(fromDate) : undefined;
     const to = toDate ? new Date(toDate) : undefined;
 
-    return this.service.findAll({
-      page: parseOptionalInt(page),
-      pageSize: parseOptionalInt(pageSize),
-      userId: parseOptionalString(userId),
-      action: parseOptionalString(action),
-      resource: parseOptionalString(resource),
-      fromDate: from && !Number.isNaN(from.getTime()) ? from : undefined,
-      toDate: to && !Number.isNaN(to.getTime()) ? to : undefined,
-      search: parseOptionalString(search),
-      ipAddress: parseOptionalString(ipAddress),
-    });
+    return this.service.findAll(
+      {
+        page: parseOptionalInt(page),
+        pageSize: parseOptionalInt(pageSize),
+        userId: parseOptionalString(userId),
+        action: parseOptionalString(action),
+        resource: parseOptionalString(resource),
+        fromDate: from && !Number.isNaN(from.getTime()) ? from : undefined,
+        toDate: to && !Number.isNaN(to.getTime()) ? to : undefined,
+        search: parseOptionalString(search),
+        ipAddress: parseOptionalString(ipAddress),
+      },
+      user.sub
+    );
   }
 
   /**
@@ -73,14 +78,14 @@ export class AuditLogsController {
       'Intended for building filter dropdowns, so a screen never has to ' +
       'discover the available values by paging through the whole trail.',
   })
-  async findFacets() {
-    return this.service.findFacets();
+  async findFacets(@CurrentUser() user: JwtPayload) {
+    return this.service.findFacets(user.sub);
   }
 
   @Get(':id')
   @Permissions('audit:read')
   @ApiOperation({ summary: 'Get single audit log entry' })
-  async findById(@Param('id') id: string) {
-    return this.service.findById(id);
+  async findById(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.service.findById(id, user.sub);
   }
 }

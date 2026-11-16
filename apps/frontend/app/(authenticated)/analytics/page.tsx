@@ -19,16 +19,38 @@ import {
 } from '@/hooks/useAnalytics';
 import { useBranches } from '@/hooks/useBranches';
 import { useSchemes } from '@/hooks/useSchemes';
+import { useClassContext } from '@/lib/context/class-context';
 import { formatters } from '@/lib/utils/formatters';
 import type { AnalyticsFilters } from '@/lib/services/analytics.service';
 
 export default function AnalyticsPage() {
+  /**
+   * The cohort screen opens on the shared class, and can widen beyond it.
+   *
+   * The branch, scheme and semester here are *filters*, not a required
+   * scope: leaving them empty shows everything the member is entitled to
+   * see. They start from the class the member is working on elsewhere, so
+   * the charts are about the right class on arrival — and the member can
+   * still widen them to the whole college.
+   */
+  const { context: classContext } = useClassContext();
   const [branchId, setBranchId] = useState('');
   const [schemeId, setSchemeId] = useState('');
-  const [semester, setSemester] = useState(1);
+  const [semester, setSemester] = useState<number | ''>('');
 
   const { data: branchesData } = useBranches();
   const { data: schemesData } = useSchemes();
+
+  /**
+   * The filters fall back to the shared class.
+   *
+   * The fallback is a *starting point*, not a lock: the member can widen
+   * the cohort from here, and the filter dropdowns still show the wider
+   * choice.
+   */
+  const effectiveBranchId = branchId || classContext.branchId;
+  const effectiveSchemeId = schemeId || classContext.schemeId;
+  const effectiveSemester = semester === '' ? classContext.semester : semester;
 
   /**
    * The filters are an *override*, not a precondition.
@@ -46,9 +68,9 @@ export default function AnalyticsPage() {
    * to be there on arrival.
    */
   const filters: AnalyticsFilters = {
-    branchId: branchId || undefined,
-    schemeId: schemeId || undefined,
-    semester,
+    branchId: effectiveBranchId || undefined,
+    schemeId: effectiveSchemeId || undefined,
+    semester: effectiveSemester,
   };
 
   const overview = useOverview(filters);
@@ -103,7 +125,7 @@ export default function AnalyticsPage() {
         <div className="grid grid-cols-1 gap-base md:grid-cols-3">
           <Select
             label="Branch (optional)"
-            value={branchId}
+            value={effectiveBranchId}
             onChange={(e) => setBranchId(e.target.value)}
           >
             <option value="">All branches in my scope</option>
@@ -115,7 +137,7 @@ export default function AnalyticsPage() {
           </Select>
           <Select
             label="Scheme (optional)"
-            value={schemeId}
+            value={effectiveSchemeId}
             onChange={(e) => setSchemeId(e.target.value)}
           >
             <option value="">All schemes</option>
@@ -127,8 +149,8 @@ export default function AnalyticsPage() {
           </Select>
           <Select
             label="Semester"
-            value={String(semester)}
-            onChange={(e) => setSemester(Number(e.target.value))}
+            value={String(effectiveSemester)}
+            onChange={(e) => setSemester(e.target.value === '' ? '' : Number(e.target.value))}
           >
             {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
               <option key={n} value={n}>

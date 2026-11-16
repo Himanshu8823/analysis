@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
 import { resolveAcademicYear } from '@/common/utils/academic-year';
+import { yearForSemester } from '@/common/utils/academic';
 import { ScopeService } from '@/common/services/scope.service';
 import { DashboardScopeRepository } from './dashboard-scope.repository';
 import type {
@@ -463,7 +464,6 @@ export class DashboardService {
         rollNo: true,
         name: true,
         semester: true,
-        currentYear: true,
         branch: { select: { id: true, code: true, name: true } },
         academicYearId: true,
       },
@@ -563,7 +563,7 @@ export class DashboardService {
         key: 'subjects',
         label: 'Subjects graded',
         value: gradedSubjects,
-        hint: `Semester ${student.semester} · Year ${student.currentYear}`,
+        hint: `Semester ${student.semester} · Year ${yearForSemester(student.semester)}`,
       },
       {
         key: 'rollNo',
@@ -623,10 +623,16 @@ export class DashboardService {
     classScope: ClassScope | undefined
   ): Promise<string[] | undefined> {
     if (scope === 'class') {
-      // A teacher's world is the branches their allocations and class-teacher
-      // assignments cover. The `branchId` parameter cannot widen that.
+      /**
+       * A teacher's world is the branches their allocations and class-teacher
+       * assignments cover. The `branchId` parameter cannot widen that.
+       *
+       * A teacher with no allocation at all gets an *empty* set, not
+       * `undefined`. `undefined` would mean college-wide — the whole
+       * opposite of what an unallocated teacher should see. They see an
+       * empty dashboard, which is the truth.
+       */
       const allocated = classScope?.branchIds ?? [];
-      if (allocated.length === 0) return undefined;
       if (query.branchId) {
         return allocated.includes(query.branchId) ? [query.branchId] : allocated;
       }
@@ -722,7 +728,17 @@ export class DashboardService {
   ): Prisma.StudentWhereInput {
     const where: Prisma.StudentWhereInput = { isActive: true };
     if (yearId) where.academicYearId = yearId;
-    if (branchIds && branchIds.length > 0) where.branchId = { in: branchIds };
+    /**
+     * `undefined` means college-wide — no branch filter at all.
+     *
+     * An *empty* array means "no branch at all", and it must match nothing.
+     * The distinction matters for a teacher with no allocations: their world
+     * is empty, and treating the empty set as "no filter" would hand them
+     * the whole college.
+     */
+    if (branchIds) {
+      where.branchId = { in: branchIds };
+    }
     if (query.schemeId) where.schemeId = query.schemeId;
     if (query.semester !== undefined && Number.isFinite(query.semester)) {
       where.semester = query.semester;
@@ -741,7 +757,11 @@ export class DashboardService {
     if (yearId) {
       where.OR = [{ academicYearId: yearId }, { academicYearId: null }];
     }
-    if (branchIds && branchIds.length > 0) where.branchId = { in: branchIds };
+    // `undefined` is college-wide; an empty array matches nothing. See
+    // `buildStudentWhere`.
+    if (branchIds) {
+      where.branchId = { in: branchIds };
+    }
     if (query.schemeId) where.schemeId = query.schemeId;
     if (query.semester !== undefined && Number.isFinite(query.semester)) {
       where.semester = query.semester;
@@ -853,7 +873,8 @@ export class DashboardService {
         isWithheld: false,
         student: {
           isActive: true,
-          ...(branchIds && branchIds.length > 0 ? { branchId: { in: branchIds } } : {}),
+          // `undefined` is college-wide; an empty array matches nothing.
+          ...(branchIds ? { branchId: { in: branchIds } } : {}),
         },
       },
       select: {
@@ -996,7 +1017,12 @@ export class DashboardService {
       examinations = await this.prisma.examination.findMany({
         where: {
           academicYearId: yearId,
-          ...(branchIds && branchIds.length > 0 ? { branchId: { in: branchIds } } : {}),
+          /**
+           * `undefined` is college-wide; an empty array matches nothing.
+           * A teacher with no allocation sees no examinations — the same
+           * rule the student and offering counts follow.
+           */
+          ...(branchIds ? { branchId: { in: branchIds } } : {}),
         },
         select: {
           id: true,
@@ -1330,7 +1356,8 @@ export class DashboardService {
    * The branches that appear in the figures, resolved to their display names.
    *
    * `undefined` means "every branch" — the college scope — so the map is
-   * built from all active branches in that case.
+   * built from all active branches in that case. An empty array means "no
+   * branch at all", and the map stays empty.
    */
   private async branchNames(branchIds: string[] | undefined): Promise<Map<string, string>> {
     const map = new Map<string, string>();
@@ -1338,7 +1365,7 @@ export class DashboardService {
     const branches = await this.prisma.branch.findMany({
       where: {
         isActive: true,
-        ...(branchIds && branchIds.length > 0 ? { id: { in: branchIds } } : {}),
+        ...(branchIds ? { id: { in: branchIds } } : {}),
       },
       select: { id: true, code: true, name: true },
     });
@@ -1357,13 +1384,26 @@ export class DashboardService {
     scope: DashboardScopeKind,
     branchIds: string[] | undefined
   ): Promise<string> {
-    // No branch filter means the figures cover the whole college.
-    if (!branchIds || branchIds.length === 0) {
-      return scope === 'class' ? 'Your subjects' : 'Whole college';
+    /**
+     * The class scope with an empty branch set is a teacher with no
+     * allocation: their figures cover nothing, and the label says so. The
+     * college and branch scopes only ever pass `undefined` (college-wide)
+     * or a non-empty set, so the empty case belongs to the class scope
+     * alone.
+     */
+    if (scope === 'class') {
+      if (!branchIds || branchIds.length === 0) return 'Your subjects';
+      const labels = await this.scopeRepository.branchLabels(branchIds);
+      if (labels.length === 0) return 'Your subjects';
+      if (labels.length === 1) return labels[0];
+      return `${labels.length} branches`;
     }
 
+    // No branch filter means the figures cover the whole college.
+    if (!branchIds) return 'Whole college';
+
     const labels = await this.scopeRepository.branchLabels(branchIds);
-    if (labels.length === 0) return scope === 'class' ? 'Your subjects' : 'Your branch';
+    if (labels.length === 0) return 'Your branch';
     if (labels.length === 1) return labels[0];
     return `${labels.length} branches`;
   }

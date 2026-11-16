@@ -11,6 +11,7 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 import { AuditService } from '@/common/services/audit.service';
+import { AuthorisationService } from '@/common/services/authorisation.service';
 import { AuditAction, AuditResource } from '@/common/decorators/audited.decorator';
 import { CACHE_SERVICE } from '@/common/constants/injection-tokens';
 import { CacheKeys } from '../cache/cache.constants';
@@ -61,6 +62,7 @@ export class StudentProvisioningService {
     private readonly prisma: PrismaClient,
     private readonly config: ConfigService,
     private readonly auditService: AuditService,
+    private readonly authorisation: AuthorisationService,
     @Inject(CACHE_SERVICE) private readonly cache: CacheService
   ) {}
 
@@ -100,8 +102,18 @@ export class StudentProvisioningService {
       where: { id: studentId },
     });
     if (!student) {
-      throw new NotFoundException('Student not found');
+      throw new NotFoundException('That student no longer exists.');
     }
+
+    /**
+     * The student must be in a branch the caller may write to.
+     *
+     * Provisioning a login is a write against the student record, so it
+     * carries the same branch scope as editing one. Without this, a
+     * branch-scoped member could provision accounts for any branch's
+     * students.
+     */
+    await this.authorisation.assertBranchWritable(provisionedBy, student.branchId, 'student');
 
     const storedEmail = student.email?.trim().toLowerCase() || null;
     const suppliedEmail = options?.email?.trim().toLowerCase() || null;

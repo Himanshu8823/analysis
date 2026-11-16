@@ -14,7 +14,14 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { UploadService } from './upload.service';
 import { CreateUploadJobDto, ConfirmUploadDto } from './dto';
-import { Permissions, CurrentUser, Audited, AuditAction, AuditResource } from '@/common/decorators';
+import {
+  AnyPermission,
+  Permissions,
+  CurrentUser,
+  Audited,
+  AuditAction,
+  AuditResource,
+} from '@/common/decorators';
 import { parseOptionalInt, parseOptionalString } from '@/common/utils/query-params';
 import { Throttle } from '@nestjs/throttler';
 import type { JwtPayload } from '@/common/types';
@@ -92,29 +99,31 @@ export class UploadController {
   @Get('jobs/:jobId')
   @Permissions('upload:read')
   @ApiOperation({ summary: 'Poll the status of an upload job' })
-  async status(@Param('jobId') jobId: string) {
-    return this.service.findById(jobId);
+  async status(@Param('jobId') jobId: string, @CurrentUser() user: JwtPayload) {
+    return this.service.findByIdForViewer(jobId, user.sub);
   }
 
   /**
    * Confirms an extraction and writes it to the marks table.
    *
-   * The route is gated on `upload:read` rather than on a single write
-   * permission, because two different rights can land here and they are not
-   * the same right:
+   * Two different rights can land here and they are not the same right:
    *
    *  - `upload:process` — the exam cell's administrative reach. It approves
    *    a whole extraction for the college.
    *  - `upload:process_own_subject` — the teacher's right to write a score
    *    for the subjects the HOD allocated to them, and nothing else (§3.6).
    *
-   * The guard would need *every* listed permission (`every`, not `some`), so
-   * listing both here would lock out both groups. The service therefore
-   * resolves which right the caller holds and applies the matching rule —
-   * the teacher's path checks every offering against their allocations.
+   * The route is guarded on **either** of them, because either is enough to
+   * arrive here — and the service then applies the rule that matches the
+   * right the caller actually holds.
+   *
+   * The route used to be guarded on `upload:read`, a permission to *look* at
+   * an upload, because the guard could only require every listed permission.
+   * A route that writes marks guarded on a read permission is a guard that
+   * does not guard the thing it protects.
    */
   @Post('jobs/:jobId/confirm')
-  @Permissions('upload:read')
+  @AnyPermission('upload:process', 'upload:process_own_subject')
   @Audited(AuditResource.UPLOAD_JOB, AuditAction.CONFIRM, {
     resourceIdSource: 'param',
     resourceIdField: 'jobId',

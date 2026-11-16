@@ -81,7 +81,16 @@ export class ReportsService {
     status?: string;
     generatedBy?: string;
     type?: string;
-    branchId?: string;
+    /**
+     * The branches the read may cover.
+     *
+     * `undefined` means college-wide — no branch filter at all. A set of
+     * one or more narrows the read to those branches. The value is a set
+     * rather than a single id because a user may be scoped to several
+     * branches at once, and a read that named none must still be narrowed
+     * to all of them.
+     */
+    branchId?: string | string[];
   }) {
     return this.repository.findAll(params);
   }
@@ -108,8 +117,23 @@ export class ReportsService {
     return this.repository.updateStatus(id, update);
   }
 
-  async delete(id: string): Promise<void> {
-    return this.repository.delete(id);
+  /**
+   * Archives a report.
+   *
+   * The report is not deleted. It is a statement about a class's results,
+   * and the row is kept with the reason it was archived and who archived it.
+   * The file is released; the record is not.
+   */
+  async archive(id: string, archivedBy: string, reason: string): Promise<void> {
+    const report = await this.repository.findById(id);
+    if (!report) {
+      throw new NotFoundException('This report no longer exists.');
+    }
+    if (report.isArchived) {
+      throw new BadRequestException('This report has already been archived.');
+    }
+
+    return this.repository.archive(id, archivedBy, reason);
   }
 
   /** Generates the file and updates the Report row. Called by the worker too. */
