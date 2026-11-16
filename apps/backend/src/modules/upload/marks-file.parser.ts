@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import pdfParse from 'pdf-parse';
 import { parseCsv, parseExcel } from '../students/student-import.parser';
-import { parseDbatuStatement } from './dbatu-statement.parser';
+import { parseDbatuStatement, parseDbatuStatementLines } from './dbatu-statement.parser';
 
 /**
  * One extracted mark row — exactly the fields the confirm DTO accepts.
@@ -298,6 +298,18 @@ export async function parseMarksFile(buffer: Buffer, filename: string): Promise<
   const lower = filename.toLowerCase();
   const isPdf = lower.endsWith('.pdf');
 
+  /**
+   * A printed statement is a *text* layout: its columns are separated by
+   * spaces, not by commas. Reading it as a comma-separated file would collapse
+   * each whole line into a single cell and lose every column boundary, so the
+   * statement is detected on the raw lines and parsed from them.
+   */
+  const rawLines = readTextLines(buffer, isPdf);
+
+  if (isStatementText(rawLines)) {
+    return parseDbatuStatementLines(rawLines);
+  }
+
   let matrix: unknown[][];
   if (isPdf) {
     matrix = await parsePdfText(buffer);
@@ -319,6 +331,34 @@ export async function parseMarksFile(buffer: Buffer, filename: string): Promise<
 
   const [headerRow, ...dataRows] = matrix;
   return parseMarksSheet(headerRow ?? [], dataRows);
+}
+
+/**
+ * Reads a text-like file into its lines, trimming the trailing whitespace
+ * each line carries.
+ *
+ * A PDF is not read here — its text layer is extracted by {@link parsePdfText},
+ * which also recovers the column positions.
+ */
+function readTextLines(buffer: Buffer, isPdf: boolean): string[] {
+  if (isPdf) return [];
+
+  return buffer
+    .toString('utf8')
+    .replace(/^﻿/, '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+/**
+ * Whether the raw lines are a printed result statement.
+ *
+ * The tell is a subject header such as `BTCOM701:INT` — a code followed by a
+ * part marker — which is what the statement's own header row carries.
+ */
+export function isStatementText(lines: string[]): boolean {
+  return lines.some((line) => hasSubjectCode(line));
 }
 
 /**
